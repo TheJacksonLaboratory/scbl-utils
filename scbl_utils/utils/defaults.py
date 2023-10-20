@@ -1,17 +1,6 @@
 from pathlib import Path
 
-toml = (Path(__package__).parent / 'pyproject.toml').read_text()
-
-try:
-    from tomllib import loads
-
-    toml = loads(toml)
-    DOCUMENTATION = toml['tool']['poetry']['documentation']
-except ImportError:
-    from re import search
-
-    DOCUMENTATION = search(pattern=r'documentation = "(.*)"\n', string=toml).group(1)  # type: ignore
-
+DOCUMENTATION = 'https://github.com/TheJacksonLaboratory/scbl-utils/'
 CONFIG_DIR = Path('/sc/service/etc/.config/scbl-utils')
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
