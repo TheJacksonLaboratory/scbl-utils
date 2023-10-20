@@ -7,6 +7,7 @@ from .utils.defaults import CONFIG_DIR
 
 app = typer.Typer()
 
+
 @app.callback(no_args_is_help=True)
 def callback(config_dir: Path = CONFIG_DIR) -> None:
     """
@@ -117,9 +118,12 @@ def samplesheet_from_gdrive(
         lambda sample_name: sub(pattern=blacklist, repl='-', string=sample_name)
     )
 
-    # Drop excess columns and convert to records
+    # Drop excess columns and sort for groupby operation later
     to_keep = grouped_samplesheet_df.columns.intersection(SAMPLESHEET_KEY_TO_TYPE)  # type: ignore
     grouped_samplesheet_df = grouped_samplesheet_df[to_keep]
+    grouped_samplesheet_df.sort_values(
+        by=['tool', 'command', 'sample_name'], inplace=True
+    )
     samplesheet_records = grouped_samplesheet_df.to_dict(orient='records')
 
     # Write to yml, grouping by tool-command combo for easier visual

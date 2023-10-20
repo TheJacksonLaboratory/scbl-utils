@@ -87,15 +87,13 @@ def get_program_from_lib_types(
     # combination of library types
     sample_df_filled = sample_df.assign(**lib_dict_filtered).copy()
 
-    # Iterate over each column of the sample_df and aggregate
+    # Iterate over each column of sample_df_filled and aggregate
     aggregated = pd.Series()
     for col, series in sample_df_filled.items():
-        # If pipeline expects a list for this column (as specified by
-        # samplesheet_key_to_type) or the collumn has more than one
-        # unique value, compress into list
-        if samplesheet_key_to_type.get(col, str) == list[str] or len(series.drop_duplicates()) > 1:  # type: ignore
+        if col == 'n_cells':
+            aggregated[col] = series.max()
+        elif samplesheet_key_to_type.get(col) == list[str] or series.nunique() > 1:  # type: ignore
             aggregated[col] = series.to_list()
-        # Else, just get the one unique value
         else:
             aggregated[col] = series.drop_duplicates().item()
 
