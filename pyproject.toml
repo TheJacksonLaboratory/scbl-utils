@@ -5,8 +5,8 @@ description = "A set of command-line utilities that facilitate data processing a
 authors = ["Ahmed Said <ahmed.said@jax.org>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/ahmed-said-jax/scbl-utils/"
-documentation = "https://github.com/ahmed-said-jax/scbl-utils/"
+repository = "https://github.com/TheJacksonLaboratory/scbl-utils/"
+documentation = "https://github.com/TheJacksonLaboratory/scbl-utils/"
 
 [tool.poetry.scripts]
 scbl-utils = 'scbl_utils.main:app'
