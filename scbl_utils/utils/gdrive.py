@@ -88,9 +88,12 @@ def get_project_params(
 
     from .samplesheet import get_latest_tool_version
 
-    # Get credentials, get project name, and build service
+    # Get credentials, project name, and tool
     creds = gclient.auth
     project = df_row['project']
+    tool = df_row['tool']
+
+    # Build service
     service = build(serviceName='drive', version='v3', credentials=creds)
 
     # Get all files in Google Drive folder matching criteria
@@ -98,14 +101,14 @@ def get_project_params(
         service.files()
         .list(
             corpora='user',
-            q=f"fullText contains '{project}' and mimeType='application/vnd.google-apps.spreadsheet' and '{metrics_dir_id}' in parents",
+            q=f"fullText contains '{project}' and fullText contains '{tool}' and mimeType='application/vnd.google-apps.spreadsheet' and '{metrics_dir_id}' in parents",
             fields='files(id, modifiedTime, mimeType, parents)',
         )
         .execute()
     )
 
-    # Convert reference dir to Path
-    reference_dir = Path(df_row['reference_dir'])
+    # Get reference directory
+    reference_dir = df_row['reference_dir']
 
     # If Google Drive query returned nothing, use latest tool version
     # and get the proper reference path from the user
@@ -113,7 +116,7 @@ def get_project_params(
         params = pd.Series()
 
         params['tool_version'] = get_latest_tool_version(df_row['tool'])
-        params['reference_path'] = Prompt.ask(f'It appears that sample {df_row.name} is associated with a new project, as its project ID ({project}) was not found in any of the spreadsheets in https://drive.google.com/drive/folders/{metrics_dir_id}. Please enter the reference genome you want to use', choices=[path.name for path in reference_dir.iterdir()])  # type: ignore
+        params['reference_path'] = Prompt.ask(f'It appears that sample {df_row.name} is associated with a new project, as its project ID ({project}) was not found in any of the spreadsheets in https://drive.google.com/drive/folders/{metrics_dir_id}. Please enter the reference genome in {reference_dir.absolute()} you want to use', choices=[path.name for path in reference_dir.iterdir()])  # type: ignore
 
         return params
 
@@ -126,7 +129,7 @@ def get_project_params(
 
     # Filter metrics_df to contain just those projects matching this
     # project
-    project_df = metrics_df[metrics_df['project'] == project].copy()
+    project_df = metrics_df[(metrics_df['project'] == project) & (metrics_df['tool'] == tool)].copy()
 
     # Construct the reference path, then convert it to a str
     # representation

@@ -35,42 +35,47 @@ SAMPLESHEET_KEY_TO_TYPE = {
     'tags': list[str],
     'no_bam': bool,
 }
+REF_PARENT_DIR = Path('/sc/service/pipelines/references')
 LIB_TYPES_TO_PROGRAM = [
     {
         'library_types': ['Chromatin Accessibility', 'Gene Expression'],
         'tool': 'cellranger-arc',
         'command': 'count',
-        'reference_dir': '/sc/service/pipelines/references/10x-arc',
+        'reference_dir': '10x-arc',
     },
     {
         'library_types': ['Gene Expression'],
         'tool': 'cellranger',
         'command': 'count',
-        'reference_dir': '/sc/service/pipelines/references/10x-rna',
+        'reference_dir': '10x-rna',
     },
     {
         'library_types': ['CytAssist Gene Expression', 'Spatial Gene Expression'],
         'tool': 'spaceranger',
         'command': 'count',
-        'reference_dir': '/sc/service/pipelines/references/10x-vis',
+        'reference_dir': '10x-vis',
     },
     {
         'library_types': ['Antibody Capture', 'Gene Expression'],
         'tool': 'cellranger',
         'command': 'count',
-        'reference_dir': '/sc/service/pipelines/references/10x-rna',
+        'reference_dir': '10x-rna',
     },
     {
         'library_types': ['Chromatin Accessibility'],
         'tool': 'cellranger-atac',
         'command': 'count',
-        'reference_dir': '/sc/service/pipelines/references/10x-atac',
+        'reference_dir': '10x-atac',
     },
     {
         'library_types': ['Gene Expression', 'Multiplexing Capture'],
         'tool': 'cellranger',
         'command': 'multi',
-        'reference_dir': '/sc/service/pipelines/references/10x-atac',
+        'reference_dir': '10x-atac',
     },
 ]
+
+for lib_dict in LIB_TYPES_TO_PROGRAM:
+    lib_dict['reference_dir'] = REF_PARENT_DIR / lib_dict['reference_dir']
+
 SAMPLENAME_BLACKLIST_PATTERN = f'[^{ascii_letters + digits}]'

@@ -86,7 +86,7 @@ def get_program_from_lib_types(
 
     # Fill sample_df with tool, command, and reference_dir based on its
     # combination of library types
-    sample_df_filled = sample_df.assign(**lib_dict_filtered).copy()
+    sample_df_filled = sample_df.assign(**lib_dict_filtered)
 
     # Iterate over each column of sample_df_filled and aggregate
     aggregated = pd.Series()

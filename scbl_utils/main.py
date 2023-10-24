@@ -63,6 +63,7 @@ def samplesheet_from_gdrive(
         for filename, path in config_files.items()
         if 'spec.yml' in filename
     }
+
     tracking_spec, metrics_spec = (
         specs['trackingsheet_spec.yml'],
         specs['metricssheet_spec.yml'],
@@ -143,3 +144,6 @@ def samplesheet_from_gdrive(
                 default_flow_style=False,
             )
             f.write(f'\n{hashes}\n')
+
+if __name__ == '__main__':
+    app()
