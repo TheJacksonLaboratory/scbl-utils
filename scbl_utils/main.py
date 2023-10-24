@@ -21,7 +21,7 @@ def callback(config_dir: Path = CONFIG_DIR) -> None:
 
 @app.command(no_args_is_help=True)
 def samplesheet_from_gdrive(
-    fastq_dirs: Annotated[
+    fastqdirs: Annotated[
         list[Path],
         typer.Argument(
             help='Directories containing fastq files for which to generate samplesheet.'
@@ -40,13 +40,12 @@ def samplesheet_from_gdrive(
     """
     from itertools import groupby
     from re import sub
-    from string import ascii_letters, digits
 
-    from yaml import Dumper, Loader, dump, load
+    from yaml import Dumper, Loader, dump, load, add_representer
 
     from .utils import gdrive, validate
-    from .utils.defaults import GDRIVE_CONFIG_FILES, SAMPLESHEET_KEY_TO_TYPE, SCOPES
-    from .utils.samplesheet import get_program_from_lib_types, map_libs_to_fastqdirs
+    from .utils.defaults import GDRIVE_CONFIG_FILES, SAMPLESHEET_KEY_TO_TYPE, SCOPES, SAMPLENAME_BLACKLIST_PATTERN
+    from .utils.samplesheet import get_program_from_lib_types, map_libs_to_fastqdirs, list_representer
 
     # Create and validate Google Drive config dir
     gdrive_config_dir = CONFIG_DIR / 'google-drive'
@@ -55,7 +54,7 @@ def samplesheet_from_gdrive(
 
     # Construct mapping between each library and its directory and
     # and validate at the same time
-    lib_to_fastqdir = map_libs_to_fastqdirs(fastq_dirs)
+    lib_to_fastqdir = map_libs_to_fastqdirs(fastqdirs)
 
     # Load in the two specification files that instruct script how to
     # get information from Google Drive
@@ -113,22 +112,26 @@ def samplesheet_from_gdrive(
     )
 
     # Sanitize sample names (ascii letters, digits, and '-' allowed)
-    blacklist = f'[^{ascii_letters + digits}]'
     grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].apply(
-        lambda sample_name: sub(pattern=blacklist, repl='-', string=sample_name)
+        lambda sample_name: sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='-', string=sample_name)
     )
 
-    # Drop excess columns and sort for groupby operation later
-    to_keep = grouped_samplesheet_df.columns.intersection(SAMPLESHEET_KEY_TO_TYPE)  # type: ignore
+    # Sort columns for prettier output and drop unnecessary ones
+    to_keep = grouped_samplesheet_df.columns.reindex(SAMPLESHEET_KEY_TO_TYPE)
     grouped_samplesheet_df = grouped_samplesheet_df[to_keep]
+
+    # Also sort the df itself for later groupby operation, convert to
+    # list[dict]
     grouped_samplesheet_df.sort_values(
         by=['tool', 'command', 'sample_name'], inplace=True
     )
     samplesheet_records = grouped_samplesheet_df.to_dict(orient='records')
 
-    # Write to yml, grouping by tool-command combo for easier visual
-    # parsing
+    # Add custom list representer for prettier output and write to yml,
+    # grouping by tool-command combo for easier visual parsing
+    add_representer(data_type=list, representer=list_representer)
     with output_path.open('w') as f:
+        hashes = '#' * 80
         for _, records in groupby(
             samplesheet_records, key=lambda record: (record['tool'], record['command'])
         ):
@@ -139,4 +142,4 @@ def samplesheet_from_gdrive(
                 sort_keys=False,
                 default_flow_style=False,
             )
-            f.write('###\n')
+            f.write(f'\n{hashes}\n')

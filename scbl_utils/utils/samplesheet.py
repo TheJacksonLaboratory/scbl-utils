@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+from yaml import Dumper, SequenceNode
 
 from .defaults import (
     LIB_TYPES_TO_PROGRAM,
@@ -139,3 +140,7 @@ def get_latest_tool_version(
     latest_versions = grouped['version'].max()
 
     return latest_versions[tool]
+
+
+def list_representer(dumper: Dumper, data: list) -> SequenceNode:
+    return dumper.represent_sequence(tag='tag:yaml.org,2002:seq', sequence=data, flow_style=True)

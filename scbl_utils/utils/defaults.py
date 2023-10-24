@@ -1,3 +1,4 @@
+from string import ascii_letters, digits
 from pathlib import Path
 
 DOCUMENTATION = 'https://github.com/TheJacksonLaboratory/scbl-utils/'
@@ -19,17 +20,17 @@ SIBLING_REPOSITORY = 'https://github.com/TheJacksonLaboratory/nf-tenx'
 SAMPLESHEET_KEY_TO_TYPE = {
     'libraries': list[str],
     'library_types': list[str],
-    'fastq_paths': list[str],
+    'sample_name': str,
+    'n_cells': int,
+    'is_nuclei': bool,
     'tool': str,
     'tool_version': str,
     'command': str,
-    'sample_name': str,
+    'fastq_paths': list[str],
     'reference_path': str,
     'use_undetermined': bool,
     'lanes': str,
-    'n_cells': int,
-    'is_nuclei': bool,
-    'design': dict[str, str],
+    'design': dict[str, dict[str, str]],
     'probe_set': list[str],
     'tags': list[str],
     'no_bam': bool,
@@ -72,3 +73,4 @@ LIB_TYPES_TO_PROGRAM = [
         'reference_dir': '/sc/service/pipelines/references/10x-atac',
     },
 ]
+SAMPLENAME_BLACKLIST_PATTERN = f'[^{ascii_letters + digits}]'
