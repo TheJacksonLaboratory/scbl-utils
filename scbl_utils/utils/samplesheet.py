@@ -143,4 +143,6 @@ def get_latest_tool_version(
 
 
 def list_representer(dumper: Dumper, data: list) -> SequenceNode:
-    return dumper.represent_sequence(tag='tag:yaml.org,2002:seq', sequence=data, flow_style=True)
+    return dumper.represent_sequence(
+        tag='tag:yaml.org,2002:seq', sequence=data, flow_style=True
+    )

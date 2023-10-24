@@ -44,8 +44,17 @@ def samplesheet_from_gdrive(
     from yaml import Dumper, Loader, dump, load, add_representer
 
     from .utils import gdrive, validate
-    from .utils.defaults import GDRIVE_CONFIG_FILES, SAMPLESHEET_KEY_TO_TYPE, SCOPES, SAMPLENAME_BLACKLIST_PATTERN
-    from .utils.samplesheet import get_program_from_lib_types, map_libs_to_fastqdirs, list_representer
+    from .utils.defaults import (
+        GDRIVE_CONFIG_FILES,
+        SAMPLESHEET_KEY_TO_TYPE,
+        SCOPES,
+        SAMPLENAME_BLACKLIST_PATTERN,
+    )
+    from .utils.samplesheet import (
+        get_program_from_lib_types,
+        map_libs_to_fastqdirs,
+        list_representer,
+    )
 
     # Create and validate Google Drive config dir
     gdrive_config_dir = CONFIG_DIR / 'google-drive'
@@ -114,7 +123,9 @@ def samplesheet_from_gdrive(
 
     # Sanitize sample names (ascii letters, digits, and '-' allowed)
     grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].apply(
-        lambda sample_name: sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='-', string=sample_name)
+        lambda sample_name: sub(
+            pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='-', string=sample_name
+        )
     )
 
     # Sort columns for prettier output and drop unnecessary ones
@@ -144,6 +155,7 @@ def samplesheet_from_gdrive(
                 default_flow_style=False,
             )
             f.write(f'\n{hashes}\n')
+
 
 if __name__ == '__main__':
     app()

@@ -81,8 +81,6 @@ def get_project_params(
         :return: A `dict` with keys 'tool_version' and 'reference_path'
         :rtype: `dict[str, str]`
     """
-    from pathlib import Path
-
     from googleapiclient.discovery import build
     from rich.prompt import Prompt
 
@@ -129,7 +127,9 @@ def get_project_params(
 
     # Filter metrics_df to contain just those projects matching this
     # project
-    project_df = metrics_df[(metrics_df['project'] == project) & (metrics_df['tool'] == tool)].copy()
+    project_df = metrics_df[
+        (metrics_df['project'] == project) & (metrics_df['tool'] == tool)
+    ].copy()
 
     # Construct the reference path, then convert it to a str
     # representation
