@@ -6,8 +6,8 @@
   tool: cellranger-atac
   tool_version: 2.0.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/ATAC Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-atac/test-refdata]
+  fastq_paths: [tests/data/fastqs/ATAC Sample 0]
+  reference_path: [tests/references/10x-atac/test-refdata]
 - libraries: [SC9900002]
   library_types: [Chromatin Accessibility]
   sample_name: ATACv2Sample0
@@ -16,8 +16,8 @@
   tool: cellranger-atac
   tool_version: 2.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/ATAC v2 Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-atac/test-refdata]
+  fastq_paths: [tests/data/fastqs/ATAC v2 Sample 0]
+  reference_path: [tests/references/10x-atac/test-refdata]
 
 ################################################################################
 
@@ -29,9 +29,9 @@
   tool: cellranger-arc
   tool_version: 2.0.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Multiome Sample 0,
-    /Users/saida/work/scbl-utils/tests/data/fastqs/Multiome Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-arc/test-refdata]
+  fastq_paths: [tests/data/fastqs/Multiome Sample 0,
+    tests/data/fastqs/Multiome Sample 0]
+  reference_path: [tests/references/10x-arc/test-refdata]
 
 ################################################################################
 
@@ -43,9 +43,9 @@
   tool: spaceranger
   tool_version: 2.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Visium CytAssist FFPE
+  fastq_paths: [tests/data/fastqs/Visium CytAssist FFPE
       Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
+  reference_path: [tests/references/10x-vis/test-refdata]
 
 ################################################################################
 
@@ -56,9 +56,9 @@
   tool: cellranger
   tool_version: 7.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Automated RNA Sample
+  fastq_paths: [tests/data/fastqs/Automated RNA Sample
       0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+  reference_path: [tests/references/10x-rna/test-refdata]
 - libraries: [SC9900004]
   library_types: [Gene Expression]
   sample_name: FlexSample0
@@ -66,8 +66,8 @@
   tool: cellranger
   tool_version: 7.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Flex Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+  fastq_paths: [tests/data/fastqs/Flex Sample 0]
+  reference_path: [tests/references/10x-rna/test-refdata]
 - libraries: [SC9900006]
   library_types: [Gene Expression]
   sample_name: RNAHTSample0
@@ -75,8 +75,8 @@
   tool: cellranger
   tool_version: 7.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/RNA-HT Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+  fastq_paths: [tests/data/fastqs/RNA-HT Sample 0]
+  reference_path: [tests/references/10x-rna/test-refdata]
 - libraries: [SC9900005]
   library_types: [Gene Expression]
   sample_name: RNASample0
@@ -84,8 +84,8 @@
   tool: cellranger
   tool_version: 7.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/RNA Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+  fastq_paths: [tests/data/fastqs/RNA Sample 0]
+  reference_path: [tests/references/10x-rna/test-refdata]
 
 ################################################################################
 
@@ -97,9 +97,9 @@
   tool: cellranger
   tool_version: 7.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Cell Surface Sample
-      0, /Users/saida/work/scbl-utils/tests/data/fastqs/Cell Surface Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+  fastq_paths: [tests/data/fastqs/Cell Surface Sample
+      0, tests/data/fastqs/Cell Surface Sample 0]
+  reference_path: [tests/references/10x-rna/test-refdata]
 
 ################################################################################
 
@@ -111,9 +111,9 @@
   tool: cellranger
   tool_version: 7.1.0
   command: multi
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/CellPlex Sample 0,
-    /Users/saida/work/scbl-utils/tests/data/fastqs/CellPlex Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+  fastq_paths: [tests/data/fastqs/CellPlex Sample 0,
+    tests/data/fastqs/CellPlex Sample 0]
+  reference_path: [tests/references/10x-rna/test-refdata]
 
 ################################################################################
 
@@ -125,8 +125,8 @@
   tool: cellranger
   tool_version: 6.1.1
   command: vdj
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/5' VDJ Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vdj/test-refdata]
+  fastq_paths: [tests/data/fastqs/5' VDJ Sample 0]
+  reference_path: [tests/references/10x-vdj/test-refdata]
 
 ################################################################################
 
@@ -138,9 +138,9 @@
   tool: spaceranger
   tool_version: 2.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Visium FFPE Sample
+  fastq_paths: [tests/data/fastqs/Visium FFPE Sample
       0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
+  reference_path: [tests/references/10x-vis/test-refdata]
 - libraries: [SC9900008]
   library_types: [Spatial Gene Expression]
   sample_name: VisiumFFSample0
@@ -149,8 +149,8 @@
   tool: spaceranger
   tool_version: 2.1.0
   command: count
-  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Visium FF Sample 0]
-  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
+  fastq_paths: [tests/data/fastqs/Visium FF Sample 0]
+  reference_path: [tests/references/10x-vis/test-refdata]
 
 ################################################################################
 
