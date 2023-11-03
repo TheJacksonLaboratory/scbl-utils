@@ -1,0 +1,156 @@
+- libraries: [SC9900001]
+  library_types: [Chromatin Accessibility]
+  sample_name: ATACSample0
+  n_cells: 10000.0
+  is_nuclei: false
+  tool: cellranger-atac
+  tool_version: 2.0.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/ATAC Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-atac/test-refdata]
+- libraries: [SC9900002]
+  library_types: [Chromatin Accessibility]
+  sample_name: ATACv2Sample0
+  n_cells: 10000.0
+  is_nuclei: false
+  tool: cellranger-atac
+  tool_version: 2.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/ATAC v2 Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-atac/test-refdata]
+
+################################################################################
+
+- libraries: [SC9900010, SC9900011]
+  library_types: [Chromatin Accessibility, Gene Expression]
+  sample_name: MultiomeSample0
+  n_cells: 6000.0
+  is_nuclei: false
+  tool: cellranger-arc
+  tool_version: 2.0.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Multiome Sample 0,
+    /Users/saida/work/scbl-utils/tests/data/fastqs/Multiome Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-arc/test-refdata]
+
+################################################################################
+
+- libraries: [SC9900007]
+  library_types: [CytAssist Gene Expression]
+  sample_name: VisiumCytAssistFFPESample0
+  n_cells: 10000.0
+  is_nuclei: false
+  tool: spaceranger
+  tool_version: 2.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Visium CytAssist FFPE
+      Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
+
+################################################################################
+
+- libraries: [SC9900003]
+  library_types: [Gene Expression]
+  sample_name: AutomatedRNASample0
+  is_nuclei: false
+  tool: cellranger
+  tool_version: 7.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Automated RNA Sample
+      0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+- libraries: [SC9900004]
+  library_types: [Gene Expression]
+  sample_name: FlexSample0
+  is_nuclei: false
+  tool: cellranger
+  tool_version: 7.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Flex Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+- libraries: [SC9900006]
+  library_types: [Gene Expression]
+  sample_name: RNAHTSample0
+  is_nuclei: false
+  tool: cellranger
+  tool_version: 7.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/RNA-HT Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+- libraries: [SC9900005]
+  library_types: [Gene Expression]
+  sample_name: RNASample0
+  is_nuclei: true
+  tool: cellranger
+  tool_version: 7.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/RNA Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+
+################################################################################
+
+- libraries: [SC9900012, SC9900013]
+  library_types: [Gene Expression, Antibody Capture]
+  sample_name: CellSurfaceSample0
+  n_cells: 5000.0
+  is_nuclei: false
+  tool: cellranger
+  tool_version: 7.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Cell Surface Sample
+      0, /Users/saida/work/scbl-utils/tests/data/fastqs/Cell Surface Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+
+################################################################################
+
+- libraries: [SC9900014, SC9900015]
+  library_types: [Gene Expression, Multiplexing Capture]
+  sample_name: CellPlexSample0
+  n_cells: 5000.0
+  is_nuclei: false
+  tool: cellranger
+  tool_version: 7.1.0
+  command: multi
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/CellPlex Sample 0,
+    /Users/saida/work/scbl-utils/tests/data/fastqs/CellPlex Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
+
+################################################################################
+
+- libraries: [SC9900000]
+  library_types: [Immune Profiling]
+  sample_name: 5VDJSample0
+  n_cells: 10000.0
+  is_nuclei: false
+  tool: cellranger
+  tool_version: 6.1.1
+  command: vdj
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/5' VDJ Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vdj/test-refdata]
+
+################################################################################
+
+- libraries: [SC9900009]
+  library_types: [Spatial Gene Expression]
+  sample_name: VisiumFFPESample0
+  n_cells: 10000.0
+  is_nuclei: false
+  tool: spaceranger
+  tool_version: 2.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Visium FFPE Sample
+      0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
+- libraries: [SC9900008]
+  library_types: [Spatial Gene Expression]
+  sample_name: VisiumFFSample0
+  n_cells: 10000.0
+  is_nuclei: false
+  tool: spaceranger
+  tool_version: 2.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Visium FF Sample 0]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
+
+################################################################################
+
