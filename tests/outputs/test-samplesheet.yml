@@ -8,7 +8,6 @@
   command: count
   fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/ATAC Sample 0]
   reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-atac/test-refdata]
-
 - libraries: [SC9900002]
   library_types: [Chromatin Accessibility]
   sample_name: ATACv2Sample0
@@ -60,7 +59,6 @@
   fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Automated RNA Sample
       0]
   reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
-  
 - libraries: [SC9900004]
   library_types: [Gene Expression]
   sample_name: FlexSample0
@@ -70,7 +68,6 @@
   command: count
   fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Flex Sample 0]
   reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
-
 - libraries: [SC9900006]
   library_types: [Gene Expression]
   sample_name: RNAHTSample0
@@ -80,7 +77,6 @@
   command: count
   fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/RNA-HT Sample 0]
   reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-rna/test-refdata]
-
 - libraries: [SC9900005]
   library_types: [Gene Expression]
   sample_name: RNASample0
@@ -145,7 +141,6 @@
   fastq_paths: [/Users/saida/work/scbl-utils/tests/data/fastqs/Visium FFPE Sample
       0]
   reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
-
 - libraries: [SC9900008]
   library_types: [Spatial Gene Expression]
   sample_name: VisiumFFSample0
