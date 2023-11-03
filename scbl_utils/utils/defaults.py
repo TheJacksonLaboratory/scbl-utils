@@ -37,36 +37,43 @@ SAMPLESHEET_KEY_TO_TYPE = {
 }
 REF_PARENT_DIR = Path('/sc/service/pipelines/references')
 LIB_TYPES_TO_PROGRAM = {
-    ('Chromatin Accessibility',): ('cellranger-atac', 'count', ['10x-atac']),
-    ('CytAssist Gene Expression',): ('spaceranger', 'count', ['10x-vis']),
-    ('Gene Expression',): ('cellranger', 'count', ['10x-rna']),
-    ('Immune Profiling',): ('cellranger', 'vdj', ['10x-vdj']),
-    ('Spatial Gene Expression',): ('spaceranger', 'count', ['10x-vis']),
-    ('Antibody Capture', 'Gene Expression'): ('cellranger', 'count', ['10x-rna']),
-    ('CRISPR Guide Capture', 'Gene Expression'): ('cellranger', 'count', ['10x-rna']),
-    ('Chromatin Accessibility', 'Gene Expression'): (
-        'cellranger-arc',
-        'count',
-        ['10x-arc'],
-    ),
-    ('Gene Expression', 'Multiplexing Capture'): ('cellranger', 'multi', ['10x-rna']),
-    ('Gene Expression', 'Immune Profiling'): (
-        'cellranger',
-        'multi',
-        ['10x-rna', '10x-vdj'],
-    ),
-    ('Antibody Capture', 'Gene Expression', 'Immune Profiling'): (
-        'cellranger',
-        'multi',
-        ['10x-rna', '10x-vdj'],
-    ),
-    (
-        'Antibody Capture',
-        'CRISPR Guide Capture',
-        'Gene Expression',
-        'Immune Profiling',
-    ): ('cellranger', 'multi', ['10x-rna', '10x-vdj']),
+    ('Chromatin Accessibility',):
+    ('cellranger-atac', 'count', ['10x-atac']),
+
+    ('CytAssist Gene Expression',):
+    ('spaceranger', 'count', ['10x-vis']),
+
+    ('Gene Expression',):
+    ('cellranger', 'count', ['10x-rna']),
+
+    ('Immune Profiling',):
+    ('cellranger', 'vdj', ['10x-vdj']),
+
+    ('Spatial Gene Expression',):
+    ('spaceranger', 'count', ['10x-vis']),
+
+    ('Antibody Capture', 'Gene Expression'):
+    ('cellranger', 'count', ['10x-rna']),
+
+    ('CRISPR Guide Capture', 'Gene Expression'):
+    ('cellranger', 'count', ['10x-rna']),
+
+    ('Chromatin Accessibility', 'Gene Expression'):
+    ('cellranger-arc', 'count', ['10x-arc']),
+
+    ('Gene Expression', 'Multiplexing Capture'):
+    ('cellranger', 'multi', ['10x-rna']),
+
+    ('Gene Expression', 'Immune Profiling'):
+    ('cellranger', 'multi', ['10x-rna', '10x-vdj']),
+
+    ('Antibody Capture', 'Gene Expression', 'Immune Profiling'):
+    ('cellranger', 'multi', ['10x-rna', '10x-vdj']),
+
+    ('Antibody Capture', 'CRISPR Guide Capture', 'Gene Expression', 'Immune Profiling'):
+    ('cellranger', 'multi', ['10x-rna', '10x-vdj']),
 }
+
 REF_DIRS = {
     Path(ref_dir)
     for tool_command_refdirs in LIB_TYPES_TO_PROGRAM.values()

@@ -1,5 +1,4 @@
 from pathlib import Path
-from subprocess import run
 
 from typer.testing import CliRunner
 from yaml import Loader, load
@@ -7,10 +6,10 @@ from yaml import Loader, load
 from scbl_utils.main import app
 
 
-def test_samplesheet_from_gdrive(config_dir: Path, dirs: dict[str, Path]):
+def test_samplesheet_from_gdrive(config_dir: Path, dirs: dict[str, Path], tmp_path: Path):
     runner = CliRunner()
 
-    outsheet = dirs['outputs'] / 'test-samplesheet.yml'
+    outsheet = tmp_path / 'test-samplesheet.yml'
     fastqs = [str(path.absolute()) for path in (dirs['data'] / 'fastqs').iterdir()]
     args = [
         '--config-dir',
@@ -26,9 +25,13 @@ def test_samplesheet_from_gdrive(config_dir: Path, dirs: dict[str, Path]):
 
     _ = runner.invoke(app, args=args, input=inputs)
 
-    with outsheet.open() as f:
-        samplesheet = load(f, Loader)
-    with (dirs['data'] / 'correct-output.yml').open() as f:
-        correct = load(f, Loader)
+    correct = dirs['data'] / 'correct-output.yml'
+    with outsheet.open() as f, correct.open() as g:
+        result_sheet = load(f, Loader)
+        correct_sheet = load(g, Loader)
+    
 
-    assert samplesheet == correct
+    result_sheet = [{key: [Path(path).absolute() for path in value] if 'path' in key else value for key, value in rec.items()} for rec in result_sheet]
+    correct_sheet = [{key: [Path(path).absolute() for path in value] if 'path' in key else value for key, value in rec.items()} for rec in correct_sheet]
+    
+    assert result_sheet == correct_sheet

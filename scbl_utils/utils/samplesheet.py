@@ -59,7 +59,7 @@ def program_from_lib_types(
     lib_types_to_program: dict[tuple[str, ...], tuple[str, str, list[str]]] = LIB_TYPES_TO_PROGRAM,  # type: ignore
     samplesheet_key_to_type: dict[str, type] = SAMPLESHEET_KEY_TO_TYPE,
 ) -> pd.Series:
-    """To be used as first argument to `samplesheet_df.groupby('sample_name').apply`. Aggregates `sample_df` (representing one sample), adding information derived from the library types
+    """To be used as first argument to `samplesheet_df.groupby('sample_name', as_index=False).apply`. Aggregates `sample_df` (representing one sample), adding information derived from the library types
 
     :param sample_df: This dataframe represents one sample, with each row representing a library belonging to that sample. It must contain the column 'library_types'
     :type sample_df: `pd.DataFrame`
@@ -71,14 +71,26 @@ def program_from_lib_types(
     :return: A `dict` that compresses the many rows of `sample_df` into one row, which will be handled by `samplesheet.groupby('sample_name').agg`
     :rtype: `pandas.Series`
     """
-    # Get the tool-command-ref_dir combo based on library types
+    # Get the tool-command-refdir combo based on library types
+    # and throw error if not found
     aggregated = pd.Series()
     library_types = tuple(sample_df['library_types'].sort_values())
+    tool_command_refdir = lib_types_to_program.get(library_types)
+
+    if not tool_command_refdir:
+        sample_name = sample_df['sample_name'].iloc[0]
+        rprint(
+            f'The library types [bold orange1]{library_types}[/] associated with [bold orange1]{sample_name}[/] are not a valid combination. Valid combinations:\n[bold blue]',
+            *lib_types_to_program.keys(),
+            sep='\n',
+        )
+        raise Abort()
+
     (
         aggregated['tool'],
         aggregated['command'],
         aggregated['reference_dirs'],
-    ) = lib_types_to_program.get(library_types, (None, None, None))
+    ) = tool_command_refdir
 
     # The list of reference dirs contains relative paths, make them
     # absolute
@@ -94,7 +106,7 @@ def program_from_lib_types(
         elif samplesheet_key_to_type.get(col) == list[str] or series.nunique() > 1 or col == '10x_platform':  # type: ignore
             aggregated[col] = tuple(series)
         else:
-            aggregated[col] = series.drop_duplicates().item()
+            aggregated[col] = series.iloc[0]
 
     return aggregated
 
@@ -138,6 +150,23 @@ def get_latest_version(
     latest_versions = grouped['version'].max()
 
     return latest_versions[tool]
+
+
+def get_antibody_tags():
+    tags_df = pd.read_csv(
+        'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/totalseq-b_universal.csv'
+    )
+
+    return tags_df['tag_id'].to_list()
+
+
+def fill_other_cols(df_row: pd.Series):
+    new_data = df_row.copy()
+    
+    if 'Antibody Capture' in df_row['library_types']:
+        new_data['tags'] = get_antibody_tags()
+
+    return new_data
 
 
 def sanitize_sample_name(sample_name: str) -> str:

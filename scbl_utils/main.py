@@ -53,6 +53,7 @@ def samplesheet_from_gdrive(
     from .utils import gdrive
     from .utils.defaults import GDRIVE_CONFIG_FILES, SAMPLESHEET_KEY_TO_TYPE, SCOPES
     from .utils.samplesheet import (
+        fill_other_cols,
         map_libs_to_fastqdirs,
         program_from_lib_types,
         sanitize_sample_name,
@@ -107,6 +108,8 @@ def samplesheet_from_gdrive(
         col_renaming=metrics_spec['columns'],
     )
 
+    grouped_samplesheet_df = grouped_samplesheet_df.apply(fill_other_cols, axis=1)
+
     # Sanitize sample names
     grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].map(
         sanitize_sample_name
@@ -123,7 +126,7 @@ def samplesheet_from_gdrive(
 
     # Actually write output
     with output_path.open('w') as f:
-        # Add custom representer for Collections
+        # Add custom representer for lists and tuples
         for sequence_type in (list, tuple):
             add_representer(data_type=sequence_type, representer=sequence_representer)
 
