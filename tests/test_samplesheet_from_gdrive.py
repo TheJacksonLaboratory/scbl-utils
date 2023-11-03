@@ -5,8 +5,12 @@ from yaml import Loader, load
 
 from scbl_utils.main import app
 
-
-def test_samplesheet_from_gdrive(config_dir: Path, dirs: dict[str, Path], tmp_path: Path):
+# TODO: eventually, parametrize this to test each fastq directory
+# individually for more robust testing, so that the two outputs
+# don't have to be in the same order
+def test_samplesheet_from_gdrive(
+    config_dir: Path, dirs: dict[str, Path], tmp_path: Path
+):
     runner = CliRunner()
 
     outsheet = tmp_path / 'test-samplesheet.yml'
@@ -29,9 +33,20 @@ def test_samplesheet_from_gdrive(config_dir: Path, dirs: dict[str, Path], tmp_pa
     with outsheet.open() as f, correct.open() as g:
         result_sheet = load(f, Loader)
         correct_sheet = load(g, Loader)
-    
 
-    result_sheet = [{key: [Path(path).absolute() for path in value] if 'path' in key else value for key, value in rec.items()} for rec in result_sheet]
-    correct_sheet = [{key: [Path(path).absolute() for path in value] if 'path' in key else value for key, value in rec.items()} for rec in correct_sheet]
-    
+    result_sheet = [
+        {
+            key: [Path(path).absolute() for path in value] if 'path' in key else value
+            for key, value in rec.items()
+        }
+        for rec in result_sheet
+    ]
+    correct_sheet = [
+        {
+            key: [Path(path).absolute() for path in value] if 'path' in key else value
+            for key, value in rec.items()
+        }
+        for rec in correct_sheet
+    ]
+
     assert result_sheet == correct_sheet
