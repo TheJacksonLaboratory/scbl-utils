@@ -1,5 +1,5 @@
-from string import ascii_letters, digits
 from pathlib import Path
+from string import ascii_letters, digits
 
 DOCUMENTATION = 'https://github.com/TheJacksonLaboratory/scbl-utils/'
 CONFIG_DIR = Path('/sc/service/etc/.config/scbl-utils')
@@ -11,8 +11,8 @@ LIBRARY_GLOB_PATTERN = 'SC*fastq*'
 GDRIVE_CONFIG_FILES = [
     Path(filename)
     for filename in (
-        'metricssheet_spec.yml',
-        'trackingsheet_spec.yml',
+        'metricssheet-spec.yml',
+        'trackingsheet-spec.yml',
         'service-account.json',
     )
 ]
@@ -27,7 +27,7 @@ SAMPLESHEET_KEY_TO_TYPE = {
     'tool_version': str,
     'command': str,
     'fastq_paths': list[str],
-    'reference_path': str,
+    'reference_path': list[str],
     'use_undetermined': bool,
     'lanes': str,
     'design': dict[str, dict[str, str]],
@@ -36,46 +36,40 @@ SAMPLESHEET_KEY_TO_TYPE = {
     'no_bam': bool,
 }
 REF_PARENT_DIR = Path('/sc/service/pipelines/references')
-LIB_TYPES_TO_PROGRAM = [
-    {
-        'library_types': ['Chromatin Accessibility', 'Gene Expression'],
-        'tool': 'cellranger-arc',
-        'command': 'count',
-        'reference_dir': '10x-arc',
-    },
-    {
-        'library_types': ['Gene Expression'],
-        'tool': 'cellranger',
-        'command': 'count',
-        'reference_dir': '10x-rna',
-    },
-    {
-        'library_types': ['CytAssist Gene Expression', 'Spatial Gene Expression'],
-        'tool': 'spaceranger',
-        'command': 'count',
-        'reference_dir': '10x-vis',
-    },
-    {
-        'library_types': ['Antibody Capture', 'Gene Expression'],
-        'tool': 'cellranger',
-        'command': 'count',
-        'reference_dir': '10x-rna',
-    },
-    {
-        'library_types': ['Chromatin Accessibility'],
-        'tool': 'cellranger-atac',
-        'command': 'count',
-        'reference_dir': '10x-atac',
-    },
-    {
-        'library_types': ['Gene Expression', 'Multiplexing Capture'],
-        'tool': 'cellranger',
-        'command': 'multi',
-        'reference_dir': '10x-atac',
-    },
-]
-
-for lib_dict in LIB_TYPES_TO_PROGRAM:
-    lib_dict['reference_dir'] = REF_PARENT_DIR / lib_dict['reference_dir']
-
+LIB_TYPES_TO_PROGRAM = {
+    ('Chromatin Accessibility',): ('cellranger-atac', 'count', ['10x-atac']),
+    ('CytAssist Gene Expression',): ('spaceranger', 'count', ['10x-vis']),
+    ('Gene Expression',): ('cellranger', 'count', ['10x-rna']),
+    ('Immune Profiling',): ('cellranger', 'vdj', ['10x-vdj']),
+    ('Spatial Gene Expression',): ('spaceranger', 'count', ['10x-vis']),
+    ('Antibody Capture', 'Gene Expression'): ('cellranger', 'count', ['10x-rna']),
+    ('CRISPR Guide Capture', 'Gene Expression'): ('cellranger', 'count', ['10x-rna']),
+    ('Chromatin Accessibility', 'Gene Expression'): (
+        'cellranger-arc',
+        'count',
+        ['10x-arc'],
+    ),
+    ('Gene Expression', 'Multiplexing Capture'): ('cellranger', 'multi', ['10x-rna']),
+    ('Gene Expression', 'Immune Profiling'): (
+        'cellranger',
+        'multi',
+        ['10x-rna', '10x-vdj'],
+    ),
+    ('Antibody Capture', 'Gene Expression', 'Immune Profiling'): (
+        'cellranger',
+        'multi',
+        ['10x-rna', '10x-vdj'],
+    ),
+    (
+        'Antibody Capture',
+        'CRISPR Guide Capture',
+        'Gene Expression',
+        'Immune Profiling',
+    ): ('cellranger', 'multi', ['10x-rna', '10x-vdj']),
+}
+REF_DIRS = {
+    Path(ref_dir)
+    for tool_command_refdirs in LIB_TYPES_TO_PROGRAM.values()
+    for ref_dir in tool_command_refdirs[2]
+}
 SAMPLENAME_BLACKLIST_PATTERN = f'[^{ascii_letters + digits}]'

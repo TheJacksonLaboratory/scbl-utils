@@ -3,7 +3,8 @@ from typing import Annotated
 
 import typer
 
-from .utils.defaults import CONFIG_DIR
+from .utils import validate
+from .utils.defaults import CONFIG_DIR, DOCUMENTATION, REF_PARENT_DIR
 
 app = typer.Typer()
 
@@ -16,7 +17,7 @@ def callback(config_dir: Path = CONFIG_DIR) -> None:
     """
     global CONFIG_DIR
     CONFIG_DIR = config_dir
-    CONFIG_DIR.mkdir(exist_ok=True, parents=True)
+    _ = validate.direc(config_dir)
 
 
 @app.command(no_args_is_help=True)
@@ -33,33 +34,34 @@ def samplesheet_from_gdrive(
             '--outsheet', '-o', help='File path to save the resulting samplesheet.'
         ),
     ] = Path('samplesheet.yml'),
+    ref_parent_dir: Annotated[
+        Path,
+        typer.Option(
+            '--reference-parent-dir',
+            '-r',
+            help=f'The parent directory where all reference genomes are stored, organized into directories that correspond to fastq processing tools. See {DOCUMENTATION} for more information.',
+        ),
+    ] = REF_PARENT_DIR,
 ) -> None:
     """
-    Pull data from Google Drive to generate a yml samplesheet to be
-    used as input for the TheJacksonLaboratory/nf-tenx pipeline.
+    Pull data from Google Drive and generate a yml samplesheet to be
+    used as input for the nf-tenx pipeline.
     """
-    from itertools import groupby
-    from re import sub
+    from pandas import to_numeric
+    from yaml import Dumper, add_representer, dump
 
-    from yaml import Dumper, Loader, dump, load, add_representer
-
-    from .utils import gdrive, validate
-    from .utils.defaults import (
-        GDRIVE_CONFIG_FILES,
-        SAMPLESHEET_KEY_TO_TYPE,
-        SCOPES,
-        SAMPLENAME_BLACKLIST_PATTERN,
-    )
+    from .utils import gdrive
+    from .utils.defaults import GDRIVE_CONFIG_FILES, SAMPLESHEET_KEY_TO_TYPE, SCOPES
     from .utils.samplesheet import (
-        get_program_from_lib_types,
         map_libs_to_fastqdirs,
-        list_representer,
+        program_from_lib_types,
+        sanitize_sample_name,
+        sequence_representer,
     )
 
-    # Create and validate Google Drive config dir
+    # Create and validate Google Drive config dir, returning paths
     gdrive_config_dir = CONFIG_DIR / 'google-drive'
-    gdrive_config_dir.mkdir(exist_ok=True, parents=True)
-    config_files = validate.config_dir(gdrive_config_dir, GDRIVE_CONFIG_FILES)
+    config_files = validate.direc(gdrive_config_dir, GDRIVE_CONFIG_FILES)
 
     # Construct mapping between each library and its directory and
     # and validate at the same time
@@ -67,16 +69,7 @@ def samplesheet_from_gdrive(
 
     # Load in the two specification files that instruct script how to
     # get information from Google Drive
-    specs = {
-        filename: load(path.read_text(), Loader)
-        for filename, path in config_files.items()
-        if 'spec.yml' in filename
-    }
-
-    tracking_spec, metrics_spec = (
-        specs['trackingsheet_spec.yml'],
-        specs['metricssheet_spec.yml'],
-    )
+    tracking_spec, metrics_spec = gdrive.load_specs(config_files)
 
     # Login and get trackingsheet
     gclient = gdrive.login(scopes=SCOPES, filename=config_files['service-account.json'])
@@ -84,19 +77,12 @@ def samplesheet_from_gdrive(
         client=gclient, properties={'id': tracking_spec['id']}
     )
 
-    # Get mappings between column names in the spreadsheet and their
-    # new names and data types
-    col_renaming = {
-        col['old_name']: col['new_name'] for col in tracking_spec['columns']
-    }
-    col_types = {col['new_name']: col['type'] for col in tracking_spec['columns']}
-
-    # Convert GSheet to pd.DataFrame, filter (copying so as to not
-    # edit a view)
+    # Convert GSheet to pd.DataFrame, filter
     tracking_df = trackingsheet.to_df(
-        col_renaming=col_renaming, col_types=col_types, head=tracking_spec['header_row']
+        col_renaming=tracking_spec['columns'], head=tracking_spec['header_row']
     )
     samplesheet_df = tracking_df[tracking_df['libraries'].isin(lib_to_fastqdir)].copy()
+    samplesheet_df['n_cells'] = to_numeric(samplesheet_df['n_cells'], errors='coerce')
 
     # Fill samplesheet with available information
     samplesheet_df['fastq_paths'] = samplesheet_df['libraries'].map(lib_to_fastqdir)
@@ -104,10 +90,10 @@ def samplesheet_from_gdrive(
         tracking_spec['platform_to_lib_type']
     )
 
-    # Group by sample_name and fill with library type-specific information
-    grouped_samplesheet_df = samplesheet_df.groupby('sample_name').apply(
-        get_program_from_lib_types
-    )
+    # Group by sample_name and fill with library type specific information
+    grouped_samplesheet_df = samplesheet_df.groupby(
+        'sample_name', as_index=False
+    ).apply(program_from_lib_types, ref_parent_dir=ref_parent_dir.absolute())
 
     # Also get tool version and reference path
     grouped_samplesheet_df[
@@ -121,41 +107,41 @@ def samplesheet_from_gdrive(
         col_renaming=metrics_spec['columns'],
     )
 
-    # Sanitize sample names (ascii letters, digits, and '-' allowed)
-    grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].apply(
-        lambda sample_name: sub(
-            pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='-', string=sample_name
-        )
+    # Sanitize sample names
+    grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].map(
+        sanitize_sample_name
     )
 
-    # Sort columns for prettier output and drop unnecessary ones
-    to_keep = grouped_samplesheet_df.columns.reindex(SAMPLESHEET_KEY_TO_TYPE)
+    # Drop unnecessary columns
+    to_keep = [
+        col for col in SAMPLESHEET_KEY_TO_TYPE if col in grouped_samplesheet_df.columns
+    ]
     grouped_samplesheet_df = grouped_samplesheet_df[to_keep]
 
-    # Also sort the df itself for later groupby operation, convert to
-    # list[dict]
-    grouped_samplesheet_df.sort_values(
-        by=['tool', 'command', 'sample_name'], inplace=True
-    )
-    samplesheet_records = grouped_samplesheet_df.to_dict(orient='records')
+    # Sort and group for prettier yml output
+    grouped_samplesheet_df.sort_values(['library_types', 'sample_name'], inplace=True)
 
-    # Add custom list representer for prettier output and write to yml,
-    # grouping by tool-command combo for easier visual parsing
-    add_representer(data_type=list, representer=list_representer)
+    # Actually write output
     with output_path.open('w') as f:
-        hashes = '#' * 80
-        for _, records in groupby(
-            samplesheet_records, key=lambda record: (record['tool'], record['command'])
-        ):
+        # Add custom representer for Collections
+        for sequence_type in (list, tuple):
+            add_representer(data_type=sequence_type, representer=sequence_representer)
+
+        delimiter = '#' * 80
+        for _, group in grouped_samplesheet_df.groupby('library_types'):
+            # Convert to records and filter out nans
+            records = group.to_dict(orient='records')
+            records = [
+                {key: value for key, value in rec.items() if value == value}
+                for rec in records
+            ]
+
+            # Dump and write delimiter between groups
             dump(
-                list(records),
+                data=records,
                 stream=f,
                 Dumper=Dumper,
-                sort_keys=False,
                 default_flow_style=False,
+                sort_keys=False,
             )
-            f.write(f'\n{hashes}\n')
-
-
-if __name__ == '__main__':
-    app()
+            f.write(f'\n{delimiter}\n\n')

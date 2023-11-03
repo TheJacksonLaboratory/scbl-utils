@@ -1,22 +1,49 @@
+from pathlib import Path
+
 import gspread as gs
 import pandas as pd
+from rich import print as rprint
 
 
-def login(*args, **kwargs) -> gs.Client:
+def login(*args, **kwargs) -> gs.Client:  # type: ignore
     """Log into Google Drive and return gspread.Client.
 
     :raises RuntimeError: If login impossible, raise error
     :return: The logged in client
     :rtype: gs.Client
     """
+    from typer import Abort
+
     from .defaults import DOCUMENTATION
 
     try:
         return gs.service_account(*args, **kwargs)
     except Exception as e:
-        raise RuntimeError(
+        rprint(
             f'Could not log into Google Drive. See {DOCUMENTATION} for instructions on authentication. {e}'
         )
+        Abort()
+
+
+def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
+    """Load specifications from google-drive config directory
+
+    :param config_files: A dict mapping the name of a config file to its path
+    :type config_files: dict[str, Path]
+    :return: The tracking sheet specification and the metrics sheet specification, as a tuple in that order
+    :rtype: tuple[dict, dict]
+    """
+    from yaml import Loader, load
+
+    # Load in the two specification files that instruct script how to
+    # get information from Google Drive
+    specs = {
+        filename: load(path.read_text(), Loader)
+        for filename, path in config_files.items()
+        if 'spec.yml' in filename
+    }
+
+    return specs['trackingsheet-spec.yml'], specs['metricssheet-spec.yml']
 
 
 class GSheet(gs.Spreadsheet):
@@ -25,8 +52,7 @@ class GSheet(gs.Spreadsheet):
     def to_df(
         self,
         worksheet_index: int = 0,
-        col_renaming: dict = {},
-        col_types: dict = {},
+        col_renaming: dict[str, str] = {},
         **kwargs,
     ) -> pd.DataFrame:
         """Get a spreadsheet from Google Drive and convert to pandas.DataFrame
@@ -48,18 +74,18 @@ class GSheet(gs.Spreadsheet):
         """
         # Get worksheet and convert to pd.DataFrame
         worksheet = self.get_worksheet(worksheet_index)
-        records = worksheet.get_all_records(expected_headers=col_renaming, **kwargs)
+        records = worksheet.get_all_records(
+            expected_headers=col_renaming.keys(), **kwargs
+        )
         df = pd.DataFrame.from_records(records)
 
-        # Subset to desired columns, rename, strip whitespace, convert
-        # "TRUE" and "FALSE" to bools
+        # Subset to desired columns, strip whitespace, convert "TRUE"
+        # and "FALSE" to bools, rename columns, and convert n_cells to
+        # numeric
         df = df[col_renaming.keys()]
+        df = df.map(lambda value: value.strip() if isinstance(value, str) else value)  # type: ignore
         df.rename(columns=col_renaming, inplace=True)
         df.replace({'TRUE': True, 'FALSE': False}, inplace=True)
-
-        # Cast df columns to desired types
-        for col, dtype in col_types.items():
-            df[col] = df[col].astype(dtype, errors='ignore')
 
         return df
 
@@ -67,11 +93,11 @@ class GSheet(gs.Spreadsheet):
 def get_project_params(
     df_row: pd.Series, metrics_dir_id: str, gclient: gs.Client, **kwargs
 ) -> pd.Series:
-    """Use with pandas.DataFrame.agg to get tool version and reference path
+    """Use with pandas.DataFrame.apply to get tool version and reference path
 
     Parameters
     ----------
-        :param df_row: The passed-in row of the pandas.DataFrame. Its name should be a sample ID and it should contain the keys "project", "tool", and "reference_dir"
+        :param df_row: The passed-in row of the pandas.DataFrame. It should contain the keys "project", "tool", "reference_dir", and "sample_name"
         :type df_row: `pd.Series`
         :param metrics_dir_id: The ID of the Google Drive folder containing delivered metrics
         :type metrics_dir_id: `str`
@@ -84,10 +110,11 @@ def get_project_params(
     from googleapiclient.discovery import build
     from rich.prompt import Prompt
 
-    from .samplesheet import get_latest_tool_version
+    from .samplesheet import get_latest_version
 
     # Get credentials, project name, and tool
     creds = gclient.auth
+    sample_name = df_row['sample_name']
     project = df_row['project']
     tool = df_row['tool']
 
@@ -106,15 +133,28 @@ def get_project_params(
     )
 
     # Get reference directory
-    reference_dir = df_row['reference_dir']
+    reference_dirs = df_row['reference_dirs']
 
     # If Google Drive query returned nothing, use latest tool version
     # and get the proper reference path from the user
     if not result['files']:
         params = pd.Series()
 
-        params['tool_version'] = get_latest_tool_version(df_row['tool'])
-        params['reference_path'] = Prompt.ask(f'It appears that sample {df_row.name} is associated with a new project, as its project ID ({project}) was not found in any of the spreadsheets in https://drive.google.com/drive/folders/{metrics_dir_id}. Please enter the reference genome in {reference_dir.absolute()} you want to use', choices=[path.name for path in reference_dir.iterdir()])  # type: ignore
+        params['tool_version'] = get_latest_version(tool)
+        rprint(
+            f'\nIt appears that sample [bold orange1]{sample_name}[/] is associated with a new project, as its project ID ([bold orange1]{project}[/]) was not found in any of the spreadsheets in https://drive.google.com/drive/folders/{metrics_dir_id}. Please select a reference genome in each of the reference directories below:'
+        )
+
+        params['reference_path'] = []
+        for ref_dir in reference_dirs:
+            genome_choices = [path.name for path in ref_dir.iterdir()]
+            genome_choices.sort()
+
+            genome = Prompt.ask(
+                f'[bold green]{ref_dir.absolute()} ->[/]', choices=genome_choices
+            )
+            full_ref_path = str((ref_dir / genome).absolute())
+            params['reference_path'].append(full_ref_path)
 
         return params
 
@@ -126,18 +166,21 @@ def get_project_params(
     metrics_df = metricssheet.to_df(**kwargs)
 
     # Filter metrics_df to contain just those projects matching this
-    # project
+    # project and tool
     project_df = metrics_df[
         (metrics_df['project'] == project) & (metrics_df['tool'] == tool)
     ].copy()
 
     # Construct the reference path, then convert it to a str
     # representation
-    project_df['reference_path'] = reference_dir / project_df['reference']
-    project_df['reference_path'] = project_df['reference_path'].apply(
-        lambda path: str(path.absolute())
+    project_df['reference_path'] = project_df['reference'].map(
+        lambda genome: [str(ref_dir / genome) for ref_dir in reference_dirs]
     )
 
     # Since all rows should be the same (as they belong to the same
-    # project), return the first row
-    return project_df.loc[0, ['tool_version', 'reference_path']]
+    # project and have the same tool), return the first row
+    return project_df[['tool_version', 'reference_path']].iloc[0]
+
+    # TODO: is there a case where a two runs of a project use the same
+    # tool but different processing references? like, two different
+    # species within a project?
