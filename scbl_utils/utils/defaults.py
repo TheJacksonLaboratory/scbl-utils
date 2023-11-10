@@ -8,7 +8,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive',
 ]
 LIBRARY_GLOB_PATTERN = 'SC*fastq*'
-LIBRARY_ID_PATTERN = r'SC\d{7}'
+LIBRARY_ID_PATTERN = '^\s*SC\d{7}\s*$'
 GDRIVE_CONFIG_FILES = [
     Path(filename)
     for filename in (

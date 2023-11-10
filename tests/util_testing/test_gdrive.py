@@ -36,7 +36,7 @@ def test_trackingsheet_to_df(
 
 @fixture
 def input_cols():
-    return ['sample_name', 'project', 'tool', 'reference_dirs']
+    return ['libraries', 'sample_name', 'project', 'tool', 'reference_dirs']
 
 
 @fixture
@@ -63,6 +63,7 @@ def test_get_old_project_params(
     input_output = pd.Series(
         index=full_index,
         data=[
+            ('SC9900000',),
             "5' VDJ Sample 0",
             'SCP99-000',
             'cellranger',
@@ -96,6 +97,7 @@ def test_get_new_project_params(
     input_output = pd.Series(
         index=full_index,
         data=[
+            ('SC9900016',),
             'ATAC Sample 1',
             'SCP99-002',
             'cellranger-atac',

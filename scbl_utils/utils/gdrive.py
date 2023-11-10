@@ -98,17 +98,14 @@ class GSheet(gs.Spreadsheet):
             # Iterate over the rows of the table
             for i, row in enumerate(table_as_rows):
                 # If this row shares more than one element with the
-                # desire columns, then it's the header row.
+                # desired columns, then it's the header row.
                 cols_in_sheet = col_renaming.keys() & row
-                if len(cols_in_sheet) > 1:
+                if cols_in_sheet:
                     header_row_idx, header_row = i, row
                     break
 
-                # If not, make sure to reassign cols_in_sheet
-                cols_in_sheet = None
-
             # If we've looped over all rows of the table and found
-            # no rows that contain more than one of our desired keys,
+            # no rows that contain at least one of our desired keys,
             # move onto the next worksheet of this spreadsheet
             if not cols_in_sheet:
                 continue
@@ -228,16 +225,17 @@ def get_project_params(
 
         params['tool_version'] = get_latest_version(tool)
         rprint(
-            f'\nIt appears that sample [bold orange1]{sample_name}[/] is associated with a new project, as its project ID ([bold orange1]{project}[/]) was not found in any of the spreadsheets in https://drive.google.com/drive/folders/{metrics_dir_id}. Please select a reference genome in each of the reference directories below:'
+            f'\nIt appears that sample [bold orange1]{sample_name}[/] is associated with a new project, as its project ID ([bold orange1]{project}[/]) was not found in any of the spreadsheets in https://drive.google.com/drive/folders/{metrics_dir_id}. Please select a reference genome for each library from the reference directories below:'
         )
 
+        libraries = df_row['libraries']
         params['reference_path'] = []
-        for ref_dir in reference_dirs:
+        for i, ref_dir in enumerate(reference_dirs):
             genome_choices = [path.name for path in ref_dir.iterdir()]
             genome_choices.sort()
 
             genome = Prompt.ask(
-                f'[bold green]{ref_dir.absolute()} ->[/]', choices=genome_choices
+                f'Choices in [bold green]{ref_dir.absolute()}[/] for [bold orange]{libraries[i]}[/] ->', choices=genome_choices
             )
             full_ref_path = str((ref_dir / genome).absolute())
             params['reference_path'].append(full_ref_path)
