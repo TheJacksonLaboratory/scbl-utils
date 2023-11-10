@@ -142,10 +142,15 @@ class GSheet(gs.Spreadsheet):
             df.replace({'TRUE': True, 'FALSE': False}, inplace=True)
 
             # The column name to index on will be the element in the
-            # header row in the position determined as library_col_idx
+            # header row in the position defined as library_col_idx
             index_col_name = header_row[library_col_idx]
             df.set_index(index_col_name, inplace=True)
             df.index.rename(None, inplace=True)
+
+            # Drop rows with duplicate indexes because the
+            # tracking sheet has many empty rows
+            duplicate_mask = df.index.duplicated()
+            df = df.loc[~duplicate_mask]
 
             # Subset to the columns we care about and rename
             to_keep = list(cols_in_sheet - {index_col_name})
