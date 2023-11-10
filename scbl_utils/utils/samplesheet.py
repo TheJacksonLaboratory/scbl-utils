@@ -4,14 +4,16 @@ from pathlib import Path
 import pandas as pd
 from rich import print as rprint
 from typer import Abort
-from yaml import Dumper, SequenceNode
+from yaml import Dumper, SequenceNode, add_representer, dump
 
 from .defaults import (
     LIB_TYPES_TO_PROGRAM,
     LIBRARY_GLOB_PATTERN,
     REF_PARENT_DIR,
     SAMPLENAME_BLACKLIST_PATTERN,
+    SAMPLESHEET_GROUP_KEY,
     SAMPLESHEET_KEY_TO_TYPE,
+    SAMPLESHEET_SORT_KEYS,
     SIBLING_REPOSITORY,
 )
 
@@ -50,7 +52,10 @@ def map_libs_to_fastqdirs(
         )
         raise Abort()
 
-    return lib_to_fastqdir
+    # Sort dict before returning
+    sorted_libs = sorted(lib_to_fastqdir.keys())
+    sorted_lib_to_fastqdir = {lib: lib_to_fastqdir[lib] for lib in sorted_libs}
+    return sorted_lib_to_fastqdir
 
 
 def program_from_lib_types(
@@ -71,9 +76,12 @@ def program_from_lib_types(
     :return: A `dict` that compresses the many rows of `sample_df` into one row, which will be handled by `samplesheet.groupby('sample_name').agg`
     :rtype: `pandas.Series`
     """
+    # Initialize the output, a series aggreggating the df
+    aggregated = pd.Series()
+    aggregated['libraries'] = tuple(sample_df.index)
+
     # Get the tool-command-refdir combo based on library types
     # and throw error if not found
-    aggregated = pd.Series()
     library_types = tuple(sample_df['library_types'].sort_values())
     tool_command_refdir = lib_types_to_program.get(library_types)
 
@@ -152,19 +160,21 @@ def get_latest_version(
     return latest_versions[tool]
 
 
-def get_antibody_tags():
+def get_antibody_tags(_):
     tags_df = pd.read_csv(
         'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/totalseq-b_universal.csv'
     )
 
-    return tags_df['tag_id'].to_list()
+    return tuple(tags_df['tag_id'])
 
 
 def fill_other_cols(df_row: pd.Series):
     new_data = df_row.copy()
-    
-    if 'Antibody Capture' in df_row['library_types']:
-        new_data['tags'] = get_antibody_tags()
+
+    lib_type_to_func = {'Antibody Capture': ('tags', get_antibody_tags)}
+    for lib_type in lib_type_to_func.keys() & df_row['library_types']:
+        col, func = lib_type_to_func[lib_type]
+        new_data[col] = func(new_data)
 
     return new_data
 
@@ -185,3 +195,46 @@ def sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:
         return dumper.represent_sequence(
             tag='tag:yaml.org,2002:seq', sequence=data, flow_style=True
         )
+
+
+def samplesheet_from_df(
+    df: pd.DataFrame,
+    output_cols: Collection = SAMPLESHEET_KEY_TO_TYPE.keys(),
+    cols_as_str: Collection[str] = [],
+    sortby: list[str] | str = SAMPLESHEET_SORT_KEYS,
+    groupby: list[str] | str = SAMPLESHEET_GROUP_KEY,
+    delimiter: str = '#' * 80,
+) -> str:
+    # Drop unnecessary columns and sort by defined order
+    to_keep = [col for col in output_cols if col in df.columns]
+    df = df[to_keep].copy()
+
+    # Convert lists to strings if desired and sort values
+    for col in cols_as_str:
+        df[col] = df[col].apply(lambda lst: lst[0] if len(lst) == 1 else lst)
+    df.sort_values(sortby, inplace=True)
+
+    # Add custom representer for sequences
+    for sequence_type in (list, tuple):
+        add_representer(data_type=sequence_type, representer=sequence_representer)
+
+    # Generate output string
+    yml = ''
+    for _, group in df.groupby(groupby):
+        # Convert to records and filter out nans
+        records = group.to_dict(orient='records')
+        records = [
+            {key: value for key, value in rec.items() if value == value}
+            for rec in records
+        ]
+
+        # Dump and write delimiter between groups
+        yml += dump(
+            data=records,
+            Dumper=Dumper,
+            default_flow_style=False,
+            sort_keys=False,
+        )
+        yml += f'\n{delimiter}\n\n'
+
+    return yml

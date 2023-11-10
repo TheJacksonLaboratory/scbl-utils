@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from pathlib import Path
 
 from rich import print as rprint
@@ -6,7 +7,7 @@ from typer import Abort
 from .defaults import DOCUMENTATION
 
 
-def direc(direc: Path, required_files: list[Path] = []) -> dict[str, Path]:
+def direc(direc: Path, required_files: Collection[Path] = []) -> dict[str, Path]:
     """Checks that direc has required files and returns them, creating direc in the process
 
     :param direc: Config dir to check

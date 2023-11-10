@@ -8,6 +8,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive',
 ]
 LIBRARY_GLOB_PATTERN = 'SC*fastq*'
+LIBRARY_ID_PATTERN = r'SC\d{7}'
 GDRIVE_CONFIG_FILES = [
     Path(filename)
     for filename in (
@@ -80,3 +81,5 @@ REF_DIRS = {
     for ref_dir in tool_command_refdirs[2]
 }
 SAMPLENAME_BLACKLIST_PATTERN = f'[^{ascii_letters + digits}]'
+SAMPLESHEET_SORT_KEYS = ['library_types', 'sample_name']
+SAMPLESHEET_GROUP_KEY = 'library_types'

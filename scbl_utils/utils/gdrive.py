@@ -1,8 +1,12 @@
 from pathlib import Path
+from re import match
 
 import gspread as gs
 import pandas as pd
+from numpy import inf
 from rich import print as rprint
+
+from scbl_utils.utils.defaults import LIBRARY_ID_PATTERN
 
 
 def login(*args, **kwargs) -> gs.Client:  # type: ignore
@@ -49,11 +53,11 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
 class GSheet(gs.Spreadsheet):
     """Inherits from gspread.Spreadsheet, adding a to_df method. Constructor requires same args as gspread.SpreadSheet"""
 
+    # TODO: this assumes that each worksheet in a given spreadsheet
+    # has the same header row. Implement something that will either
+    # figure out the header row or add that to the specifications
     def to_df(
-        self,
-        worksheet_index: int = 0,
-        col_renaming: dict[str, str] = {},
-        **kwargs,
+        self, col_renaming: dict[str, str] = {}, lib_pattern: str = LIBRARY_ID_PATTERN
     ) -> pd.DataFrame:
         """Get a spreadsheet from Google Drive and convert to pandas.DataFrame
 
@@ -72,22 +76,99 @@ class GSheet(gs.Spreadsheet):
             :return: The requested Google Sheet as a `pandas.DataFrame`
             :rtype: pd.DataFrame
         """
-        # Get worksheet and convert to pd.DataFrame
-        worksheet = self.get_worksheet(worksheet_index)
-        records = worksheet.get_all_records(
-            expected_headers=col_renaming.keys(), **kwargs
+        # Initialize list of dataframes and get all tables in
+        # spreadsheet as rows and as columns
+        dfs = []
+        tables = (
+            (
+                worksheet.get_values(major_dimension='rows'),
+                worksheet.get_values(major_dimension='columns'),
+            )
+            for worksheet in self.worksheets()
         )
-        df = pd.DataFrame.from_records(records)
 
-        # Subset to desired columns, strip whitespace, convert "TRUE"
-        # and "FALSE" to bools, rename columns, and convert n_cells to
-        # numeric
-        df = df[col_renaming.keys()]
-        df = df.map(lambda value: value.strip() if isinstance(value, str) else value)  # type: ignore
-        df.rename(columns=col_renaming, inplace=True)
-        df.replace({'TRUE': True, 'FALSE': False}, inplace=True)
+        # Some worksheets have the same columns. Initialize a pd.Series
+        # tracking nan counts so as to pick the ones with the least
+        best_nan_counts = pd.Series({col: inf for col in col_renaming.values()})
 
-        return df
+        # Iterate over table-pairings
+        for table_as_rows, table_as_columns in tables:
+            cols_in_sheet, header_row_idx, header_row = set(), 0, []
+
+            # Iterate over the rows of the table
+            for i, row in enumerate(table_as_rows):
+                # If this row shares more than one element with the
+                # desire columns, then it's the header row.
+                cols_in_sheet = col_renaming.keys() & row
+                if len(cols_in_sheet) > 1:
+                    header_row_idx, header_row = i, row
+                    break
+
+                # If not, make sure to reassign cols_in_sheet
+                cols_in_sheet = None
+
+            # If we've looped over all rows of the table and found
+            # no rows that contain more than one of our desired keys,
+            # move onto the next worksheet of this spreadsheet
+            if not cols_in_sheet:
+                continue
+
+            # Get a list of the columns that contain values that match
+            # the regex of a library ID
+            library_col_idxs = [
+                i
+                for i, col in enumerate(table_as_columns)
+                if any(match(pattern=lib_pattern, string=entry) for entry in col)
+            ]
+
+            # If it's empty, that means that this table doesn't have a
+            # column tracking library ID, so its useless to us because
+            # we can't align worksheets. # TODO: perhaps make this more
+            # dynamic in case one wants to retrieve a spreadsheet that
+            # has nothing to with libraries
+            if not library_col_idxs:
+                continue
+
+            # Take the first column that matches the requirement above
+            library_col_idx = library_col_idxs[0]
+
+            # Construct DataFrame, assuming all data will be after
+            # header row
+            data = table_as_rows[header_row_idx + 1 :]
+            df = pd.DataFrame(data=data, columns=header_row)
+
+            # Format df
+            df = df.map(lambda value: value.strip() if isinstance(value, str) else value)  # type: ignore
+            df.replace({'TRUE': True, 'FALSE': False}, inplace=True)
+
+            # The column name to index on will be the element in the
+            # header row in the position determined as library_col_idx
+            index_col_name = header_row[library_col_idx]
+            df.set_index(index_col_name, inplace=True)
+            df.index.rename(None, inplace=True)
+
+            # Subset to the columns we care about and rename
+            to_keep = list(cols_in_sheet - {index_col_name})
+            df = df[to_keep]
+            df.rename(columns=col_renaming, inplace=True)
+
+            # Compare the nan counts, setting to_keep = True for
+            # columns in this df that have less nans than the best so
+            # far
+            nan_counts = df.isna().sum()
+            duplicate_cols = df.columns.intersection(best_nan_counts.index)
+            to_keep = nan_counts[duplicate_cols] < best_nan_counts[duplicate_cols]
+
+            # Get the actual column names to keep and subset df again
+            cols_to_keep = to_keep[to_keep].index
+            df = df[cols_to_keep]
+
+            # Set the best nan counts and append df to dfs list
+            best_nan_counts[cols_to_keep] = nan_counts[cols_to_keep]
+            dfs.append(df)
+
+        # Concatenate the dataframes and return
+        return pd.concat(dfs, axis=1)
 
 
 def get_project_params(
