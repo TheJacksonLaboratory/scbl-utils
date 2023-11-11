@@ -6,16 +6,10 @@ from rich import print as rprint
 from typer import Abort
 from yaml import Dumper, SequenceNode, add_representer, dump
 
-from .defaults import (
-    LIB_TYPES_TO_PROGRAM,
-    LIBRARY_GLOB_PATTERN,
-    REF_PARENT_DIR,
-    SAMPLENAME_BLACKLIST_PATTERN,
-    SAMPLESHEET_GROUP_KEY,
-    SAMPLESHEET_KEY_TO_TYPE,
-    SAMPLESHEET_SORT_KEYS,
-    SIBLING_REPOSITORY,
-)
+from .defaults import (LIB_TYPES_TO_PROGRAM, LIBRARY_GLOB_PATTERN,
+                       REF_PARENT_DIR, SAMPLENAME_BLACKLIST_PATTERN,
+                       SAMPLESHEET_GROUP_KEY, SAMPLESHEET_KEY_TO_TYPE,
+                       SAMPLESHEET_SORT_KEYS, SIBLING_REPOSITORY)
 
 
 def map_libs_to_fastqdirs(
@@ -158,6 +152,33 @@ def get_latest_version(
     latest_versions = grouped['version'].max()
 
     return latest_versions[tool]
+
+
+def genomes_from_user(
+    message: str, reference_dirs: list[Path], sample_name: str
+) -> list[str]:
+    from rich.prompt import Prompt
+
+    # Print a message explaining why the user is being prompted
+    rprint(message, end='\n\n')
+
+    # The reference dirs and libraries are both in order, zip them
+    reference_paths = []
+    for ref_dir in reference_dirs:
+        # Get the genome choices and sort for prettier output
+        genome_choices = [path.name for path in ref_dir.iterdir()]
+        genome_choices.sort()
+
+        # Ask the user which genome they want and construct the full
+        # ref path, appending to output
+        genome = Prompt.ask(
+            f'Choose a genome in [bold green]{ref_dir.absolute()}[/] for [bold orange1]{sample_name}[/] ->',
+            choices=genome_choices,
+        )
+        full_ref_path = str((ref_dir / genome).absolute())
+        reference_paths.append(full_ref_path)
+
+    return reference_paths
 
 
 def get_antibody_tags(_):

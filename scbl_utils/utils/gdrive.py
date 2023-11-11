@@ -53,9 +53,6 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
 class GSheet(gs.Spreadsheet):
     """Inherits from gspread.Spreadsheet, adding a to_df method. Constructor requires same args as gspread.SpreadSheet"""
 
-    # TODO: this assumes that each worksheet in a given spreadsheet
-    # has the same header row. Implement something that will either
-    # figure out the header row or add that to the specifications
     def to_df(
         self, col_renaming: dict[str, str] = {}, lib_pattern: str = LIBRARY_ID_PATTERN
     ) -> pd.DataFrame:
@@ -191,20 +188,20 @@ def get_project_params(
         :rtype: `dict[str, str]`
     """
     from googleapiclient.discovery import build
-    from rich.prompt import Prompt
 
-    from .samplesheet import get_latest_version
+    from .samplesheet import genomes_from_user, get_latest_version
 
-    # Get credentials, project name, and tool
+    # Get credentials, project, tool, and reference dirs
     creds = gclient.auth
-    sample_name = df_row['sample_name']
-    project = df_row['project']
-    tool = df_row['tool']
+    sample_name, project, tool, reference_dirs = (
+        df_row[col] for col in ('sample_name', 'project', 'tool', 'reference_dirs')
+    )
 
     # Build service
     service = build(serviceName='drive', version='v3', credentials=creds)
 
-    # Get all files in Google Drive folder matching criteria
+    # Get all files in Google Drive folder matching criteria, sort
+    # by modified time, and get their IDs
     result = (
         service.files()
         .list(
@@ -214,57 +211,45 @@ def get_project_params(
         )
         .execute()
     )
+    metrics_files = result['files']
+    metrics_files.sort(key=lambda file: file['modifiedTime'])
+    spreadsheet_ids = [file['id'] for file in metrics_files]
 
-    # Get reference directory
-    reference_dirs = df_row['reference_dirs']
+    # Iterate over all spreadsheets
+    for id in spreadsheet_ids:
+        metricssheet = GSheet(client=gclient, properties={'id': id})
+        metrics_df = metricssheet.to_df(**kwargs)
 
-    # If Google Drive query returned nothing, use latest tool version
-    # and get the proper reference path from the user
-    if not result['files']:
-        params = pd.Series()
+        # Filter metrics_df to contain just those projects matching this
+        # project and tool
+        project_df = metrics_df[
+            (metrics_df['project'] == project) & (metrics_df['tool'] == tool)
+        ].copy()
 
-        params['tool_version'] = get_latest_version(tool)
-        rprint(
-            f'\nIt appears that sample [bold orange1]{sample_name}[/] is associated with a new project, as its project ID ([bold orange1]{project}[/]) was not found in any of the spreadsheets in https://drive.google.com/drive/folders/{metrics_dir_id}. Please select a reference genome for each library from the reference directories below:'
+        if project_df.shape[0] < 1:
+            continue
+
+        # Construct the reference path, then convert it to a str
+        # representation
+        project_df['reference_path'] = project_df['reference'].map(
+            lambda genome: [str(ref_dir / genome) for ref_dir in reference_dirs]
         )
 
-        libraries = df_row['libraries']
-        params['reference_path'] = []
-        for i, ref_dir in enumerate(reference_dirs):
-            genome_choices = [path.name for path in ref_dir.iterdir()]
-            genome_choices.sort()
+        # Since all rows should be the same (as they belong to the same
+        # project and have the same tool), return the first row
+        return project_df[['tool_version', 'reference_path']].iloc[0]
 
-            genome = Prompt.ask(
-                f'Choices in [bold green]{ref_dir.absolute()}[/] for [bold orange]{libraries[i]}[/] ->', choices=genome_choices
-            )
-            full_ref_path = str((ref_dir / genome).absolute())
-            params['reference_path'].append(full_ref_path)
+    # Either there were no spreadsheets matching the criteria or there
+    # are no instances of the project that share this tool. Just get
+    # the latest tool version and reference genome from the user
+    params = pd.Series()
+    params['tool_version'] = get_latest_version(tool)
 
-        return params
-
-    # Get the most recently modified delivered metrics spreadsheet
-    # and convert to pandas.DataFrame
-    most_recent = max(result['files'], key=lambda f: f['modifiedTime'])
-    spreadsheet_id = most_recent['id']
-    metricssheet = GSheet(client=gclient, properties={'id': spreadsheet_id})
-    metrics_df = metricssheet.to_df(**kwargs)
-
-    # Filter metrics_df to contain just those projects matching this
-    # project and tool
-    project_df = metrics_df[
-        (metrics_df['project'] == project) & (metrics_df['tool'] == tool)
-    ].copy()
-
-    # Construct the reference path, then convert it to a str
-    # representation
-    project_df['reference_path'] = project_df['reference'].map(
-        lambda genome: [str(ref_dir / genome) for ref_dir in reference_dirs]
+    message = f'\nThere are no spreadsheets in the Google Drive folder at https://drive.google.com/drive/folders/{metrics_dir_id} containing the SCBL Project [bold orange1]{project}[/] and the tool [bold orange1]{tool}[/].'
+    params['reference_path'] = genomes_from_user(
+        message=message,
+        reference_dirs=reference_dirs,
+        sample_name=sample_name,
     )
 
-    # Since all rows should be the same (as they belong to the same
-    # project and have the same tool), return the first row
-    return project_df[['tool_version', 'reference_path']].iloc[0]
-
-    # TODO: is there a case where a two runs of a project use the same
-    # tool but different processing references? like, two different
-    # species within a project?
+    return params
