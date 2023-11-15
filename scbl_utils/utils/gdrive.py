@@ -4,7 +4,7 @@ import gspread as gs
 import pandas as pd
 from rich import print as rprint
 
-from scbl_utils.utils.defaults import TRACKING_DF_INDEX_COL
+from .defaults import TRACKING_DF_INDEX_COL
 
 
 def login(*args, **kwargs) -> gs.Client:  # type: ignore

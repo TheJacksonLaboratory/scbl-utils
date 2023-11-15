@@ -43,7 +43,7 @@ AGG_FUNCS = {
     'area': 'first',
 }
 SAMPLESHEET_KEYS = ('libraries', 'library_types', 'sample_name', 'n_cells', 'is_nuclei', 'tool', 'tool_version', 'command', 'fastq_paths', 'reference_path', 'use_undetermined', 'lanes', 'design', 'probe_set', 'tags', 'no_bam', 'slide', 'area', 'image', 'roi_json', 'cyta_image', 'manual_alignment')
-_ref_parent_dir = Path('/sc/service/pipelines/references').absolute()
+_ref_parent_dir = Path('/sc/service/pipelines/references')
 _lib_types_to_program = {
     ('Chromatin Accessibility',):
     ('cellranger-atac', 'count', ['10x-atac']),
@@ -119,5 +119,5 @@ PLATFORMS_TO_PROBESET = {
         'mm10-2020-A': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
     },
 }
-VISIUM_DIR = Path('/sc/service/imaging/visium').absolute()
+VISIUM_DIR = Path('/sc/service/imaging/visium')
 TRACKING_DF_INDEX_COL = 'libraries'

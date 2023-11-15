@@ -48,7 +48,7 @@ def samplesheet_from_gdrive(
     Pull data from Google Drive and generate a yml samplesheet to be
     used as input for the nf-tenx pipeline.
     """
-    from pandas import concat, Series
+    from pandas import concat
     from .utils import gdrive
     from .utils.defaults import (AGG_FUNCS, GDRIVE_CONFIG_FILES,
                                  LIB_TYPES_TO_PROGRAM, SCOPES)
