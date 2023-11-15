@@ -4,7 +4,7 @@ from typing import Annotated
 import typer
 
 from .utils import validate
-from .utils.defaults import CONFIG_DIR, DOCUMENTATION, REF_PARENT_DIR
+from .utils.defaults import CONFIG_DIR, DOCUMENTATION
 
 see_more_message = f'See {DOCUMENTATION} for more information.'
 app = typer.Typer()
@@ -20,7 +20,7 @@ def callback(config_dir: Path = CONFIG_DIR) -> None:
     CONFIG_DIR = config_dir
     _ = validate.direc(config_dir)
 
-
+# TODO: clean up this function. or not because it's gonna be obsolete
 @app.command(no_args_is_help=True)
 def samplesheet_from_gdrive(
     fastqdirs: Annotated[
@@ -35,14 +35,6 @@ def samplesheet_from_gdrive(
             '--outsheet', '-o', help='File path to save the resulting samplesheet.'
         ),
     ] = Path('samplesheet.yml'),
-    ref_parent_dir: Annotated[
-        Path,
-        typer.Option(
-            '--reference-parent-dir',
-            '-r',
-            help=f'The parent directory where all reference genomes are stored, organized into directories that correspond to fastq processing tools. {see_more_message}',
-        ),
-    ] = REF_PARENT_DIR,
     ref_path_as_str: Annotated[
         bool,
         typer.Option(
@@ -56,17 +48,13 @@ def samplesheet_from_gdrive(
     Pull data from Google Drive and generate a yml samplesheet to be
     used as input for the nf-tenx pipeline.
     """
-    from pandas import to_numeric
-
+    from pandas import concat, Series
     from .utils import gdrive
-    from .utils.defaults import GDRIVE_CONFIG_FILES, SCOPES
-    from .utils.samplesheet import (
-        fill_other_cols,
-        map_libs_to_fastqdirs,
-        program_from_lib_types,
-        samplesheet_from_df,
-        sanitize_sample_name,
-    )
+    from .utils.defaults import (AGG_FUNCS, GDRIVE_CONFIG_FILES,
+                                 LIB_TYPES_TO_PROGRAM, SCOPES)
+    from .utils.samplesheet import (get_antibody_tags, map_platform_to_probeset,
+                                    get_visium_info, map_libs_to_fastqdirs,
+                                    samplesheet_from_df, sanitize_samplename)
 
     # Create and validate Google Drive config dir, returning paths
     gdrive_config_dir = CONFIG_DIR / 'google-drive'
@@ -79,6 +67,7 @@ def samplesheet_from_gdrive(
     # Load in the two specification files that instruct script how to
     # get information from Google Drive
     tracking_spec, metrics_spec = gdrive.load_specs(config_files)
+    sheets_spec = tracking_spec['sheets']
 
     # Login and get trackingsheet
     gclient = gdrive.login(scopes=SCOPES, filename=config_files['service-account.json'])
@@ -86,25 +75,39 @@ def samplesheet_from_gdrive(
         client=gclient, properties={'id': tracking_spec['id']}
     )
 
-    # Convert GSheet to pd.DataFrame
-    tracking_df = trackingsheet.to_df(col_renaming=tracking_spec['columns'])
+    # Convert GSheet to pd.DataFrame and concatenate
+    tracking_dfs = [
+        trackingsheet.to_df(
+            sheet_idx=sheet_idx,
+            col_renaming=sheet_dict['columns'],
+            header_row=sheet_dict['header_row'],
+        )
+        for sheet_idx, sheet_dict in sheets_spec.items()
+        if sheet_dict['join']
+    ]
+    tracking_df = concat(tracking_dfs, axis=1)
+    tracking_df['libraries'] = tracking_df.index
 
-    # Filter df and convert n_cells to numeric
-    samplesheet_df = tracking_df.loc[lib_to_fastqdir.keys()].copy()  # type: ignore
-    samplesheet_df['n_cells'] = to_numeric(
-        samplesheet_df['n_cells'].str.replace(',', ''), errors='coerce'
+    # Filter df and fill with available information 
+    # # TODO: after the filtration, everything can be wrapped into a 
+    # function called "fill" or something
+    samplesheet_df = tracking_df[tracking_df['libraries'].isin(lib_to_fastqdir.keys())].copy()  # type: ignore
+    for new_col, old_col, mapping in (
+        ('fastq_paths', 'libraries', lib_to_fastqdir),
+        ('library_types', '10x_platform', tracking_spec['platform_to_lib_type']),
+    ):
+        samplesheet_df[new_col] = samplesheet_df[old_col].map(mapping)
+
+    # Group by sample_name and aggregate
+    grouped_samplesheet_df = samplesheet_df.groupby('sample_name', as_index=False).agg(
+        AGG_FUNCS
     )
 
-    # Fill samplesheet with available information
-    samplesheet_df['fastq_paths'] = samplesheet_df.index.map(lib_to_fastqdir)
-    samplesheet_df['library_types'] = samplesheet_df['10x_platform'].map(
-        tracking_spec['platform_to_lib_type']
-    )
-
-    # Group by sample_name and fill with library type specific information
-    grouped_samplesheet_df = samplesheet_df.groupby(
-        'sample_name', as_index=False
-    ).apply(program_from_lib_types, ref_parent_dir=ref_parent_dir.absolute())
+    # Assign tool/command/ref_dirs combo based on lib_types. This is
+    # weird because pandas is weird
+    grouped_samplesheet_df[
+        ['tool', 'command', 'reference_dirs']
+    ] = grouped_samplesheet_df['library_types'].apply(lambda lib_combo: LIB_TYPES_TO_PROGRAM[lib_combo])
 
     # Also get tool version and reference path
     grouped_samplesheet_df[
@@ -117,12 +120,22 @@ def samplesheet_from_gdrive(
         col_renaming=metrics_spec['columns'],
     )
 
-    # Fill other columns based on library types
-    grouped_samplesheet_df = grouped_samplesheet_df.apply(fill_other_cols, axis=1)
+    # Get antibody tags if antibody vapture
+    grouped_samplesheet_df['tags'] = grouped_samplesheet_df['library_types'].map(
+        get_antibody_tags
+    )
+
+    # Get probe set if flex or visium
+    grouped_samplesheet_df['probe_set'] = grouped_samplesheet_df[
+        ['10x_platform', 'reference_path']
+    ].apply(map_platform_to_probeset, axis=1)
+
+    # Get visium file paths
+    grouped_samplesheet_df = grouped_samplesheet_df.apply(get_visium_info, axis=1)
 
     # Sanitize sample names
     grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].map(
-        sanitize_sample_name
+        sanitize_samplename
     )
 
     # Generate yml output and write to file, converting ref_path to str

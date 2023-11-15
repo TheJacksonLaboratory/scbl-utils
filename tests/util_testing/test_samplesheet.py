@@ -5,7 +5,7 @@ from pytest import fixture, mark, raises
 from typer import Abort
 
 from scbl_utils.utils import samplesheet
-from scbl_utils.utils.defaults import LIB_TYPES_TO_PROGRAM
+from scbl_utils.utils.defaults import LIB_TYPES_TO_PROGRAM, SAMPLENAME_BLACKLIST_PATTERN
 
 
 @fixture
@@ -100,3 +100,8 @@ def test_get_latest_version():
     }
     for tool, version in latest_versions.items():
         assert samplesheet.get_latest_version(tool) == version
+
+
+@mark.parametrize(argnames=('sample_name', 'sanitized'), argvalues=[('goodname-stuff123', 'goodname-stuff123'), ('space name_underscore', 'space-name-underscore'), ("!@#$%^&*'bad_chars and (spaces)", 'bad-chars-and-spaces')])
+def test_sanitize_samplename(sample_name, sanitized):
+    assert samplesheet.sanitize_samplename(sample_name) == sanitized

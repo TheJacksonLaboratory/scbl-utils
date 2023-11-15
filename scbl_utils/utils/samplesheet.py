@@ -1,19 +1,29 @@
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from pathlib import Path
+from re import sub, match
 
+from numpy import nan
 import pandas as pd
 from rich import print as rprint
 from typer import Abort
 from yaml import Dumper, SequenceNode, add_representer, dump
 
-from .defaults import (LIB_TYPES_TO_PROGRAM, LIBRARY_GLOB_PATTERN,
-                       REF_PARENT_DIR, SAMPLENAME_BLACKLIST_PATTERN,
-                       SAMPLESHEET_GROUP_KEY, SAMPLESHEET_KEY_TO_TYPE,
-                       SAMPLESHEET_SORT_KEYS, SIBLING_REPOSITORY)
+from .defaults import (
+    ANTIBODY_LIB_TYPES,
+    LIBRARY_GLOB_PATTERN,
+    PLATFORMS_TO_PROBESET,
+    SAMPLENAME_BLACKLIST_PATTERN,
+    SEP_PATTERN,
+    SIBLING_REPOSITORY,
+    SAMPLESHEET_KEYS,
+    SAMPLESHEET_SORT_KEYS,
+    SAMPLESHEET_GROUP_KEY,
+    VISIUM_DIR
+)
 
 
 def map_libs_to_fastqdirs(
-    fastqdirs: list[Path], glob_pattern: str = LIBRARY_GLOB_PATTERN
+    fastqdirs: Collection[Path], glob_pattern: str = LIBRARY_GLOB_PATTERN
 ) -> dict[str, str]:
     """Go from a list of fastq dirs to a mapping of library ID to fastq dir
 
@@ -52,65 +62,81 @@ def map_libs_to_fastqdirs(
     return sorted_lib_to_fastqdir
 
 
-def program_from_lib_types(
-    sample_df: pd.DataFrame,
-    ref_parent_dir: Path = REF_PARENT_DIR,
-    lib_types_to_program: dict[tuple[str, ...], tuple[str, str, list[str]]] = LIB_TYPES_TO_PROGRAM,  # type: ignore
-    samplesheet_key_to_type: dict[str, type] = SAMPLESHEET_KEY_TO_TYPE,
-) -> pd.Series:
-    """To be used as first argument to `samplesheet_df.groupby('sample_name', as_index=False).apply`. Aggregates `sample_df` (representing one sample), adding information derived from the library types
+# def program_from_types(library_types: tuple[str, ...], lib_types_to_program: dict[tuple[str, ...], tuple[str, str, list[str]]] = LIB_TYPES_TO_PROGRAM) -> dict[str, str]:
+#     sorted_lib_types = sorted(library_types)
+#     sorted_lib_types = tuple(sorted_lib_types)
 
-    :param sample_df: This dataframe represents one sample, with each row representing a library belonging to that sample. It must contain the column 'library_types'
-    :type sample_df: `pd.DataFrame`
-    :param lib_types_to_program: A dict that associates a library type combo to a tool-command-reference_dir combo, defaults to LIB_TYPES_TO_PROGRAM
-    :type lib_types_to_program: dict[tuple[str, ...], tuple[str, str, Path]
-    :param samplesheet_key_to_type: A mapping between each samplesheet key and its type, defaults to SAMPLESHEET_KEY_TO_TYPE
-    :type samplesheet_key_to_type: `dict[str, type]`, optional
-    :raises ValueError: If the combination of library types for a given sample doesn't exist, raises error
-    :return: A `dict` that compresses the many rows of `sample_df` into one row, which will be handled by `samplesheet.groupby('sample_name').agg`
-    :rtype: `pandas.Series`
-    """
-    # Initialize the output, a series aggreggating the df
-    aggregated = pd.Series()
-    aggregated['libraries'] = tuple(sample_df.index)
+#     tool_command_refdir = lib_types_to_program.get(library_types)
 
-    # Get the tool-command-refdir combo based on library types
-    # and throw error if not found
-    library_types = tuple(sample_df['library_types'].sort_values())
-    tool_command_refdir = lib_types_to_program.get(library_types)
+#     if not tool_command_refdir:
+#         sample_name = sample_df['sample_name'].iloc[0]
+#         rprint(
+#             f'The library types [bold orange1]{library_types}[/] associated with [bold orange1]{sample_name}[/] are not a valid combination. Valid combinations:\n[bold blue]',
+#             *lib_types_to_program.keys(),
+#             sep='\n',
+#         )
+#         raise Abort()
 
-    if not tool_command_refdir:
-        sample_name = sample_df['sample_name'].iloc[0]
-        rprint(
-            f'The library types [bold orange1]{library_types}[/] associated with [bold orange1]{sample_name}[/] are not a valid combination. Valid combinations:\n[bold blue]',
-            *lib_types_to_program.keys(),
-            sep='\n',
-        )
-        raise Abort()
 
-    (
-        aggregated['tool'],
-        aggregated['command'],
-        aggregated['reference_dirs'],
-    ) = tool_command_refdir
+# def program_from_lib_types(
+#     sample_df: pd.DataFrame,
+#     ref_parent_dir: Path = REF_PARENT_DIR,
+#     lib_types_to_program: dict[tuple[str, ...], tuple[str, str, list[str]]] = LIB_TYPES_TO_PROGRAM,  # type: ignore
+#     samplesheet_key_to_type: dict[str, type] = SAMPLESHEET_KEY_TO_TYPE,
+# ) -> pd.Series:
+#     """To be used as first argument to `samplesheet_df.groupby('sample_name', as_index=False).apply`. Aggregates `sample_df` (representing one sample), adding information derived from the library types
 
-    # The list of reference dirs contains relative paths, make them
-    # absolute
-    aggregated['reference_dirs'] = [
-        ref_parent_dir / ref_child_dir for ref_child_dir in aggregated['reference_dirs']
-    ]
+#     :param sample_df: This dataframe represents one sample, with each row representing a library belonging to that sample. It must contain the column 'library_types'
+#     :type sample_df: `pd.DataFrame`
+#     :param lib_types_to_program: A dict that associates a library type combo to a tool-command-reference_dir combo, defaults to LIB_TYPES_TO_PROGRAM
+#     :type lib_types_to_program: dict[tuple[str, ...], tuple[str, str, Path]
+#     :param samplesheet_key_to_type: A mapping between each samplesheet key and its type, defaults to SAMPLESHEET_KEY_TO_TYPE
+#     :type samplesheet_key_to_type: `dict[str, type]`, optional
+#     :raises ValueError: If the combination of library types for a given sample doesn't exist, raises error
+#     :return: A `dict` that compresses the many rows of `sample_df` into one row, which will be handled by `samplesheet.groupby('sample_name').agg`
+#     :rtype: `pandas.Series`
+#     """
+#     # Initialize the output, a series aggreggating the df
+#     aggregated = pd.Series()
+#     aggregated['libraries'] = tuple(sample_df.index)
 
-    # Iterate over each column of sample_df and aggregate
-    for col, series in sample_df.items():
-        if col == 'n_cells':
-            aggregated[col] = series.max()
-        # TODO: think of a better way to check for 10x_platform
-        elif samplesheet_key_to_type.get(col) == list[str] or series.nunique() > 1 or col == '10x_platform':  # type: ignore
-            aggregated[col] = tuple(series)
-        else:
-            aggregated[col] = series.iloc[0]
+#     # Get the tool-command-refdir combo based on library types
+#     # and throw error if not found
+#     library_types = tuple(sample_df['library_types'].sort_values())
+#     tool_command_refdir = lib_types_to_program.get(library_types)
 
-    return aggregated
+#     if not tool_command_refdir:
+#         sample_name = sample_df['sample_name'].iloc[0]
+#         rprint(
+#             f'The library types [bold orange1]{library_types}[/] associated with [bold orange1]{sample_name}[/] are not a valid combination. Valid combinations:\n[bold blue]',
+#             *lib_types_to_program.keys(),
+#             sep='\n',
+#         )
+#         raise Abort()
+
+#     (
+#         aggregated['tool'],
+#         aggregated['command'],
+#         aggregated['reference_dirs'],
+#     ) = tool_command_refdir
+
+#     # The list of reference dirs contains relative paths, make them
+#     # absolute
+#     aggregated['reference_dirs'] = [
+#         ref_parent_dir / ref_child_dir for ref_child_dir in aggregated['reference_dirs']
+#     ]
+
+#     # Iterate over each column of sample_df and aggregate
+#     for col, series in sample_df.items():
+#         if col == 'n_cells':
+#             aggregated[col] = series.max()
+#         # TODO: think of a better way to check for 10x_platform
+#         elif samplesheet_key_to_type.get(col) == list[str] or series.nunique() > 1 or col == '10x_platform':  # type: ignore
+#             aggregated[col] = tuple(series)
+#         else:
+#             aggregated[col] = series.iloc[0]
+
+#     return aggregated
 
 
 def get_latest_version(
@@ -155,7 +181,7 @@ def get_latest_version(
 
 
 def genomes_from_user(
-    message: str, reference_dirs: list[Path], sample_name: str
+    message: str, reference_dirs: Collection[Path], sample_name: str
 ) -> list[str]:
     from rich.prompt import Prompt
 
@@ -181,7 +207,12 @@ def genomes_from_user(
     return reference_paths
 
 
-def get_antibody_tags(_):
+def get_antibody_tags(
+    library_types: Collection[str], antibody_lib_types: set[str] = ANTIBODY_LIB_TYPES
+) -> tuple[str, ...] | float:
+    if not antibody_lib_types & set(library_types):
+        return nan
+
     tags_df = pd.read_csv(
         'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/totalseq-b_universal.csv'
     )
@@ -189,23 +220,60 @@ def get_antibody_tags(_):
     return tuple(tags_df['tag_id'])
 
 
-def fill_other_cols(df_row: pd.Series):
+def map_platform_to_probeset(
+    df_row: pd.Series,
+    platform_to_probset: dict[str, dict[str, str]] = PLATFORMS_TO_PROBESET,
+):
+    platforms = df_row['10x_platform']
+    ref_paths = df_row['reference_path']
+    for platform in platforms:
+        probeset_dict = platform_to_probset.get(platform)
+        if not probeset_dict:
+            continue
+        genome = ref_paths[0].split('/')[-1]
+        probe_set = probeset_dict.get(genome)
+        if probe_set:
+            return probe_set
+
+    return nan
+
+
+def get_visium_info(
+    df_row: pd.Series,
+    visium_dir: Path = VISIUM_DIR,
+) -> pd.Series:
+    library = df_row['libraries'][0]
+    slide, area, lib_types = (df_row[col] for col in ('slide', 'area', 'library_types'))
+
     new_data = df_row.copy()
+    for lib in (library.upper(), library.lower()):
+        shared_patterns = {
+            'roi_json': rf'{lib}\.json',
+            'image': rf'{lib}\.tiff',
+            'manual_alignment': rf'{lib}[_-]{slide}[_-]{area}\.json',
+        }
+        cytassist_pattern = {'cyta_image': rf'CAV.*{lib}.*\.tif'}
+        lib_type_to_patterns = {
+            ('CytAssist Gene Expression',): shared_patterns | cytassist_pattern,
+            ('Spatial Gene Expression',): shared_patterns,
+        }
+        patterns = lib_type_to_patterns.get(lib_types)
+        if not patterns:
+            return df_row
 
-    lib_type_to_func = {'Antibody Capture': ('tags', get_antibody_tags)}
-    for lib_type in lib_type_to_func.keys() & df_row['library_types']:
-        col, func = lib_type_to_func[lib_type]
-        new_data[col] = func(new_data)
-
+        paths_with_lib = list(visium_dir.rglob(f'*{lib}*'))
+        for key, pattern in patterns.items():
+            for path in paths_with_lib:
+                if match(pattern=pattern, string=path.name):
+                    new_data[key] = str(path.absolute())
+                    break
     return new_data
 
 
-def sanitize_sample_name(sample_name: str) -> str:
-    from re import sub
-
-    pre_sanitized = sub(pattern=r'[_\s]', repl='-', string=sample_name)
-    sanitized = sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=pre_sanitized)
-    return sanitized
+def sanitize_samplename(sample_name: str) -> str:
+    legal = sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=sample_name)
+    sep_replaced = sub(pattern=SEP_PATTERN, repl='-', string=legal)
+    return sep_replaced
 
 
 def sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:
@@ -220,7 +288,7 @@ def sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:
 
 def samplesheet_from_df(
     df: pd.DataFrame,
-    output_cols: Collection = SAMPLESHEET_KEY_TO_TYPE.keys(),
+    output_cols: Sequence[str] = SAMPLESHEET_KEYS,
     cols_as_str: Collection[str] = [],
     sortby: list[str] | str = SAMPLESHEET_SORT_KEYS,
     groupby: list[str] | str = SAMPLESHEET_GROUP_KEY,

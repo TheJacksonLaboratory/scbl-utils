@@ -1,0 +1,36 @@
+- libraries: [SC2300462]
+  library_types: [CytAssist Gene Expression]
+  sample_name: JDC-WP-007-o
+  n_cells: 4968
+  is_nuclei: false
+  tool: spaceranger
+  tool_version: 2.0.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/../visium]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/refdata-gex-GRCh38-2020-A]
+  slide: V42N07-060
+  area: A1
+  image: /Users/saida/work/visium/cytassist/SC2300462.tiff
+  roi_json: /Users/saida/work/visium/cytassist/SC2300462.json
+  cyta_image: /Users/saida/work/visium/cytassist/CAVG10255_2023-06-21_13-44-52_2023-06-21-robson_V42N07-060_A1_sc2300462.tif
+  manual_alignment: /Users/saida/work/visium/cytassist/SC2300462_V42N07-060-A1.json
+
+################################################################################
+
+- libraries: [SC2300637]
+  library_types: [Spatial Gene Expression]
+  sample_name: E18-Optic-Nerve---C1
+  n_cells: 78
+  is_nuclei: false
+  tool: spaceranger
+  tool_version: 2.1.0
+  command: count
+  fastq_paths: [/Users/saida/work/scbl-utils/../visium]
+  reference_path: [/Users/saida/work/scbl-utils/tests/references/10x-vis/test-refdata]
+  slide: V23F23-299
+  area: ''
+  image: /Users/saida/work/visium/other/SC2300637.tiff
+  roi_json: /Users/saida/work/visium/other/SC2300637.json
+
+################################################################################
+
