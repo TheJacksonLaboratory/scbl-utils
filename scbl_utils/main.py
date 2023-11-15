@@ -119,7 +119,13 @@ def samplesheet_from_gdrive(
     grouped_samplesheet_df[
         ['tool', 'command', 'reference_dirs']
     ] = grouped_samplesheet_df['library_types'].apply(lambda lib_combo: LIB_TYPES_TO_PROGRAM[lib_combo])
-
+    
+    # Some gene expression libraries are actually multiplexed despite 
+    # not being marked as such. If the 'design' column is there, then
+    # change it to cellranger multi. Eventually there should be a
+    # better way of doing this TODO
+    grouped_samplesheet_df['command'] = grouped_samplesheet_df[['command', 'design']].apply(lambda s: 'multi' if s['design'] else s['command'], axis=1)
+    
     # Also get tool version and reference path
     grouped_samplesheet_df[
         ['tool_version', 'reference_path']
