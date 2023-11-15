@@ -1,3 +1,4 @@
+from audioop import mul
 from pathlib import Path
 from typing import Annotated
 
@@ -52,7 +53,8 @@ def samplesheet_from_gdrive(
     from .utils import gdrive
     from .utils.defaults import (AGG_FUNCS, GDRIVE_CONFIG_FILES,
                                  LIB_TYPES_TO_PROGRAM, SCOPES)
-    from .utils.samplesheet import (get_antibody_tags, map_platform_to_probeset,
+    from .utils.samplesheet import (get_antibody_tags, get_design,
+                                    map_platform_to_probeset,
                                     get_visium_info, map_libs_to_fastqdirs,
                                     samplesheet_from_df, sanitize_samplename)
 
@@ -81,6 +83,7 @@ def samplesheet_from_gdrive(
             sheet_idx=sheet_idx,
             col_renaming=sheet_dict['columns'],
             header_row=sheet_dict['header_row'],
+            to_join=sheet_dict['join']
         )
         for sheet_idx, sheet_dict in sheets_spec.items()
         if sheet_dict['join']
@@ -120,7 +123,7 @@ def samplesheet_from_gdrive(
         col_renaming=metrics_spec['columns'],
     )
 
-    # Get antibody tags if antibody vapture
+    # Get antibody tags if antibody capture
     grouped_samplesheet_df['tags'] = grouped_samplesheet_df['library_types'].map(
         get_antibody_tags
     )
@@ -132,6 +135,15 @@ def samplesheet_from_gdrive(
 
     # Get visium file paths
     grouped_samplesheet_df = grouped_samplesheet_df.apply(get_visium_info, axis=1)
+
+    # This is hardcoded because eventually google-drive will become 
+    # irrelevant. However TODO: make the below less hardcoded or 
+    # prettier in a function or something
+    multiplexing_sheet_idx = 5
+    multiplexing_spec = sheets_spec[multiplexing_sheet_idx]
+    multiplexing_df = trackingsheet.to_df(sheet_idx=5, col_renaming=multiplexing_spec['columns'], header_row=multiplexing_spec['header_row'], to_join=multiplexing_spec['join'])
+
+    grouped_samplesheet_df['design'] = grouped_samplesheet_df['libraries'].apply(get_design, multiplexing_df=multiplexing_df)
 
     # Sanitize sample names
     grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].map(

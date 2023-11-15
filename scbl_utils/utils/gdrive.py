@@ -53,10 +53,10 @@ class GSheet(gs.Spreadsheet):
     """Inherits from gspread.Spreadsheet, adding a to_df method. Constructor requires same args as gspread.SpreadSheet"""
 
     def to_df(
-        self, sheet_idx: int = 0, col_renaming: dict[str, str] = {}, header_row: int = 0, index_col: str = TRACKING_DF_INDEX_COL
+        self, sheet_idx: int = 0, col_renaming: dict[str, str] = {}, header_row: int = 0, index_col: str = TRACKING_DF_INDEX_COL, to_join: bool = True
     ) -> pd.DataFrame:
         # Get table and assign data and header row, then convert to df
-        table = self.get_worksheet(sheet_idx).get_values()
+        table = self.get_worksheet(sheet_idx).get_values(combine_merged_cells=True)
         data = table[header_row + 1 :]
         columns = table[header_row]
         df = pd.DataFrame(data=data, columns=columns)
@@ -68,10 +68,14 @@ class GSheet(gs.Spreadsheet):
         df = df.map(lambda s: s.strip(), na_action='ignore')  # type: ignore
         df.replace({'TRUE': True, 'FALSE': False, '': nan, '-': nan}, inplace=True)
 
+        # Set index and rename
         df.set_index(index_col, inplace=True)
         df.index.rename('', inplace=True)
-        duplicated = df.index.duplicated()
-        df = df.loc[~duplicated].copy()
+        
+        if to_join:
+            duplicated = df.index.duplicated()
+            df = df.loc[~duplicated].copy()
+        
         return df
 
     # def to_df(
