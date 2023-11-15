@@ -2,7 +2,7 @@ from collections.abc import Collection, Sequence
 from pathlib import Path
 from re import sub, match
 
-from numpy import nan, isnan
+from numpy import nan
 import pandas as pd
 from rich import print as rprint
 from typer import Abort
@@ -286,6 +286,16 @@ def sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:
         )
 
 
+def is_valid(value: Collection[str] | str | int | bool | None | float):
+    if isinstance(value, Collection) and len(value) == 0:
+        return False
+    if value is None:
+        return False
+    if value != value:
+        return False
+    return True
+
+
 def samplesheet_from_df(
     df: pd.DataFrame,
     output_cols: Sequence[str] = SAMPLESHEET_KEYS,
@@ -313,7 +323,7 @@ def samplesheet_from_df(
         # Convert to records and filter out nans
         records = group.to_dict(orient='records')
         records = [
-            {key: value for key, value in rec.items() if not isnan(value) and value is not None}
+            {key: value for key, value in rec.items() if is_valid(value)}
             for rec in records
         ]
 

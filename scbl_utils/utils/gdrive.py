@@ -2,6 +2,7 @@ from pathlib import Path
 
 import gspread as gs
 import pandas as pd
+from numpy import nan
 from rich import print as rprint
 
 from .defaults import TRACKING_DF_INDEX_COL
@@ -65,7 +66,7 @@ class GSheet(gs.Spreadsheet):
         df = df[cols_to_keep].copy()
         df.rename(columns=col_renaming, inplace=True)
         df = df.map(lambda s: s.strip(), na_action='ignore')  # type: ignore
-        df.replace({'TRUE': True, 'FALSE': False}, inplace=True)
+        df.replace({'TRUE': True, 'FALSE': False, '': nan, '-': nan}, inplace=True)
 
         df.set_index(index_col, inplace=True)
         df.index.rename('', inplace=True)

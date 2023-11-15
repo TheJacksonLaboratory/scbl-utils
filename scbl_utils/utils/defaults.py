@@ -103,20 +103,26 @@ SAMPLESHEET_GROUP_KEY = 'library_types'
 ANTIBODY_LIB_TYPES = {'Antibody Capture'}
 PLATFORMS_TO_PROBESET = {
     'Flex': {
-        'refdata-gex-cellranger-GRCh38-2020-A': '1.0/Chromium_Human_Transcriptome_Probe_Set_v1.0.1_GRCh38-2020-A.csv',
-        'refdata-gex-cellranger-mm10-2020-A': '1.0/Chromium_Mouse_Transcriptome_Probe_Set_v1.0.1_mm10-2020-A.csv',
+        'refdata-gex-GRCh38-2020-A': '1.0/Chromium_Human_Transcriptome_Probe_Set_v1.0.1_GRCh38-2020-A.csv',
+        'refdata-gex-mm10-2020-A': '1.0/Chromium_Mouse_Transcriptome_Probe_Set_v1.0.1_mm10-2020-A.csv',
     },
     'Visium CytAssist FFPE': {
         'refdata-cellranger-GRCh38-3.0.0': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
+        'refdata-gex-GRCh38-2020-A': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
         'refdata-cellranger-mm10-3.0.0': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
+        'refdata-gex-mm10-2020-A': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
     },
     'Visium FF': {
         'refdata-cellranger-GRCh38-3.0.0': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
+        'refdata-gex-GRCh38-2020-A': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
         'refdata-cellranger-mm10-3.0.0': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
+        'refdata-gex-mm10-2020-A': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
     },
     'Visium FFPE': {
         'refdata-cellranger-GRCh38-3.0.0': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
+        'refdata-gex-GRCh38-2020-A': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
         'refdata-cellranger-mm10-3.0.0': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
+        'refdata-gex-mm10-2020-A': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
     },
 }
 VISIUM_DIR = Path('/sc/service/imaging/visium')
