@@ -2,7 +2,7 @@ from collections.abc import Collection, Sequence
 from pathlib import Path
 from re import sub, match
 
-from numpy import nan
+from numpy import nan, isnan
 import pandas as pd
 from rich import print as rprint
 from typer import Abort
@@ -313,7 +313,7 @@ def samplesheet_from_df(
         # Convert to records and filter out nans
         records = group.to_dict(orient='records')
         records = [
-            {key: value for key, value in rec.items() if value == value}
+            {key: value for key, value in rec.items() if not isnan(value) and value is not None}
             for rec in records
         ]
 
