@@ -37,6 +37,7 @@ AGG_FUNCS = {
     'n_cells': n_cells_agg,
     'project': 'first',
     'is_nuclei': all,
+    'design': 'first',
     'fastq_paths': tuple,
     'project': 'first',
     'slide': 'first',

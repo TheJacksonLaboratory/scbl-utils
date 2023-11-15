@@ -90,11 +90,19 @@ def samplesheet_from_gdrive(
     ]
     tracking_df = concat(tracking_dfs, axis=1)
     tracking_df['libraries'] = tracking_df.index
+    
+    # This is hardcoded because eventually google-drive will become 
+    # irrelevant. However TODO: make the below less hardcoded or 
+    # prettier in a function or something
+    multiplexing_sheet_idx = 5
+    multiplexing_spec = sheets_spec[multiplexing_sheet_idx]
+    multiplexing_df = trackingsheet.to_df(sheet_idx=5, col_renaming=multiplexing_spec['columns'], header_row=multiplexing_spec['header_row'], to_join=multiplexing_spec['join'])
 
     # Filter df and fill with available information 
     # # TODO: after the filtration, everything can be wrapped into a 
     # function called "fill" or something
     samplesheet_df = tracking_df[tracking_df['libraries'].isin(lib_to_fastqdir.keys())].copy()  # type: ignore
+    samplesheet_df['design'] = samplesheet_df['libraries'].apply(get_design, multiplexing_df=multiplexing_df)
     for new_col, old_col, mapping in (
         ('fastq_paths', 'libraries', lib_to_fastqdir),
         ('library_types', '10x_platform', tracking_spec['platform_to_lib_type']),
@@ -135,15 +143,6 @@ def samplesheet_from_gdrive(
 
     # Get visium file paths
     grouped_samplesheet_df = grouped_samplesheet_df.apply(get_visium_info, axis=1)
-
-    # This is hardcoded because eventually google-drive will become 
-    # irrelevant. However TODO: make the below less hardcoded or 
-    # prettier in a function or something
-    multiplexing_sheet_idx = 5
-    multiplexing_spec = sheets_spec[multiplexing_sheet_idx]
-    multiplexing_df = trackingsheet.to_df(sheet_idx=5, col_renaming=multiplexing_spec['columns'], header_row=multiplexing_spec['header_row'], to_join=multiplexing_spec['join'])
-
-    grouped_samplesheet_df['design'] = grouped_samplesheet_df['libraries'].apply(get_design, multiplexing_df=multiplexing_df)
 
     # Sanitize sample names
     grouped_samplesheet_df['sample_name'] = grouped_samplesheet_df['sample_name'].map(

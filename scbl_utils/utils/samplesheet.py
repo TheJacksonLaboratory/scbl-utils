@@ -286,9 +286,11 @@ def sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:
         )
     
 
-def get_design(libraries: Sequence[str], multiplexing_df: pd.DataFrame) -> dict[str, dict[str, str]]:
-    lib = multiplexing_df.index.intersection(list(libraries))[0]
-    lib_df = multiplexing_df[lib].copy()
+def get_design(lib: str, multiplexing_df: pd.DataFrame) -> dict[str, dict[str, str]] | float:
+    if lib not in multiplexing_df.index:
+        return nan
+        
+    lib_df = multiplexing_df.loc[lib].copy()
     design = {tag: {'name': name, 'description': description} for tag, name, description in lib_df[['tag_id', 'sub_sample_name', 'description']].itertuples(index=False)}
     return design
 
