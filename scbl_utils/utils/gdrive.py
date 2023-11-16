@@ -243,21 +243,42 @@ def get_project_params(
     genome_pattern = species_to_genome_pattern.get(species, r'.*')
     # Iterate over all spreadsheets
     for id in spreadsheet_ids:
-        # Load all worksheets of file into dataframes
-        metricssheet = GSheet(client=gclient, properties={'id': id})
-        metrics_dfs = [
-            metricssheet.to_df(sheet_idx=idx, **kwargs)
-            for idx, _ in enumerate(metricssheet.worksheets())
-        ]
+        try:
+            # Load all worksheets of file into dataframes
+            metricssheet = GSheet(client=gclient, properties={'id': id})
+            metrics_dfs = [
+                metricssheet.to_df(sheet_idx=idx, **kwargs)
+                for idx, _ in enumerate(metricssheet.worksheets())
+            ]
+        except gs.exceptions.APIError:
+            rprint(f'In trying to assign the [blue]tool_version[/] and [blue]reference_path[/] for [bold orange1]{sample_name}[/], the [red]API request-rate limit was exceeded[/]. Defaulting to latest [blue]tool_version[/] and asking you to input [blue]reference_path[/].')
+            break
 
-        # Join them
-        metrics_df = pd.concat(metrics_dfs, axis=1)
+
+        # The below chunk of code will figure out whether each tab in
+        # in the metrics spreadsheet represents the same information 
+        # about different libraries, or different information about 
+        # the same libraries. # TODO: put in to a function
+
+        # First, figure out whether the columns are the same between 
+        # sheets
+        cols = [col for df in metrics_dfs for col in df.columns]
+        set_cols = set(cols)
+
+        # If they are, then it's the same info but for different
+        # libraries. If not, then it's different info for same
+        # libraries.
+        if len(cols) != len(set_cols):
+            metrics_df = pd.concat(metrics_dfs, axis=0, join='outer')
+        else:
+            metrics_df = pd.concat(metrics_dfs, axis=1, join='outer')
+
         # metrics_dfs[0].join(other=metrics_dfs[1:], on='libraries', how='outer', rsuffix='1')  # type: ignore
 
         # Filter metrics_df to contain just those projects matching this
         # project and tool
         project_df = metrics_df[
-            (metrics_df['project'] == project) & (metrics_df['tool'] == tool) & metrics_df['reference'].str.match(genome_pattern, case=False)
+            (metrics_df['project'] == project) & (metrics_df['tool'] == tool) & (metrics_df['reference'].str.match(genome_pattern, case=False))
         ].copy()
 
         if project_df.shape[0] < 1:
