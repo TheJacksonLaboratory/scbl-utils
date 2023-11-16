@@ -8,7 +8,7 @@ from .defaults import DOCUMENTATION
 
 
 def direc(direc: Path, required_files: Collection[Path] = []) -> dict[str, Path]:
-    """Checks that direc has required files and returns them, creating direc in the process
+    """Checks that `direc` has required files and returns them, creating `direc` in the process
 
     :param direc: Config dir to check
     :type direc: Path

@@ -1,25 +1,18 @@
 from collections.abc import Collection, Sequence
 from pathlib import Path
-from re import sub, match
+from re import match, sub
 
-from numpy import nan
 import pandas as pd
+from numpy import nan
 from rich import print as rprint
 from typer import Abort
 from yaml import Dumper, SequenceNode, add_representer, dump
 
-from .defaults import (
-    ANTIBODY_LIB_TYPES,
-    LIBRARY_GLOB_PATTERN,
-    PLATFORMS_TO_PROBESET,
-    SAMPLENAME_BLACKLIST_PATTERN,
-    SEP_PATTERN,
-    SIBLING_REPOSITORY,
-    SAMPLESHEET_KEYS,
-    SAMPLESHEET_SORT_KEYS,
-    SAMPLESHEET_GROUP_KEY,
-    VISIUM_DIR
-)
+from .defaults import (ANTIBODY_LIB_TYPES, LIBRARY_GLOB_PATTERN,
+                       PLATFORMS_TO_PROBESET, SAMPLENAME_BLACKLIST_PATTERN,
+                       SAMPLESHEET_GROUP_KEY, SAMPLESHEET_KEYS,
+                       SAMPLESHEET_SORT_KEYS, SEP_PATTERN, SIBLING_REPOSITORY,
+                       VISIUM_DIR)
 
 
 def map_libs_to_fastqdirs(
@@ -29,10 +22,9 @@ def map_libs_to_fastqdirs(
 
     :param fastq_dirs: list of fastq dirs
     :type fastq_dirs: list[Path]
-    :param glob_pattern: pattern to glob for in each fastq dir, defaults to LIBRARY_GLOB_PATTERN
+    :param glob_pattern: pattern to glob for in each fastq dir, defaults to `LIBRARY_GLOB_PATTERN`
     :type glob_pattern: str, optional
-    :raises FileNotFoundError: If any of the dirs do not contain files matching the glob pattern, raise FileNotFoundError
-    :return: A dict mapping
+    :return: A dict mapping each library ID to its fastq directory as an string of its absolute path
     :rtype: dict[str, str]
     """
     # Get a mapping between library names and the fastq directories
@@ -62,83 +54,6 @@ def map_libs_to_fastqdirs(
     return sorted_lib_to_fastqdir
 
 
-# def program_from_types(library_types: tuple[str, ...], lib_types_to_program: dict[tuple[str, ...], tuple[str, str, list[str]]] = LIB_TYPES_TO_PROGRAM) -> dict[str, str]:
-#     sorted_lib_types = sorted(library_types)
-#     sorted_lib_types = tuple(sorted_lib_types)
-
-#     tool_command_refdir = lib_types_to_program.get(library_types)
-
-#     if not tool_command_refdir:
-#         sample_name = sample_df['sample_name'].iloc[0]
-#         rprint(
-#             f'The library types [bold orange1]{library_types}[/] associated with [bold orange1]{sample_name}[/] are not a valid combination. Valid combinations:\n[bold blue]',
-#             *lib_types_to_program.keys(),
-#             sep='\n',
-#         )
-#         raise Abort()
-
-
-# def program_from_lib_types(
-#     sample_df: pd.DataFrame,
-#     ref_parent_dir: Path = REF_PARENT_DIR,
-#     lib_types_to_program: dict[tuple[str, ...], tuple[str, str, list[str]]] = LIB_TYPES_TO_PROGRAM,  # type: ignore
-#     samplesheet_key_to_type: dict[str, type] = SAMPLESHEET_KEY_TO_TYPE,
-# ) -> pd.Series:
-#     """To be used as first argument to `samplesheet_df.groupby('sample_name', as_index=False).apply`. Aggregates `sample_df` (representing one sample), adding information derived from the library types
-
-#     :param sample_df: This dataframe represents one sample, with each row representing a library belonging to that sample. It must contain the column 'library_types'
-#     :type sample_df: `pd.DataFrame`
-#     :param lib_types_to_program: A dict that associates a library type combo to a tool-command-reference_dir combo, defaults to LIB_TYPES_TO_PROGRAM
-#     :type lib_types_to_program: dict[tuple[str, ...], tuple[str, str, Path]
-#     :param samplesheet_key_to_type: A mapping between each samplesheet key and its type, defaults to SAMPLESHEET_KEY_TO_TYPE
-#     :type samplesheet_key_to_type: `dict[str, type]`, optional
-#     :raises ValueError: If the combination of library types for a given sample doesn't exist, raises error
-#     :return: A `dict` that compresses the many rows of `sample_df` into one row, which will be handled by `samplesheet.groupby('sample_name').agg`
-#     :rtype: `pandas.Series`
-#     """
-#     # Initialize the output, a series aggreggating the df
-#     aggregated = pd.Series()
-#     aggregated['libraries'] = tuple(sample_df.index)
-
-#     # Get the tool-command-refdir combo based on library types
-#     # and throw error if not found
-#     library_types = tuple(sample_df['library_types'].sort_values())
-#     tool_command_refdir = lib_types_to_program.get(library_types)
-
-#     if not tool_command_refdir:
-#         sample_name = sample_df['sample_name'].iloc[0]
-#         rprint(
-#             f'The library types [bold orange1]{library_types}[/] associated with [bold orange1]{sample_name}[/] are not a valid combination. Valid combinations:\n[bold blue]',
-#             *lib_types_to_program.keys(),
-#             sep='\n',
-#         )
-#         raise Abort()
-
-#     (
-#         aggregated['tool'],
-#         aggregated['command'],
-#         aggregated['reference_dirs'],
-#     ) = tool_command_refdir
-
-#     # The list of reference dirs contains relative paths, make them
-#     # absolute
-#     aggregated['reference_dirs'] = [
-#         ref_parent_dir / ref_child_dir for ref_child_dir in aggregated['reference_dirs']
-#     ]
-
-#     # Iterate over each column of sample_df and aggregate
-#     for col, series in sample_df.items():
-#         if col == 'n_cells':
-#             aggregated[col] = series.max()
-#         # TODO: think of a better way to check for 10x_platform
-#         elif samplesheet_key_to_type.get(col) == list[str] or series.nunique() > 1 or col == '10x_platform':  # type: ignore
-#             aggregated[col] = tuple(series)
-#         else:
-#             aggregated[col] = series.iloc[0]
-
-#     return aggregated
-
-
 def get_latest_version(
     tool: str, repository_link: str = SIBLING_REPOSITORY
 ) -> (
@@ -148,7 +63,7 @@ def get_latest_version(
 
     :param tool: The name of the tool
     :type tool: `str`
-    :param repository_link: Link to repository containing a table to read information from, defaults to SIBLING_REPOSITORY
+    :param repository_link: Link to repository containing a table to read information from, defaults to `SIBLING_REPOSITORY`
     :type repository_link: `str`, optional
     :return: The latest version of the tool
     :rtype: `str`
@@ -183,6 +98,17 @@ def get_latest_version(
 def genomes_from_user(
     message: str, reference_dirs: Collection[Path], sample_name: str
 ) -> list[str]:
+    """Get the genome for a given sample from the user
+
+    :param message: The message to display to the user
+    :type message: `str`
+    :param reference_dirs: The directories containing the reference genomes to search
+    :type reference_dirs: `Collection[Path]`
+    :param sample_name: The name of the sample
+    :type sample_name: `str`
+    :return: The list of genomes to use for this sample
+    :rtype: `list[str]`
+    """
     from rich.prompt import Prompt
 
     # Print a message explaining why the user is being prompted
@@ -210,6 +136,15 @@ def genomes_from_user(
 def get_antibody_tags(
     library_types: Collection[str], antibody_lib_types: set[str] = ANTIBODY_LIB_TYPES
 ) -> tuple[str, ...] | float:
+    """Gets all TotalSeq™-B tags
+
+    :param library_types: The library types associated with a given sample
+    :type library_types: `Collection[str]`
+    :param antibody_lib_types: The library types that should have antibody tags associated with them, defaults to `ANTIBODY_LIB_TYPES`
+    :type antibody_lib_types: `set[str]`, optional
+    :return: All TotalSeq™-B tags or `np.nan` if the assay does not require it
+    :rtype: tuple[str, ...] | float
+    """
     if not antibody_lib_types & set(library_types):
         return nan
 
@@ -223,9 +158,18 @@ def get_antibody_tags(
 def map_platform_to_probeset(
     df_row: pd.Series,
     platform_to_probset: dict[str, dict[str, str]] = PLATFORMS_TO_PROBESET,
-):
+) -> str | float:
+    """If a given platform should have a probe-set, get it
+
+    :param df_row: The row corresponding to the sample
+    :type df_row: `pd.Series`
+    :param platform_to_probset: A mapping of platform -> probe set, defaults to `PLATFORMS_TO_PROBESET`
+    :type platform_to_probset: `dict[str, dict[str, str]]`, optional
+    :return: The path of the probe set, relative to `SIBLING_REPOSITORY`/assets or `np.nan` if the assay is not one that requires a probe set
+    :rtype: `str` | `np.nan`
+    """
     platforms, species = (df_row[col] for col in ('10x_platform', 'species'))
-    
+
     for platform in platforms:
         probeset_dict = platform_to_probset.get(platform)
         if not probeset_dict:
@@ -241,6 +185,15 @@ def get_visium_info(
     df_row: pd.Series,
     visium_dir: Path = VISIUM_DIR,
 ) -> pd.Series:
+    """Visium samples require extra files, so get them if necessary
+
+    :param df_row: The row corresponding to the sample
+    :type df_row: `pd.Series`
+    :param visium_dir: The directory in which to look for these files, defaults to `VISIUM_DIR`
+    :type visium_dir: `Path`, optional
+    :return: The same row, updated with the file paths necesary for Visium runs.
+    :rtype: `pd.Series`
+    """
     library = df_row['libraries'][0]
     slide, area, lib_types = (df_row[col] for col in ('slide', 'area', 'library_types'))
 
@@ -269,8 +222,17 @@ def get_visium_info(
     return new_data
 
 
-def sanitize_samplename(sample_name: str) -> str:
-    legal = sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=sample_name)
+def sanitize_samplename(sample_name: str, sample_name_blacklist_pattern: str = SAMPLENAME_BLACKLIST_PATTERN) -> str:
+    """Format sample names correctly, removing illegal characters and replacing spaces
+
+    :param sample_name: The sample name to sanitize
+    :type sample_name: `str`
+    :param sample_name_blacklist_pattern: A blacklist regex of unallowed characters, defaults to `SAMPLENAME_BLACKLIST_PATTERN`
+    :type sample_name_blacklist_pattern: `str`, optional
+    :return: The sanitized sample name
+    :rtype: `str`
+    """
+    legal = sub(pattern=sample_name_blacklist_pattern, repl='', string=sample_name)
     sep_replaced = sub(pattern=SEP_PATTERN, repl='-', string=legal)
     return sep_replaced
 
@@ -283,18 +245,41 @@ def sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:
         return dumper.represent_sequence(
             tag='tag:yaml.org,2002:seq', sequence=data, flow_style=True
         )
-    
 
-def get_design(lib: str, multiplexing_df: pd.DataFrame) -> dict[str, dict[str, str]] | float:
+
+def get_design(
+    lib: str, multiplexing_df: pd.DataFrame
+) -> dict[str, dict[str, str]] | float:
+    """Gets the multiplexing design for a sample if applicable
+
+    :param lib: The library ID in question
+    :type lib: `str`
+    :param multiplexing_df: A table representing the multiplexing tab of a sample tracking sheet
+    :type multiplexing_df: `pd.DataFrame`
+    :return: The multiplexing 'design'
+    :rtype: dict[str, dict[str, str]] | float
+    """
     if lib not in multiplexing_df.index:
         return nan
-        
+
     lib_df = multiplexing_df.loc[lib].copy()
-    design = {tag: {'name': name, 'description': description} for tag, name, description in lib_df[['tag_id', 'sub_sample_name', 'description']].itertuples(index=False)}
+    design = {
+        tag: {'name': name, 'description': description}
+        for tag, name, description in lib_df[
+            ['tag_id', 'sub_sample_name', 'description']
+        ].itertuples(index=False)
+    }
     return design
 
 
-def is_valid(value: Collection[str] | str | int | bool | None | float):
+def is_valid(value: Collection | str | int | bool | None | float) -> bool:
+    """Determine whether a value should be printed to samplesheet
+
+    :param value: The value to be printed
+    :type value: `Collection | str | int | bool | None | float`
+    :return: Whether the value should be printed or not
+    :rtype: bool
+    """
     if isinstance(value, Collection) and len(value) == 0:
         return False
     if value is None:
@@ -312,6 +297,23 @@ def samplesheet_from_df(
     groupby: list[str] | str = SAMPLESHEET_GROUP_KEY,
     delimiter: str = '#' * 80,
 ) -> str:
+    """Convert a `pandas.DataFrame` to a `yml` samplesheet
+
+    :param df: The data to convert
+    :type df: `pd.DataFrame`
+    :param output_cols: Which columns to output, defaults to `SAMPLESHEET_KEYS`
+    :type output_cols: `Sequence[str]`, optional
+    :param cols_as_str: Which columns to output as `str`s rather than `list[str]`, defaults to `[]`
+    :type cols_as_str: `Collection[str]`, optional
+    :param sortby: How to sort each record, defaults to `SAMPLESHEET_SORT_KEYS`
+    :type sortby: `list[str] | str`, optional
+    :param groupby: How to group records (so as to put a delimiter between different groups for easier visual parsing), defaults to `SAMPLESHEET_GROUP_KEY`
+    :type groupby: `list[str] | str`, optional
+    :param delimiter: The delimiter to use between groups, defaults to `'#'*80`
+    :type delimiter: `str`, optional
+    :return: The formatted `yml` samplesheet
+    :rtype: `str`
+    """
     # Drop unnecessary columns and sort by defined order
     to_keep = [col for col in output_cols if col in df.columns]
     df = df[to_keep].copy()

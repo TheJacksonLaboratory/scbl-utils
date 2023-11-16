@@ -53,7 +53,12 @@ class GSheet(gs.Spreadsheet):
     """Inherits from gspread.Spreadsheet, adding a to_df method. Constructor requires same args as gspread.SpreadSheet"""
 
     def to_df(
-        self, sheet_idx: int = 0, col_renaming: dict[str, str] = {}, header_row: int = 0, index_col: str = TRACKING_DF_INDEX_COL, to_join: bool = True
+        self,
+        sheet_idx: int = 0,
+        col_renaming: dict[str, str] = {},
+        header_row: int = 0,
+        index_col: str = TRACKING_DF_INDEX_COL,
+        to_join: bool = True,
     ) -> pd.DataFrame:
         # Get table and assign data and header row, then convert to df
         table = self.get_worksheet(sheet_idx).get_values(combine_merged_cells=True)
@@ -71,132 +76,20 @@ class GSheet(gs.Spreadsheet):
         # Set index and rename
         df.set_index(index_col, inplace=True)
         df.index.rename('', inplace=True)
-        
+
         if to_join:
             duplicated = df.index.duplicated()
             df = df.loc[~duplicated].copy()
-        
+
         return df
-
-    # def to_df(
-    #     self, col_renaming: dict[str, str] = {}, lib_pattern: str = LIBRARY_ID_PATTERN
-    # ) -> pd.DataFrame:
-    #     """Get a spreadsheet from Google Drive and convert to pandas.DataFrame
-
-    #     Parameters
-    #     ----------
-    #         :param worksheet_index: The index of the sheet you want to get from the spreadsheet, defaults to 0
-    #         :type worksheet_index: `int`
-    #         :param col_renaming: A mapping between the column names in the Google Sheet and the column names desired in the returned df. Only columns in this dict will be kept, defaults to {}
-    #         :type col_renaming: `dict[str, str]`, optional
-    #         :param col_types:  A mapping between the column names in the df and the type they should be converted to. Note that the keys in this dict should be the values of the col_renaming dict, defaults to {}
-    #         :type col_types: `dict[str, type]`, optional
-    #         :param **kwargs: Keyword arguments to be passed to gspread.WorkSheet.get_all_records.
-
-    #     Returns
-    #     -------
-    #         :return: The requested Google Sheet as a `pandas.DataFrame`
-    #         :rtype: pd.DataFrame
-    #     """
-    #     # Initialize list of dataframes and get all tables in
-    #     # spreadsheet as rows and as columns
-    #     dfs = []
-    #     tables = (
-    #         (
-    #             worksheet.get_values(major_dimension='rows'),
-    #             worksheet.get_values(major_dimension='columns'),
-    #         )
-    #         for worksheet in self.worksheets()
-    #     )
-
-    #     # Some worksheets have the same columns. Initialize a pd.Series
-    #     # tracking nan counts so as to pick the ones with the least
-    #     best_nan_counts = pd.Series({col: inf for col in col_renaming.values()})
-
-    #     # Iterate over table-pairings
-    #     for table_as_rows, table_as_columns in tables:
-    #         cols_in_sheet, header_row_idx, header_row = set(), 0, []
-
-    #         # Iterate over the rows of the table
-    #         for i, row in enumerate(table_as_rows):
-    #             # If this row shares elements with the desired columns
-    #             # then it's the header row.
-    #             cols_in_sheet = col_renaming.keys() & row
-    #             if cols_in_sheet:
-    #                 header_row_idx, header_row = i, row
-    #                 break
-
-    #         # If we've looped over all rows of the table and found
-    #         # no rows that contain at least one of our desired keys,
-    #         # move onto the next worksheet of this spreadsheet
-    #         if not cols_in_sheet:
-    #             continue
-
-    #         # Get a list of the columns that contain values that match
-    #         # the regex of a library ID
-    #         library_col_idxs = [
-    #             i
-    #             for i, col in enumerate(table_as_columns)
-    #             if any(match(pattern=lib_pattern, string=entry) for entry in col)
-    #         ]
-
-    #         # If it's empty, that means that this table doesn't have a
-    #         # column tracking library ID, so its useless to us because
-    #         # we can't align worksheets. # TODO: perhaps make this more
-    #         # dynamic in case one wants to retrieve a spreadsheet that
-    #         # has nothing to with libraries
-    #         if not library_col_idxs:
-    #             continue
-
-    #         # Take the first column that matches the requirement above
-    #         library_col_idx = library_col_idxs[0]
-
-    #         # Construct DataFrame, assuming all data will be after
-    #         # header row
-    #         data = table_as_rows[header_row_idx + 1 :]
-    #         df = pd.DataFrame(data=data, columns=header_row)
-
-    #         # Format df
-    #         df = df.map(lambda value: value.strip() if isinstance(value, str) else value)  # type: ignore
-    #         df.replace({'TRUE': True, 'FALSE': False}, inplace=True)
-
-    #         # The column name to index on will be the element in the
-    #         # header row in the position defined as library_col_idx
-    #         index_col_name = header_row[library_col_idx]
-    #         df.set_index(index_col_name, inplace=True)
-    #         df.index.rename(None, inplace=True)
-
-    #         # Drop rows with duplicate indexes because the
-    #         # tracking sheet has many empty rows
-    #         duplicate_mask = df.index.duplicated()
-    #         df = df.loc[~duplicate_mask]
-
-    #         # Subset to the columns we care about and rename
-    #         to_keep = list(cols_in_sheet - {index_col_name})
-    #         df = df[to_keep]
-    #         df.rename(columns=col_renaming, inplace=True)
-
-    #         # Compare the nan counts, setting to_keep = True for
-    #         # columns in this df that have less nans than the best so
-    #         # far
-    #         nan_counts = df.isna().sum()
-    #         duplicate_cols = df.columns.intersection(best_nan_counts.index)
-    #         to_keep = nan_counts[duplicate_cols] < best_nan_counts[duplicate_cols]
-
-    #         # Get the actual column names to keep and subset df again
-    #         cols_to_keep = to_keep[to_keep].index
-    #         df = df[cols_to_keep]
-
-    #         # Set the best nan counts and append df to dfs list
-    #         best_nan_counts[cols_to_keep] = nan_counts[cols_to_keep]
-    #         dfs.append(df)
-
-    #     # Concatenate the dataframes and return
-    #     return pd.concat(dfs, axis=1)
-
+    
 
 def get_project_params(
-    df_row: pd.Series, metrics_dir_id: str, gclient: gs.Client, species_to_genome_pattern: dict[str, str] = SPECIES_TO_GENOME_PATTERN, **kwargs
+    df_row: pd.Series,
+    metrics_dir_id: str,
+    gclient: gs.Client,
+    species_to_genome_pattern: dict[str, str] = SPECIES_TO_GENOME_PATTERN,
+    **kwargs,
 ) -> pd.Series:
     """Use with pandas.DataFrame.apply to get tool version and reference path
 
@@ -206,6 +99,9 @@ def get_project_params(
         :type df_row: `pd.Series`
         :param metrics_dir_id: The ID of the Google Drive folder containing delivered metrics
         :type metrics_dir_id: `str`
+        :param species_to_genome_pattern: A mapping of species -> regex for genomes of that species
+        :type species_to_genome_pattern: `dict`
+        :param **kwargs: key-word arguments passed into `GSheet.to_df`
 
     Returns
     -------
@@ -219,7 +115,8 @@ def get_project_params(
     # Get credentials, project, tool, and reference dirs
     creds = gclient.auth
     sample_name, project, tool, reference_dirs, species = (
-        df_row[col] for col in ('sample_name', 'project', 'tool', 'reference_dirs', 'species')
+        df_row[col]
+        for col in ('sample_name', 'project', 'tool', 'reference_dirs', 'species')
     )
 
     # Build service
@@ -239,7 +136,7 @@ def get_project_params(
     metrics_files = result['files']
     metrics_files.sort(key=lambda file: file['modifiedTime'])
     spreadsheet_ids = [file['id'] for file in metrics_files]
-    
+
     genome_pattern = species_to_genome_pattern.get(species, r'.*')
     # Iterate over all spreadsheets
     for id in spreadsheet_ids:
@@ -251,16 +148,17 @@ def get_project_params(
                 for idx, _ in enumerate(metricssheet.worksheets())
             ]
         except gs.exceptions.APIError:
-            rprint(f'In trying to assign the [blue]tool_version[/] and [blue]reference_path[/] for [bold orange1]{sample_name}[/], the [red]API request-rate limit was exceeded[/]. Defaulting to latest [blue]tool_version[/] and asking you to input [blue]reference_path[/].')
+            rprint(
+                f'In trying to assign the [blue]tool_version[/] and [blue]reference_path[/] for [bold orange1]{sample_name}[/], the [red]API request-rate limit was exceeded[/]. Defaulting to latest [blue]tool_version[/] and asking you to input [blue]reference_path[/].'
+            )
             break
 
-
         # The below chunk of code will figure out whether each tab in
-        # in the metrics spreadsheet represents the same information 
-        # about different libraries, or different information about 
+        # in the metrics spreadsheet represents the same information
+        # about different libraries, or different information about
         # the same libraries. # TODO: put in to a function
 
-        # First, figure out whether the columns are the same between 
+        # First, figure out whether the columns are the same between
         # sheets
         cols = [col for df in metrics_dfs for col in df.columns]
         set_cols = set(cols)
@@ -278,7 +176,9 @@ def get_project_params(
         # Filter metrics_df to contain just those projects matching this
         # project and tool
         project_df = metrics_df[
-            (metrics_df['project'] == project) & (metrics_df['tool'] == tool) & (metrics_df['reference'].str.match(genome_pattern, case=False))
+            (metrics_df['project'] == project)
+            & (metrics_df['tool'] == tool)
+            & (metrics_df['reference'].str.match(genome_pattern, case=False))
         ].copy()
 
         if project_df.shape[0] < 1:
