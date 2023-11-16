@@ -22,6 +22,7 @@ def callback(config_dir: Path = CONFIG_DIR) -> None:
     _ = validate.direc(config_dir)
 
 # TODO: clean up this function. or not because it's gonna be obsolete
+# TODO: if dataframe.apply, just pass the whole dataframe.
 @app.command(no_args_is_help=True)
 def samplesheet_from_gdrive(
     fastqdirs: Annotated[
@@ -144,7 +145,7 @@ def samplesheet_from_gdrive(
 
     # Get probe set if flex or visium
     grouped_samplesheet_df['probe_set'] = grouped_samplesheet_df[
-        ['10x_platform', 'reference_path']
+        ['10x_platform', 'species']
     ].apply(map_platform_to_probeset, axis=1)
 
     # Get visium file paths

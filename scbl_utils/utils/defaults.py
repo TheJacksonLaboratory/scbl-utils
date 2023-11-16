@@ -1,4 +1,4 @@
-from itertools import permutations
+from itertools import permutations, product
 from pathlib import Path
 from string import ascii_letters, digits
 
@@ -37,6 +37,7 @@ AGG_FUNCS = {
     'n_cells': n_cells_agg,
     'project': 'first',
     'is_nuclei': all,
+    'species': 'first',
     'design': 'first',
     'fastq_paths': tuple,
     'project': 'first',
@@ -102,29 +103,19 @@ SEP_PATTERN = rf'[{SEP_CHARS}]'
 SAMPLESHEET_SORT_KEYS = ['library_types', 'sample_name']
 SAMPLESHEET_GROUP_KEY = 'library_types'
 ANTIBODY_LIB_TYPES = {'Antibody Capture'}
+_species_to_flex_probesets = {'H sapiens': '1.0/Chromium_Human_Transcriptome_Probe_Set_v1.0.1_GRCh38-2020-A.csv', 'M musculus': '1.0/Chromium_Mouse_Transcriptome_Probe_Set_v1.0.1_mm10-2020-A.csv'}
+_species_to_visium_probesets = {'H sapiens': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv', 'M musculus': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv'}
 PLATFORMS_TO_PROBESET = {
-    'Flex': {
-        'refdata-gex-GRCh38-2020-A': '1.0/Chromium_Human_Transcriptome_Probe_Set_v1.0.1_GRCh38-2020-A.csv',
-        'refdata-gex-mm10-2020-A': '1.0/Chromium_Mouse_Transcriptome_Probe_Set_v1.0.1_mm10-2020-A.csv',
-    },
-    'Visium CytAssist FFPE': {
-        'refdata-cellranger-GRCh38-3.0.0': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
-        'refdata-gex-GRCh38-2020-A': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
-        'refdata-cellranger-mm10-3.0.0': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
-        'refdata-gex-mm10-2020-A': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
-    },
-    'Visium FF': {
-        'refdata-cellranger-GRCh38-3.0.0': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
-        'refdata-gex-GRCh38-2020-A': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
-        'refdata-cellranger-mm10-3.0.0': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
-        'refdata-gex-mm10-2020-A': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
-    },
-    'Visium FFPE': {
-        'refdata-cellranger-GRCh38-3.0.0': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
-        'refdata-gex-GRCh38-2020-A': '2.0/Visium_Human_Transcriptome_Probe_Set_v2.0_GRCh38-2020-A.csv',
-        'refdata-cellranger-mm10-3.0.0': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
-        'refdata-gex-mm10-2020-A': '1.3.0/Visium_Mouse_Transcriptome_Probe_Set_v1.0_mm10-2020-A.csv',
-    },
+    'Flex': _species_to_flex_probesets,
+    'Visium CytAssist FFPE': _species_to_visium_probesets,
+    'Visium FF': _species_to_visium_probesets,
+    'Visium FFPE': _species_to_visium_probesets,
 }
 VISIUM_DIR = Path('/sc/service/imaging/visium')
 TRACKING_DF_INDEX_COL = 'libraries'
+_species_to_genomes = {'M musculus': (r'mm\d*', r'GRCm\d*'), 'H sapiens': (r'hg\d*', r'GRCh\d*'), 'G aculeatus': (r'GAculeatus',)}
+SPECIES_TO_GENOME_PATTERN = {species: rf'^(?!.*and).*({"|".join(genomes)}).*$' for species, genomes in _species_to_genomes.items()}
+_human_mouse_genomes = '|'.join(_species_to_genomes['H sapiens'] + _species_to_genomes['M musculus'])
+_human_mouse_pattern = rf'^.*({_human_mouse_genomes}).*({_human_mouse_genomes}).*$'
+SPECIES_TO_GENOME_PATTERN['H sapiens + M musculus'] = _human_mouse_pattern
+SPECIES_TO_GENOME_PATTERN['M musculus + H sapiens'] = _human_mouse_pattern

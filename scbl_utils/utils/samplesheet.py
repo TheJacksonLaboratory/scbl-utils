@@ -224,14 +224,13 @@ def map_platform_to_probeset(
     df_row: pd.Series,
     platform_to_probset: dict[str, dict[str, str]] = PLATFORMS_TO_PROBESET,
 ):
-    platforms = df_row['10x_platform']
-    ref_paths = df_row['reference_path']
+    platforms, species = (df_row[col] for col in ('10x_platforms', 'species'))
+    
     for platform in platforms:
         probeset_dict = platform_to_probset.get(platform)
         if not probeset_dict:
             continue
-        genome = ref_paths[0].split('/')[-1]
-        probe_set = probeset_dict.get(genome)
+        probe_set = probeset_dict.get(species)
         if probe_set:
             return probe_set
 

@@ -5,7 +5,7 @@ import pandas as pd
 from numpy import nan
 from rich import print as rprint
 
-from .defaults import TRACKING_DF_INDEX_COL
+from .defaults import SPECIES_TO_GENOME_PATTERN, TRACKING_DF_INDEX_COL
 
 
 def login(*args, **kwargs) -> gs.Client:  # type: ignore
@@ -196,7 +196,7 @@ class GSheet(gs.Spreadsheet):
 
 
 def get_project_params(
-    df_row: pd.Series, metrics_dir_id: str, gclient: gs.Client, **kwargs
+    df_row: pd.Series, metrics_dir_id: str, gclient: gs.Client, species_to_genome_pattern: dict[str, str] = SPECIES_TO_GENOME_PATTERN, **kwargs
 ) -> pd.Series:
     """Use with pandas.DataFrame.apply to get tool version and reference path
 
@@ -218,8 +218,8 @@ def get_project_params(
 
     # Get credentials, project, tool, and reference dirs
     creds = gclient.auth
-    sample_name, project, tool, reference_dirs = (
-        df_row[col] for col in ('sample_name', 'project', 'tool', 'reference_dirs')
+    sample_name, project, tool, reference_dirs, species = (
+        df_row[col] for col in ('sample_name', 'project', 'tool', 'reference_dirs', 'species')
     )
 
     # Build service
@@ -239,7 +239,8 @@ def get_project_params(
     metrics_files = result['files']
     metrics_files.sort(key=lambda file: file['modifiedTime'])
     spreadsheet_ids = [file['id'] for file in metrics_files]
-
+    
+    genome_pattern = species_to_genome_pattern.get(species, r'.*')
     # Iterate over all spreadsheets
     for id in spreadsheet_ids:
         # Load all worksheets of file into dataframes
@@ -256,7 +257,7 @@ def get_project_params(
         # Filter metrics_df to contain just those projects matching this
         # project and tool
         project_df = metrics_df[
-            (metrics_df['project'] == project) & (metrics_df['tool'] == tool)
+            (metrics_df['project'] == project) & (metrics_df['tool'] == tool) & metrics_df['reference'].str.match(genome_pattern, case=False)
         ].copy()
 
         if project_df.shape[0] < 1:
