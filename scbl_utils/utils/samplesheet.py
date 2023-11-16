@@ -224,7 +224,7 @@ def map_platform_to_probeset(
     df_row: pd.Series,
     platform_to_probset: dict[str, dict[str, str]] = PLATFORMS_TO_PROBESET,
 ):
-    platforms, species = (df_row[col] for col in ('10x_platforms', 'species'))
+    platforms, species = (df_row[col] for col in ('10x_platform', 'species'))
     
     for platform in platforms:
         probeset_dict = platform_to_probset.get(platform)
