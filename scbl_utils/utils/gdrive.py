@@ -155,7 +155,7 @@ def get_project_params(
             ]
         except gs.exceptions.APIError:
             rprint(
-                f'In trying to assign the [green]tool_version[/] and [green]reference_path[/] for [bold orange1]{sample_name}[/], the [red]API request-rate limit was exceeded[/]. Defaulting to latest [blue]tool_version[/] and asking you to input [blue]reference_path[/].'
+                f'In trying to assign the [green]tool_version[/] and [green]reference_path[/] for [bold orange1]{sample_name}[/], the [red]API request-rate limit was exceeded[/]. Defaulting to latest [green]tool_version[/] and asking you to input [green]reference_path[/].'
             )
             break
 
