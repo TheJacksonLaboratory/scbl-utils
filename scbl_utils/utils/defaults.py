@@ -20,7 +20,34 @@ GDRIVE_CONFIG_FILES = [
         'service-account.json',
     )
 ]
-SPEC_SCHEMA = {'trackingsheet-spec.yml': {'id': str, 'sheets': dict[int, dict[str, dict[str, str] | int | bool]], 'platfor_to_lib_type': dict[str, str]}}
+_schema_draft_version = 'https://json-schema.org/draft/2020-12/schema'
+SPEC_SCHEMA = {
+    'trackingsheet-spec.yml': {
+        '$schema': _schema_draft_version,
+        'type': 'object',
+        'properties': {
+            'id': {'type': 'string'},
+            'sheets': {
+                'type': 'object',
+                'properties': {
+                    'columns': {'type': 'object'},
+                    'header_row': {'type': 'integer'},
+                    'join': {'type': 'boolean'},
+                },
+            },
+            'platform_to_lib_type': {'type': 'object'},
+        },
+    },
+    'metricssheet-spec.yml': {
+        '$schema': _schema_draft_version,
+        'type': 'object',
+        'properties': {
+            'dir_id': {'type': 'string'},
+            'header_row': {'type': 'integer'},
+            'columns': {'type': 'object'},
+        },
+    },
+}
 SIBLING_REPOSITORY = 'https://github.com/TheJacksonLaboratory/nf-tenx'
 
 

@@ -4,8 +4,9 @@ import gspread as gs
 import pandas as pd
 from numpy import nan
 from rich import print as rprint
+from typer import Abort
 
-from .defaults import SPECIES_TO_GENOME_PATTERN, TRACKING_DF_INDEX_COL
+from .defaults import DOCUMENTATION, SPECIES_TO_GENOME_PATTERN, TRACKING_DF_INDEX_COL
 
 
 def login(*args, **kwargs) -> gs.Client:  # type: ignore
@@ -15,17 +16,13 @@ def login(*args, **kwargs) -> gs.Client:  # type: ignore
     :return: The logged in client
     :rtype: gs.Client
     """
-    from typer import Abort
-
-    from .defaults import DOCUMENTATION
-
     try:
         return gs.service_account(*args, **kwargs)
     except Exception as e:
         rprint(
             f'Could not log into Google Drive. See {DOCUMENTATION} for instructions on authentication. {e}'
         )
-        Abort()
+        raise Abort()
 
 
 def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
@@ -36,9 +33,10 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
     :return: The tracking sheet specification and the metrics sheet specification, as a tuple in that order
     :rtype: tuple[dict, dict]
     """
+    from jsonschema import validate, ValidationError
     from yaml import Loader, load
-    # from jsonschema import validate
-    # from json import load
+
+    from .defaults import SPEC_SCHEMA
 
     # Load in the two specification files that instruct script how to
     # get information from Google Drive
@@ -47,7 +45,12 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
         for filename, path in config_files.items()
         if 'spec.yml' in filename
     }
-    # validate(instance=)
+    for filename, spec in specs.items():
+        try:
+            validate(instance=spec, schema=SPEC_SCHEMA[filename])
+        except ValidationError as e:
+            rprint(f'[green]{filename}[/] is incorrectly formatted. See {DOCUMENTATION} for more information.\n{e}')
+            raise Abort()
 
     return specs['trackingsheet-spec.yml'], specs['metricssheet-spec.yml']
 
@@ -152,7 +155,7 @@ def get_project_params(
             ]
         except gs.exceptions.APIError:
             rprint(
-                f'In trying to assign the [blue]tool_version[/] and [blue]reference_path[/] for [bold orange1]{sample_name}[/], the [red]API request-rate limit was exceeded[/]. Defaulting to latest [blue]tool_version[/] and asking you to input [blue]reference_path[/].'
+                f'In trying to assign the [green]tool_version[/] and [green]reference_path[/] for [bold orange1]{sample_name}[/], the [red]API request-rate limit was exceeded[/]. Defaulting to latest [blue]tool_version[/] and asking you to input [blue]reference_path[/].'
             )
             break
 

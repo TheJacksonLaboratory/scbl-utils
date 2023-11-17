@@ -105,7 +105,7 @@ def samplesheet_from_gdrive(
     # This is hardcoded because eventually google-drive will become
     # irrelevant. However TODO: make the below less hardcoded or
     # prettier in a function or something
-    multiplexing_sheet_id, multiplexing_spec = ((id, spec) for id, spec in sheets_spec.items() if not spec['join'])
+    multiplexing_sheet_id, multiplexing_spec = [(id, spec) for id, spec in sheets_spec.items() if not spec['join']][0]
     multiplexing_df = trackingsheet.to_df(
         sheet_id=multiplexing_sheet_id,
         col_renaming=multiplexing_spec['columns'],
