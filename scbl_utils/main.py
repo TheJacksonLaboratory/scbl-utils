@@ -56,7 +56,7 @@ def samplesheet_from_gdrive(
     ] = False,
 ) -> None:
     """
-    Pull data from Google Drive and generate a yml samplesheet to be
+    Pull data from Google Drive and generate a `yml` samplesheet to be
     used as input for the nf-tenx pipeline.
     """
     from pandas import concat
@@ -91,12 +91,12 @@ def samplesheet_from_gdrive(
     # Convert GSheet to pd.DataFrame and concatenate
     tracking_dfs = [
         trackingsheet.to_df(
-            sheet_idx=sheet_idx,
+            sheet_id=sheet_id,
             col_renaming=sheet_dict['columns'],
             header_row=sheet_dict['header_row'],
             to_join=sheet_dict['join'],
         )
-        for sheet_idx, sheet_dict in sheets_spec.items()
+        for sheet_id, sheet_dict in sheets_spec.items()
         if sheet_dict['join']
     ]
     tracking_df = concat(tracking_dfs, axis=1)
@@ -105,10 +105,9 @@ def samplesheet_from_gdrive(
     # This is hardcoded because eventually google-drive will become
     # irrelevant. However TODO: make the below less hardcoded or
     # prettier in a function or something
-    multiplexing_sheet_idx = 5
-    multiplexing_spec = sheets_spec[multiplexing_sheet_idx]
+    multiplexing_sheet_id, multiplexing_spec = ((id, spec) for id, spec in sheets_spec.items() if not spec['join'])
     multiplexing_df = trackingsheet.to_df(
-        sheet_idx=5,
+        sheet_id=multiplexing_sheet_id,
         col_renaming=multiplexing_spec['columns'],
         header_row=multiplexing_spec['header_row'],
         to_join=multiplexing_spec['join'],
@@ -185,3 +184,7 @@ def samplesheet_from_gdrive(
         else samplesheet_from_df(grouped_samplesheet_df)
     )
     output_path.write_text(data=yml_output)
+
+
+# @app.command(no_args_is_help=True)
+# def metrics_from_

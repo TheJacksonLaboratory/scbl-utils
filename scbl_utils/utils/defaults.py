@@ -20,6 +20,7 @@ GDRIVE_CONFIG_FILES = [
         'service-account.json',
     )
 ]
+SPEC_SCHEMA = {'trackingsheet-spec.yml': {'id': str, 'sheets': dict[int, dict[str, dict[str, str] | int | bool]], 'platfor_to_lib_type': dict[str, str]}}
 SIBLING_REPOSITORY = 'https://github.com/TheJacksonLaboratory/nf-tenx'
 
 

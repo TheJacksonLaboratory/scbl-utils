@@ -37,6 +37,8 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
     :rtype: tuple[dict, dict]
     """
     from yaml import Loader, load
+    # from jsonschema import validate
+    # from json import load
 
     # Load in the two specification files that instruct script how to
     # get information from Google Drive
@@ -45,6 +47,7 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
         for filename, path in config_files.items()
         if 'spec.yml' in filename
     }
+    # validate(instance=)
 
     return specs['trackingsheet-spec.yml'], specs['metricssheet-spec.yml']
 
@@ -54,14 +57,14 @@ class GSheet(gs.Spreadsheet):
 
     def to_df(
         self,
-        sheet_idx: int = 0,
+        sheet_id: str,
         col_renaming: dict[str, str] = {},
         header_row: int = 0,
         index_col: str = TRACKING_DF_INDEX_COL,
         to_join: bool = True,
     ) -> pd.DataFrame:
         # Get table and assign data and header row, then convert to df
-        table = self.get_worksheet(sheet_idx).get_values(combine_merged_cells=True)
+        table = self.get_worksheet_by_id(sheet_id).get_values(combine_merged_cells=True)
         data = table[header_row + 1 :]
         columns = table[header_row]
         df = pd.DataFrame(data=data, columns=columns)
@@ -144,8 +147,8 @@ def get_project_params(
             # Load all worksheets of file into dataframes
             metricssheet = GSheet(client=gclient, properties={'id': id})
             metrics_dfs = [
-                metricssheet.to_df(sheet_idx=idx, **kwargs)
-                for idx, _ in enumerate(metricssheet.worksheets())
+                metricssheet.to_df(sheet_id=sheet.id, **kwargs)
+                for sheet in metricssheet.worksheets()
             ]
         except gs.exceptions.APIError:
             rprint(
