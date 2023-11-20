@@ -52,7 +52,7 @@ def tracking_spec(
 ):
     sheets = spec['sheets']
     spec_columns = {
-        col for sheet_dict in sheets.values() for col in sheet_dict['columns'].values()
+        col for sheet_dict in sheets.values() for col in sheet_dict['columns'].values() # type: ignore
     }
     missing_columns = '\n'.join(required_columns - spec_columns)
     if missing_columns:
@@ -66,15 +66,15 @@ def tracking_spec(
         raise Abort()
 
     if any(
-        index_col not in sheet_dict['columns'].values()
-        for sheet_dict in sheets.values()
+        index_col not in sheet_dict['columns'].values() # type: ignore
+        for sheet_dict in sheets.values() #type: ignore
     ):
         rprint(
             f'Every sheet in [bright_cyan]trackingsheet-spec.yml[/] must have a column mapping to [green]{index_col}[/].'
         )
         raise Abort()
 
-    present_lib_types = spec['platform_to_lib_type'].values()
+    present_lib_types = spec['platform_to_lib_type'].values() # type: ignore
     missing_lib_types = '\n'.join(required_lib_types - set(present_lib_types))
     if missing_lib_types:
         rprint(
@@ -92,7 +92,7 @@ def metrics_spec(
     required_columns: set = REQUIRED_METRICSSHEET_SPEC_KEYS,
 ):
     spec_columns = spec['columns']
-    missing_columns = '\n'.join(required_columns - set(spec_columns.values()))
+    missing_columns = '\n'.join(required_columns - set(spec_columns.values())) # type: ignore
 
     if missing_columns:
         rprint(
