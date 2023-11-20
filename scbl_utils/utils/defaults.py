@@ -141,6 +141,7 @@ def n_cells_agg(n_cells_series: Series):
 
 def design_agg(designs: Series):
     overall_design = {}
+    libs_with_design = designs.dropna()
     for design in designs:
         overall_design |= design
     return overall_design
