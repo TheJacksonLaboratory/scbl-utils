@@ -221,7 +221,9 @@ def get_visium_info(
     return new_data
 
 
-def sanitize_samplename(sample_name: str, sample_name_blacklist_pattern: str = SAMPLENAME_BLACKLIST_PATTERN) -> str:
+def sanitize_samplename(
+    sample_name: str, sample_name_blacklist_pattern: str = SAMPLENAME_BLACKLIST_PATTERN
+) -> str:
     """Format sample names correctly, removing illegal characters and replacing spaces
 
     :param sample_name: The sample name to sanitize
@@ -269,13 +271,18 @@ def get_design(
                 ['tag_id', 'sub_sample_name', 'description']
             ]
         }
-    
+
     elif isinstance(lib_multiplexing_info, pd.Series):
-        design = {lib_multiplexing_info['tag_id']: {'name': lib_multiplexing_info['sub_sample_name'], 'description': lib_multiplexing_info['description']}}
-    
+        design = {
+            lib_multiplexing_info['tag_id']: {
+                'name': lib_multiplexing_info['sub_sample_name'],
+                'description': lib_multiplexing_info['description'],
+            }
+        }
+
     else:
         design = nan
-    
+
     return design
 
 

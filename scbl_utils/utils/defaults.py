@@ -59,7 +59,7 @@ _lib_types_to_program = {
     ('Antibody Capture', 'CRISPR Guide Capture', 'Gene Expression', 'Immune Profiling'):
     ('cellranger', 'multi', ['10x-rna', '10x-vdj']),
 }
-_lib_types = {lib_type for lib_tuple in _lib_types_to_program for lib_type in lib_tuple}
+LIB_TYPES = {lib_type for lib_tuple in _lib_types_to_program for lib_type in lib_tuple}
 SPEC_SCHEMA = {
     'trackingsheet-spec.yml': {
         '$schema': _schema_draft_version,
@@ -90,7 +90,7 @@ SPEC_SCHEMA = {
             'platform_to_lib_type': {
                 'type': 'object',
                 'patternProperties': {
-                    '.+': {'type': 'string', 'enum': list(_lib_types)}
+                    '.+': {'type': 'string', 'enum': list(LIB_TYPES)}
                 },
             },
         },
@@ -115,7 +115,7 @@ REQUIRED_METRICSSHEET_SPEC_KEYS = {
     'tool',
     'tool_version',
     'reference',
-    'libraries'
+    'libraries',
 }
 REQUIRED_TRACKINGSHEET_SPEC_COLUMNS = {
     'libraries',

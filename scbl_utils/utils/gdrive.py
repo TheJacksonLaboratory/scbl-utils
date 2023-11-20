@@ -6,7 +6,8 @@ from numpy import nan
 from rich import print as rprint
 from typer import Abort
 
-from .defaults import DOCUMENTATION, SPECIES_TO_GENOME_PATTERN, TRACKING_DF_INDEX_COL
+from .defaults import (DOCUMENTATION, SPECIES_TO_GENOME_PATTERN,
+                       TRACKING_DF_INDEX_COL)
 
 
 def login(*args, **kwargs) -> gs.Client:  # type: ignore
@@ -33,11 +34,13 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
     :return: The tracking sheet specification and the metrics sheet specification, as a tuple in that order
     :rtype: tuple[dict, dict]
     """
-    from jsonschema import validate as validate_yml, ValidationError
+    from jsonschema import ValidationError
+    from jsonschema import validate as validate_yml
     from yaml import Loader, load
 
     from .defaults import SPEC_SCHEMA
-    from .validate import tracking_spec as validate_tracking_spec, metrics_spec as validate_metrics_spec
+    from .validate import metrics_spec as validate_metrics_spec
+    from .validate import tracking_spec as validate_tracking_spec
 
     # Load in the two specification files that instruct script how to
     # get information from Google Drive
@@ -52,7 +55,9 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
         try:
             validate_yml(instance=spec, schema=SPEC_SCHEMA.get(filename, {}))
         except ValidationError as e:
-            rprint(f'[green]{filename}[/] is incorrectly formatted. See {DOCUMENTATION} for more information.\n{e}')
+            rprint(
+                f'[green]{filename}[/] is incorrectly formatted. See {DOCUMENTATION} for more information.\n{e}'
+            )
             raise Abort()
 
     # Validate each's contents as well
@@ -96,7 +101,7 @@ class GSheet(gs.Spreadsheet):
             df = df.loc[~duplicated].copy()
 
         return df
-    
+
 
 def get_project_params(
     df_row: pd.Series,

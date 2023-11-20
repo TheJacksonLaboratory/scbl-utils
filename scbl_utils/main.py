@@ -67,8 +67,7 @@ def samplesheet_from_gdrive(
     from .utils.defaults import (AGG_FUNCS, GDRIVE_CONFIG_FILES,
                                  LIB_TYPES_TO_PROGRAM, SCOPES)
     from .utils.samplesheet import (get_antibody_tags, get_design,
-                                    get_visium_info,
-                                    map_platform_to_probeset,
+                                    get_visium_info, map_platform_to_probeset,
                                     samplesheet_from_df, sanitize_samplename)
 
     # Create and validate Google Drive config dir, returning paths
@@ -107,7 +106,9 @@ def samplesheet_from_gdrive(
     # This is hardcoded because eventually google-drive will become
     # irrelevant. However TODO: make the below less hardcoded or
     # prettier in a function or something
-    multiplexing_sheet_id, multiplexing_spec = [(id, spec) for id, spec in sheets_spec.items() if not spec['join']][0]
+    multiplexing_sheet_id, multiplexing_spec = [
+        (id, spec) for id, spec in sheets_spec.items() if not spec['join']
+    ][0]
     multiplexing_df = trackingsheet.to_df(
         sheet_id=multiplexing_sheet_id,
         col_renaming=multiplexing_spec['columns'],
@@ -201,12 +202,12 @@ def delivery_dir_to_metrics(
         typer.Option(
             '--to-gdrive',
             '-g',
-            help=f'Upload the delivery metrics to Google Drive in the format defined in metricssheet-spec.yml. See {DOCUMENTATION} for more information'
-        )
-    ] = True
+            help=f'Upload the delivery metrics to Google Drive in the format defined in metricssheet-spec.yml. See {DOCUMENTATION} for more information',
+        ),
+    ] = True,
 ) -> None:
     """
-    Parse a delivery directory and generate metrics for it, uploading 
+    Parse a delivery directory and generate metrics for it, uploading
     to Google Drive in the process if desired.
     """
     # TODO figure out what to do
