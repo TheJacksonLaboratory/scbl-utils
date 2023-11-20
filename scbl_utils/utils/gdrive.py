@@ -33,10 +33,11 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
     :return: The tracking sheet specification and the metrics sheet specification, as a tuple in that order
     :rtype: tuple[dict, dict]
     """
-    from jsonschema import validate, ValidationError
+    from jsonschema import validate as validate_yml, ValidationError
     from yaml import Loader, load
 
     from .defaults import SPEC_SCHEMA
+    from .validate import tracking_spec as validate_tracking_spec, metrics_spec as validate_metrics_spec
 
     # Load in the two specification files that instruct script how to
     # get information from Google Drive
@@ -45,12 +46,18 @@ def load_specs(config_files: dict[str, Path]) -> tuple[dict, dict]:
         for filename, path in config_files.items()
         if 'spec.yml' in filename
     }
+
+    # Validate the yml's structure
     for filename, spec in specs.items():
         try:
-            validate(instance=spec, schema=SPEC_SCHEMA[filename])
+            validate_yml(instance=spec, schema=SPEC_SCHEMA.get(filename, {}))
         except ValidationError as e:
             rprint(f'[green]{filename}[/] is incorrectly formatted. See {DOCUMENTATION} for more information.\n{e}')
             raise Abort()
+
+    # Validate each's contents as well
+    validate_tracking_spec(specs['trackingsheet-spec.yml'])
+    validate_metrics_spec(specs['metricssheet-spec.yml'])
 
     return specs['trackingsheet-spec.yml'], specs['metricssheet-spec.yml']
 
@@ -83,6 +90,7 @@ class GSheet(gs.Spreadsheet):
         df.set_index(index_col, inplace=True)
         df.index.rename('', inplace=True)
 
+        # Duplicate indices will throw an error when joining
         if to_join:
             duplicated = df.index.duplicated()
             df = df.loc[~duplicated].copy()

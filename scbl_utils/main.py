@@ -3,6 +3,8 @@ from typing import Annotated
 
 import typer
 
+from scbl_utils.utils.samplesheet import map_libs_to_fastqdirs
+
 from .utils import validate
 from .utils.defaults import CONFIG_DIR, DOCUMENTATION
 
@@ -65,7 +67,7 @@ def samplesheet_from_gdrive(
     from .utils.defaults import (AGG_FUNCS, GDRIVE_CONFIG_FILES,
                                  LIB_TYPES_TO_PROGRAM, SCOPES)
     from .utils.samplesheet import (get_antibody_tags, get_design,
-                                    get_visium_info, map_libs_to_fastqdirs,
+                                    get_visium_info,
                                     map_platform_to_probeset,
                                     samplesheet_from_df, sanitize_samplename)
 
@@ -186,5 +188,26 @@ def samplesheet_from_gdrive(
     output_path.write_text(data=yml_output)
 
 
-# @app.command(no_args_is_help=True)
-# def metrics_from_
+@app.command(no_args_is_help=True)
+def delivery_dir_to_metrics(
+    delivery_dirs: Annotated[
+        list[Path],
+        typer.Argument(
+            help='Delivery directories from which to construct metrics sheet.'
+        ),
+    ],
+    to_gdrive: Annotated[
+        bool,
+        typer.Option(
+            '--to-gdrive',
+            '-g',
+            help=f'Upload the delivery metrics to Google Drive in the format defined in metricssheet-spec.yml. See {DOCUMENTATION} for more information'
+        )
+    ] = True
+) -> None:
+    """
+    Parse a delivery directory and generate metrics for it, uploading 
+    to Google Drive in the process if desired.
+    """
+    # TODO figure out what to do
+    ...

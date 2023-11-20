@@ -46,7 +46,6 @@ def map_libs_to_fastqdirs(
             bad_dirs,
             sep='\n',
         )
-        raise Abort()
 
     # Sort dict before returning
     sorted_libs = sorted(lib_to_fastqdir.keys())
@@ -262,13 +261,21 @@ def get_design(
     if lib not in multiplexing_df.index:
         return nan
 
-    lib_df = multiplexing_df.loc[lib].copy()
-    design = {
-        tag: {'name': name, 'description': description}
-        for tag, name, description in lib_df[
-            ['tag_id', 'sub_sample_name', 'description']
-        ].itertuples(index=False)
-    }
+    lib_multiplexing_info = multiplexing_df.loc[lib].copy()
+    if isinstance(lib_multiplexing_info, pd.DataFrame):
+        design = {
+            tag: {'name': name, 'description': description}
+            for tag, name, description in lib_multiplexing_info[
+                ['tag_id', 'sub_sample_name', 'description']
+            ]
+        }
+    
+    elif isinstance(lib_multiplexing_info, pd.Series):
+        design = {lib_multiplexing_info['tag_id']: {'name': lib_multiplexing_info['sub_sample_name'], 'description': lib_multiplexing_info['description']}}
+    
+    else:
+        design = {}
+    
     return design
 
 

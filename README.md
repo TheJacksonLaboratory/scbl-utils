@@ -39,8 +39,8 @@ scbl-utils samplesheet-from-gdrive /path/to/fastq_dir /path/to/another/fastq_dir
     For the script to work, the `config-dir` (as defined [here](#top-level-options)) must contain a directory called `google-drive`. In `{config-dir}/google-drive`, 3 files must exist:
     
     - `trackingsheet-spec.yml`: a specification that instructs the script on how to read data from the Google Sheet being used as the "sample tracking sheet". The specification must contain the following keys:
-        - `id`: the Google Spreadsheet ID, found in https://docs.google.com/spreadsheets/d/`spreadsheetID`/edit#gid=0
-        - `sheets`: a mapping of the index of each worksheet within the spreadsheet to another mapping of information . The keys of this `dict` must contain:
+        - `id`: the Google Spreadsheet ID, found in https://docs.google.com/spreadsheets/d/`spreadsheet_id`/
+        - `sheets`: a mapping of the ID of each worksheet (docs.google.com/spreadsheets/d/`spreadsheet_id`/edit#gid=`worksheet_id`) within the spreadsheet to another mapping of information about that sheet. The keys of this `dict` must contain:
             - `columns`: yet another mapping, this time mapping the column names in the sheet to how they should be renamed in the script. The union of all of the values of these mappings should minimally be `{10x_platform, sample_name, is_nuclei, libraries, project, species, n_cells, slide, area, tag_id}`, and `libraries` must exist in the sheets where `join == true` to join the sheets.
             - `header_row`: The index of the header row (0-based), which contains the column names
             - `join`: a `bool` indicating whether to join this sheet (along the columns) to the other sheets in the spreadsheet. Useful for spreadsheets with multiple sheets, but not every sheet shares the same index, meaning they are not necessarily joinable

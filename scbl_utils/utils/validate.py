@@ -4,7 +4,7 @@ from pathlib import Path
 from rich import print as rprint
 from typer import Abort
 
-from .defaults import DOCUMENTATION
+from .defaults import DOCUMENTATION, REQUIRED_METRICSSHEET_SPEC_KEYS, REQUIRED_TRACKINGSHEET_SPEC_COLUMNS, TRACKING_DF_INDEX_COL
 
 
 def direc(direc: Path, required_files: Collection[Path] = []) -> dict[str, Path]:
@@ -34,3 +34,29 @@ def direc(direc: Path, required_files: Collection[Path] = []) -> dict[str, Path]
         raise Abort()
 
     return required_paths
+
+
+def tracking_spec(spec: dict[str, dict[str, str] | str], required_columns : set = REQUIRED_TRACKINGSHEET_SPEC_COLUMNS, index_col: str = TRACKING_DF_INDEX_COL):
+    sheets = spec['sheets']
+    spec_columns = {col for sheet_dict in sheets.values() for col in sheet_dict['columns'].values()}
+    missing_columns = '\n'.join(required_columns - spec_columns)
+    if missing_columns:
+        id = spec['id']
+        rprint(f'The following columns are missing from [green]trackingsheet-spec.yml[/]:', f'[bright_cyan{missing_columns}[/]', f'Please map the columns in https://docs.google.com/spreadsheets/d/{id} to these missing columns and place mapping in [bright_cyan]trackingsheet-spec.yml[/].')
+        raise Abort()
+    
+    if any(index_col not in sheet_dict['columns'].values() for sheet_dict in sheets.values()):
+        rprint(f'Every sheet in [bright_cyan]trackingsheet-spec.yml[/] must have a column mapping to [green]{index_col}[/].')
+        raise Abort()
+    
+    return
+
+
+def metrics_spec(spec: dict[str, str | dict[str, str] | int], required_columns: set = REQUIRED_METRICSSHEET_SPEC_KEYS):
+    spec_columns = spec['columns']
+    missing_columns = '\n'.join(required_columns - spec_columns.values())
+    
+    if missing_columns:
+        rprint(f'The following columns are missing from [green]metricssheet-spec.yml[/]:', f'[bright_cyan{missing_columns}[/]', f'Please map the columns in a given delivery metrics sheet to these missing columns and place mapping in [bright_cyan]metricssheet-spec.yml[/].')
+        raise Abort()
+    return
