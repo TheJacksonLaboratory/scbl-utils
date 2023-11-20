@@ -274,7 +274,7 @@ def get_design(
         design = {lib_multiplexing_info['tag_id']: {'name': lib_multiplexing_info['sub_sample_name'], 'description': lib_multiplexing_info['description']}}
     
     else:
-        design = {}
+        design = nan
     
     return design
 
