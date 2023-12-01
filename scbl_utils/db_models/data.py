@@ -77,7 +77,7 @@ class Institution(Base):
     )
 
     @validates('ror_id')
-    def check_ror(self, key: str, ror_id: str | None) -> str | None:
+    def check_ror_id(self, key: str, ror_id: str | None) -> str | None:
         if ror_id is None:
             return ror_id
 

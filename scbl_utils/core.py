@@ -154,6 +154,7 @@ def new_db_session(
     :param base_class: The base class for the database to whose
     metadata the tables will be added.
     :type base_class: `type[sqlalchemy.orm.DeclarativeBase]`
+    :param kwargs: Keyword arguments to pass to `sqlalchemy.URL.create`
     :return: A sessionmaker that can be used to create a new session.
     :rtype: sessionmaker[Session]
     """

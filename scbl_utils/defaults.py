@@ -12,7 +12,7 @@ SIBLING_REPOSITORY = 'https://github.com/TheJacksonLaboratory/nf-tenx'
 
 # System-specific settings
 LIBRARY_GLOB_PATTERN = 'SC*fastq*'
-DELIVERY_PARENT_DIR = Path('/sc/service/delivery').resolve(strict=True)
+DELIVERY_PARENT_DIR = Path('/sc/service/delivery')
 
 # Samplesheet formatting settings
 SEP_CHARS = r'\s_-'
