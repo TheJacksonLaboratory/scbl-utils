@@ -256,13 +256,13 @@ test = ["pytest (>=6)"]
 
 [[package]]
 name = "google-auth"
-version = "2.24.0"
+version = "2.25.0"
 description = "Google Authentication Library"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "google-auth-2.24.0.tar.gz", hash = "sha256:2ec7b2a506989d7dbfdbe81cb8d0ead8876caaed14f86d29d34483cbe99c57af"},
-    {file = "google_auth-2.24.0-py2.py3-none-any.whl", hash = "sha256:9b82d5c8d3479a5391ea0a46d81cca698d328459da31d4a459d4e901a5d927e0"},
+    {file = "google-auth-2.25.0.tar.gz", hash = "sha256:cabc5c6fd327d71baa820f745118ecb2b709412d153419a43173d91495ef8715"},
+    {file = "google_auth-2.25.0-py2.py3-none-any.whl", hash = "sha256:2e7d37702e617ea9f4ac2568625a9fc2cdea910dcdca90e378db09ac94ee9ab3"},
 ]
 
 [package.dependencies]
@@ -1046,4 +1046,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.13"
-content-hash = "b6cf5aca133618054490f766de558180dc778d7d6d3305093019df265ea1e18f"
+content-hash = "f7bf8fe35495d1e1dfc6ea0a8fc47881b618216f26bf969e844cd173fded1668"
