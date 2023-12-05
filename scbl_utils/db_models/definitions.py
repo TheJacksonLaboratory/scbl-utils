@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .bases import (
     Base,
     int_pk,
+    samplesheet_str,
     samplesheet_str_pk,
     stripped_str,
     unique_samplesheet_str,
@@ -44,5 +45,11 @@ class LibraryType(Base):
 class Tag(Base):
     __tablename__ = 'tag'
 
+    # TODO: add validation
     id: Mapped[samplesheet_str_pk]
+    name: Mapped[samplesheet_str]
     tag_type: Mapped[stripped_str]
+    read: Mapped[stripped_str]
+    sequence: Mapped[stripped_str]
+    pattern: Mapped[stripped_str]
+    five_prime_offset: Mapped[int]

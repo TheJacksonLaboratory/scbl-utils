@@ -83,16 +83,15 @@ class Institution(Base):
         if ror_id is None:
             return ror_id
 
+        ror_id = ror_id.strip()
         base_url = 'https://api.ror.org/organizations'
         url = f'{base_url}/{ror_id}'
         response = get(url)
 
         if not response.ok:
             rprint(
-                (
-                    f'Institution with ROR ID [green]{ror_id}[/] not found in '
-                    f'database search of {base_url}.'
-                )
+                f'Institution with ROR ID [green]{ror_id}[/] not found in '
+                f'database search of {base_url}.'
             )
             raise Abort()
 
@@ -122,10 +121,8 @@ class Institution(Base):
                 _, self.state = state_code.split('.')
         else:
             rprint(
-                (
-                    f'Could not find city information from ROR for {self.name}. '
-                    'Please enter manually.'
-                )
+                f'Could not find city information from ROR for {self.name}. '
+                'Please enter manually.'
             )
             Abort()
 
@@ -185,12 +182,10 @@ class Lab(Base):
 
             if delivery_dir is None:
                 rprint(
-                    (
-                        '[green]scbl-utils[/] tried to automatically generate a '
-                        f'delivery directory for [orange1]{self.name}[/] using '
-                        f'the name of the PI [orange1]{self.pi.name}[/], but '
-                        f'{dir_not_exist_message}'
-                    )
+                    '[green]scbl-utils[/] tried to automatically generate a '
+                    f'delivery directory for [orange1]{self.name}[/] using '
+                    f'the name of the PI [orange1]{self.pi.name}[/], but '
+                    f'{dir_not_exist_message}'
                 )
                 raise Abort()
 
@@ -283,7 +278,8 @@ class Person(Base):
     def check_orcid(self, key: str, orcid: str | None) -> str | None:
         if orcid is None:
             return orcid
-
+        
+        orcid = orcid.strip()
         invalid_message = (
             f'The ORCID [orange1]{orcid}[/] (assigned to '
             f'[orange1]{self.name}[/]) is invalid'
@@ -291,10 +287,8 @@ class Person(Base):
 
         if (match_obj := match(ORCID_PATTERN, string=orcid)) is None:
             rprint(
-                (
-                    f'{invalid_message} because it does not match the pattern '
-                    f'[green]{ORCID_PATTERN}[/].'
-                )
+                f'{invalid_message} because it does not match the pattern '
+                f'[green]{ORCID_PATTERN}[/].'
             )
             raise Abort()
 
@@ -309,10 +303,8 @@ class Person(Base):
         if not response.ok:
             rprint(
                 invalid_message
-                + (
-                    f'{invalid_message} because it was not found with '
-                    f'database search of {base_url}.'
-                )
+                + f'{invalid_message} because it was not found with database '
+                f'search of {base_url}.'
             )
             raise Abort()
 

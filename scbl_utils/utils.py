@@ -11,7 +11,7 @@ Functions:
 # TODO: when upgrading to python3.12, use QUOTE_NOTNULL instead of
 # _load_csv
 from collections.abc import Collection
-from csv import DictReader
+from csv import DictReader, QUOTE_NONNUMERIC
 from io import TextIOWrapper
 from typing import Any
 
@@ -26,10 +26,20 @@ def _load_csv(f: TextIOWrapper) -> list[dict[str, Any]]:
     :return: A list of dicts representing the rows of the CSV file
     :rtype: `list[dict[str, Any]]`
     """
-    data = [
-        {key: value if value != '' else None for key, value in row.items()}
-        for row in DictReader(f)
-    ]
+    data = []
+    
+    for row in DictReader(f):
+        new_row = {}
+        for key, value in row.items():
+            if value == '':
+                new_row[key] = None
+            else:
+                try:
+                    new_row[key] = int(value)
+                except ValueError:
+                    new_row[key] = value
+        data.append(new_row)
+
     return data
 
 

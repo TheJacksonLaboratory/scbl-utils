@@ -18,7 +18,9 @@ from typing import Any
 
 from jsonschema import ValidationError, validate
 from rich import print as rprint
-from sqlalchemy import URL, create_engine
+from rich.console import Console
+from rich.table import Table
+from sqlalchemy import URL, create_engine, select, Select
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from typer import Abort
 from yaml import safe_load as safe_load_yml
@@ -168,7 +170,7 @@ def new_db_session(
 
 
 # what's a better name for the function below?
-def validate_str(string: str, pattern: str, string_name: str) -> str:
+def validate_str(string: str, pattern: str, string_name: str):
     if match(pattern, string=string) is None:
         rprint(
             f'The {string_name} [orange1]{string}[/] does not match '
@@ -177,3 +179,39 @@ def validate_str(string: str, pattern: str, string_name: str) -> str:
         raise Abort()
 
     return string
+
+
+def matching_rows_from_table(
+    session: Session,
+    model,
+    filter_dicts: list[dict[str, Any]],
+    data_filename: str,
+) -> list:
+    stmts = [select(model).filter_by(**filter_dict) for filter_dict in filter_dicts]
+    found_rows = [session.execute(stmt).scalar() for stmt in stmts]
+    
+    missing = [
+        filter_dict.values()
+        for filter_dict, obj in zip(filter_dicts, found_rows)
+        if obj is None
+    ]
+
+    if not missing:
+        return found_rows # type: ignore
+
+    headers = filter_dicts[0].keys()
+    table = Table(*headers)
+
+    for values in missing:
+        table.add_row(*values)
+
+    console = Console()
+    console.print(
+        f'The table [green]{model.__tablename__.capitalize()}[/] contained no '
+        'rows matching the table below, which was found in [orange1]'
+        f'{data_filename}[/]',
+        table,
+        sep='\n',
+    )
+
+    raise Abort()
