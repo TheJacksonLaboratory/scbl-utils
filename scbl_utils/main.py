@@ -8,6 +8,10 @@ Functions:
 """
 # TODO write a script that parses the delivery dir for new labs, adding
 # to the db and prompting user if necessary
+
+# TODO: write github actions workflow that runs isort, black, then tests
+# TODO: write docstrings and comments especially for init-db
+# TODO: write tests for init-db
 from pathlib import Path
 from typing import Annotated
 
