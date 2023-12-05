@@ -5,14 +5,16 @@ from pathlib import Path
 from string import ascii_letters, digits
 
 # Package metadata
-CONFIG_DIR = Path('/sc/service/etc/.config/scbl-utils')
 DOCUMENTATION = 'https://github.com/TheJacksonLaboratory/scbl-utils/'
 SEE_MORE = f'See {DOCUMENTATION} for more information.'
 SIBLING_REPOSITORY = 'https://github.com/TheJacksonLaboratory/nf-tenx'
 
-# System-specific settings
+# SCBL-specific settings
+CONFIG_DIR = Path('/sc/service/etc/.config/scbl-utils')
 LIBRARY_GLOB_PATTERN = 'SC*fastq*'
-DELIVERY_PARENT_DIR = Path('/sc/service/delivery')
+LIBRARY_ID_PATTERN = r'^SC\d{7}$'
+PROJECT_ID_PATTERN = r'^SCP\d{2}-\d{3}$'
+# DELIVERY_PARENT_DIR = '/sc/service/delivery'
 
 # Samplesheet formatting settings
 SEP_CHARS = r'\s_-'
@@ -83,4 +85,3 @@ LAB_CSV_SCHEMA = {
         'additionalProperties': False,
     },
 }
-

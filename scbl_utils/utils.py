@@ -26,7 +26,10 @@ def _load_csv(f: TextIOWrapper) -> list[dict[str, Any]]:
     :return: A list of dicts representing the rows of the CSV file
     :rtype: `list[dict[str, Any]]`
     """
-    data = [{key: value if value != '' else None for key, value in row.items()} for row in DictReader(f)]
+    data = [
+        {key: value if value != '' else None for key, value in row.items()}
+        for row in DictReader(f)
+    ]
     return data
 
 

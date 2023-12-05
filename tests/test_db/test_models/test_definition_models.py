@@ -1,6 +1,3 @@
-from scbl_utils.db_models.definitions import LibraryType, Platform, Tag
-
-
 class TestPlatformModel:
     pass
 

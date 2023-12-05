@@ -13,10 +13,15 @@ from typing import Annotated
 
 import typer
 
-from .core import load_data, validate_dir, new_db_session
-from .defaults import DB_CONFIG_FILES, INSTITUION_CSV_SCHEMA, LAB_CSV_SCHEMA, SPEC_SCHEMA
+from .core import load_data, new_db_session, validate_dir
 from .db_models.bases import Base
 from .db_models.data import Institution, Lab, Person
+from .defaults import (
+    DB_CONFIG_FILES,
+    INSTITUION_CSV_SCHEMA,
+    LAB_CSV_SCHEMA,
+    SPEC_SCHEMA,
+)
 
 app = typer.Typer()
 

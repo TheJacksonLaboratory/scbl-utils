@@ -36,8 +36,8 @@ class StrippedString(TypeDecorator):
     impl = String
     cache_ok = True
 
-    def process_bind_param(self, string: str, dialect: str) -> str:
-        return string.strip()
+    def process_bind_param(self, string: str | None, dialect: str) -> str | None:
+        return string.strip() if string is not None else string
 
 
 class SamplesheetString(TypeDecorator):
@@ -50,7 +50,10 @@ class SamplesheetString(TypeDecorator):
     impl = String
     cache_ok = True
 
-    def process_bind_param(self, string: str, dialect: str) -> str:
+    def process_bind_param(self, string: str, dialect: str) -> str | None:
+        if string is None:
+            return string
+
         legalized = sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=string)
         sanitized = sub(pattern=SEP_CHARS, repl='-', string=legalized)
         return sanitized

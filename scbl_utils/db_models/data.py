@@ -31,6 +31,7 @@ Classes:
 """
 # TODO: submit entries to ROR for JAX?
 # TODO Write docstrings and comments for all classes and methods
+from os import getenv
 from pathlib import Path
 from re import match
 
@@ -41,7 +42,8 @@ from sqlalchemy import Column, ForeignKey, Table, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
-from ..defaults import DELIVERY_PARENT_DIR, ORCID_PATTERN
+from ..core import validate_str
+from ..defaults import LIBRARY_ID_PATTERN, ORCID_PATTERN, PROJECT_ID_PATTERN
 from .bases import (
     Base,
     StrippedString,
@@ -156,19 +158,24 @@ class Lab(Base):
 
     @validates('delivery_dir')
     def set_delivery_dir(self, key: str, delivery_dir: str | None) -> str:
+        # Getting delivery parent dir from environment for the sake of
+        # testing. Hopefully can figure out a better way, importing from
+        # defaults instead of this
+        delivery_parent_str = getenv('DELIVERY_PARENT_DIR', '/sc/service/delivery')
+        delivery_parent_dir = Path(delivery_parent_str)
         if delivery_dir is None:
             pi = self.pi
 
             first_name = pi.first_name.lower()
             last_name = pi.last_name.lower()
 
-            direc = DELIVERY_PARENT_DIR / f'{first_name}_{last_name}'
+            direc = delivery_parent_dir / f'{first_name}_{last_name}'
             abs_dir = direc.resolve(strict=True)
         else:
             abs_dir = Path(delivery_dir).resolve(strict=True)
 
-            if abs_dir.parent != DELIVERY_PARENT_DIR:
-                rprint(f'[orange1]{abs_dir}[/] not in {DELIVERY_PARENT_DIR}.')
+            if abs_dir.parent != delivery_parent_dir:
+                rprint(f'[orange1]{abs_dir}[/] not in {delivery_parent_dir}.')
                 raise Abort()
 
         if not abs_dir.is_dir():
@@ -227,6 +234,14 @@ class Project(Base):
         default=None, insert_default=null()
     )
 
+    @validates('id')
+    def check_id(self, key: str, id: str) -> str:
+        return validate_str(
+            string=id.upper().strip(),
+            pattern=PROJECT_ID_PATTERN,
+            string_name='project ID',
+        )
+
 
 class Person(Base):
     __tablename__ = 'person'
@@ -274,8 +289,7 @@ class Person(Base):
             f'[orange1]{self.name}[/]) is invalid'
         )
 
-        match_obj = match(ORCID_PATTERN, string=orcid)
-        if match_obj is None:
+        if (match_obj := match(ORCID_PATTERN, string=orcid)) is None:
             rprint(
                 (
                     f'{invalid_message} because it does not match the pattern '
@@ -296,8 +310,8 @@ class Person(Base):
             rprint(
                 invalid_message
                 + (
-                    f'{invalid_message} because it was not found with database '
-                    f'search of {base_url}.'
+                    f'{invalid_message} because it was not found with '
+                    f'database search of {base_url}.'
                 )
             )
             raise Abort()
@@ -347,9 +361,7 @@ class SequencingRun(Base):
 
     id: Mapped[samplesheet_str_pk]
 
-    libraries: Mapped[list['Library']] = relationship(
-        back_populates='sequencing_run', default_factory=list
-    )
+    libraries: Mapped[list['Library']] = relationship(back_populates='sequencing_run')
 
 
 class Library(Base):
@@ -370,3 +382,11 @@ class Library(Base):
     sequencing_run: Mapped[SequencingRun] = relationship(
         back_populates='libraries', default=None
     )
+
+    @validates('id')
+    def check_id(self, key: str, id: str) -> str:
+        return validate_str(
+            string=id.upper().strip(),
+            pattern=LIBRARY_ID_PATTERN,
+            string_name='library ID',
+        )

@@ -13,6 +13,7 @@ Functions:
 from collections.abc import Collection
 from json import load as load_json
 from pathlib import Path
+from re import match
 from typing import Any
 
 from jsonschema import ValidationError, validate
@@ -162,5 +163,17 @@ def new_db_session(
     engine = create_engine(url)
     Session = sessionmaker(engine)
     base_class.metadata.create_all(engine)
-    
+
     return Session
+
+
+# what's a better name for the function below?
+def validate_str(string: str, pattern: str, string_name: str) -> str:
+    if match(pattern, string=string) is None:
+        rprint(
+            f'The {string_name} [orange1]{string}[/] does not match '
+            f'the pattern [green]{pattern}[/].'
+        )
+        raise Abort()
+
+    return string
