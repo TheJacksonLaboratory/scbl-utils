@@ -15,7 +15,7 @@ scbl-utils = 'scbl_utils.main:app'
 python = ">=3.9,<3.13"
 typer = {extras = ["all"], version = "^0.9.0"}
 PyYAML = "^6.0.1"
-gspread = "^5.12.1"
+gspread = "^5.12.2"
 jsonschema = "^4.20.0"
 email-validator = "^2.1.0.post1"
 sqlalchemy = "^2.0.23"
