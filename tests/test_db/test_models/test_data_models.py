@@ -138,7 +138,6 @@ class TestProjectModel:
         Test that the `Library` model raises error with invalid library ID.
         """
         with pytest.raises(Abort):
-            experiment = full_db['experiment']
             Project(id='fake-id', lab=full_db['lab'])
 
 

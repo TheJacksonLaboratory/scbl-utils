@@ -10,37 +10,26 @@ Functions:
 """
 # TODO: when upgrading to python3.12, use QUOTE_NOTNULL instead of
 # _load_csv
-from collections.abc import Collection
+from collections.abc import Collection, Hashable
 from csv import DictReader
 from io import TextIOWrapper
+from pandas import read_csv
 from typing import Any
 
 from yaml import Dumper, SequenceNode
 
 
-def _load_csv(f: TextIOWrapper) -> list[dict[str, Any]]:
-    """Load a CSV file into a list of dicts, replacing empty strings with `None`
+def _load_csv(f: TextIOWrapper) -> list[dict[Hashable, Any]]:
+    """Load a CSV file into a list of dicts, replacing empty strings
+    with `None`
 
     :param f: Opened file to load
     :type f: `io.TextIOWrapper`
     :return: A list of dicts representing the rows of the CSV file
     :rtype: `list[dict[str, Any]]`
     """
-    data = []
-
-    for row in DictReader(f):
-        new_row = {}
-        for key, value in row.items():
-            if value == '':
-                new_row[key] = None
-            else:
-                try:
-                    new_row[key] = int(value)
-                except ValueError:
-                    new_row[key] = value
-        data.append(new_row)
-
-    return data
+    data = read_csv(f)
+    return data.to_dict(orient='records')
 
 
 def _sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:

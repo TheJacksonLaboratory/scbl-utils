@@ -41,7 +41,15 @@ def full_db(monkeypatch: MonkeyPatch, tmp_path: Path) -> dict:
     # Definition models
     platform = Platform(name='platform')
     library_type = LibraryType(name='library_type')
-    tag = Tag(id='BC000', tag_type='tag_type')
+    tag = Tag(
+        id='BC000',
+        name='tag',
+        tag_type='tag_type',
+        sequence='ACTG',
+        pattern='5P(BC)',
+        five_prime_offset=1,
+        read='R2',
+    )
 
     # Data models
     institution = Institution(ror_id='021sy4w91', short_name='JAX-GM')

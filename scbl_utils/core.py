@@ -17,6 +17,7 @@ from re import match
 from typing import Any
 
 from jsonschema import ValidationError, validate
+from pandas import read_csv
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
