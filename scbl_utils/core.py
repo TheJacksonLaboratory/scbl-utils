@@ -9,6 +9,14 @@ Functions:
     mapping of library ID to fastq directory
     
     - `validate_dir`: Checks that a directory has required files
+
+    - `new_db_session`: Create and return a new database session,
+    populating with tables if necessary
+
+    - `validate_str`: Validate a string against a pattern
+
+    - `matching_rows_from_table`: Get rows from a table that match
+    certain criteria
 """
 from collections.abc import Collection
 from json import load as load_json
@@ -17,11 +25,10 @@ from re import match
 from typing import Any
 
 from jsonschema import ValidationError, validate
-from pandas import read_csv
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import URL, create_engine, select, Select
+from sqlalchemy import URL, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from typer import Abort
 from yaml import safe_load as safe_load_yml
@@ -193,6 +200,23 @@ def matching_rows_from_table(
     filter_dicts: list[dict[str, Any]],
     data_filename: str,
 ) -> list:
+    """Get rows from a table that match the filter dicts.
+
+    :param session: A database session that has been begun
+    :type session: `sqlalchemy.Session`
+    :param model: The model class for the table
+    :type model: `type[scbl_utils.db_models.bases.Base]`
+    :param filter_dicts: A list of dicts where each dict has keys that
+    are columns and values that are the values to filter by
+    :type filter_dicts: `list[dict[str, Any]]`
+    :param data_filename: The name of the CSV file that the data comes
+    from. Used for error reporting.
+    :type data_filename: `str`
+    :raises Abort: If the table contains no rows matching the filter,
+    raise
+    :return: A list of rows from the table that match the filter dicts
+    :rtype: `list`
+    """
     stmts = [select(model).filter_by(**filter_dict) for filter_dict in filter_dicts]
     found_rows = [session.execute(stmt).scalar() for stmt in stmts]
 

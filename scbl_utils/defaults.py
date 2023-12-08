@@ -162,7 +162,15 @@ TAG_CSV_SCHEMA = {
             'sequence': {'type': 'string', 'pattern': r'^[ACGTN]*$'},
             'pattern': {'type': 'string', 'pattern': r'^[35]P[ACTGN]*\(BC\)$'},
         },
-        'required': ['id', 'name', 'five_prime_offset', 'tag_type', 'read', 'sequence', 'pattern'],
+        'required': [
+            'id',
+            'name',
+            'five_prime_offset',
+            'tag_type',
+            'read',
+            'sequence',
+            'pattern',
+        ],
         'additionalProperties': False,
     },
 }

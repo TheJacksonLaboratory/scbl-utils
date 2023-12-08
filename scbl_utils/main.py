@@ -6,19 +6,16 @@ containing information about labs and institutions.
 Functions:
     - init_db: Initialize the database with institutions and labs
 """
-# TODO write a script that parses the delivery dir for new labs, adding
-# to the db and prompting user if necessary
-
 # TODO: write github actions workflow that runs isort, black, then tests
 # TODO: write docstrings and comments especially for init-db
-# TODO: write tests for init-db
+# TODO: write one more test for init-db that tests bad input
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from .core import load_data, new_db_session, validate_dir, matching_rows_from_table
+from .core import load_data, matching_rows_from_table, new_db_session, validate_dir
 from .db_models.bases import Base
 from .db_models.data import Institution, Lab, LibraryType, Person, Platform, Tag
 from .defaults import (
@@ -86,9 +83,9 @@ def init_db(
         'person.csv': Person,
         'platform.csv': Platform,
         'librarytype.csv': LibraryType,
-        'tag.csv': Tag
-        }
-    
+        'tag.csv': Tag,
+    }
+
     initial_data = {
         filename: [csv_to_model[filename](**row) for row in dataset]
         for filename, dataset in data.items()

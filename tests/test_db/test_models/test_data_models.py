@@ -3,12 +3,12 @@ from string import punctuation, whitespace
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 from typer import Abort
 
 from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project, Sample
 
-from ..db_fixtures import full_db, delivery_parent_dir, db_session, db_path
+from ..db_fixtures import db_path, db_session, delivery_parent_dir, full_db
 
 
 class TestInstitutionModel:
@@ -91,10 +91,10 @@ class TestLabModel:
     Tests for the `Lab` model.
     """
 
-    def test_delivery_dir(self, full_db: dict, delivery_parent_dir: Path):
+    def test_auto_setting(self, full_db: dict, delivery_parent_dir: Path):
         """
-        Test that the `Lab` model correctly sets the `delivery_dir`
-        attribute.
+        Test that the `Lab` model correctly sets the `delivery_dir` and
+        `name` attributes when given the minimum required information.
         """
         # Get the two necessary objects for a Lab
         institution: Institution = full_db['institution']
@@ -104,7 +104,9 @@ class TestLabModel:
         # the group is hardcoded to 'test_group' because of the fixture
         # delivery_parent_dir, which is called by full_db
         expected_lab = {
-            'delivery_dir': str(delivery_parent_dir / f'{pi.first_name.lower()}_{pi.last_name.lower()}'),
+            'delivery_dir': str(
+                delivery_parent_dir / f'{pi.first_name.lower()}_{pi.last_name.lower()}'
+            ),
             'group': 'test_group',
             'name': 'Said Lab',
             'projects': [],
@@ -149,7 +151,9 @@ class TestPersonModel:
         assert all(person.orcid == orcid for person in people)
 
     @pytest.mark.parametrize(
-        argnames=['orcid',],
+        argnames=[
+            'orcid',
+        ],
         argvalues=[
             ('fake-orcid',),
             ('9999-9999-9999-9999',),
@@ -190,7 +194,7 @@ class TestSampleModel:
 
         with db_session.begin() as session:
             session.add(sample)
-        
+
         with db_session.begin() as session:
             stmt = select(Sample)
             processed_sample: Sample = session.execute(stmt).scalar()

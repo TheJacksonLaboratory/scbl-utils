@@ -3,20 +3,17 @@ This module contains utility functions that are uses by other submodules
 in the `scbl-utils` package.
 
 Functions:
-    - `load_csv`: Load a CSV file into a list of dicts, replacing empty
+    - `_load_csv`: Load a CSV file into a list of dicts, replacing empty
     strings with `None`
     - `_sequence_representer`: Representer for `yaml` that allows for
     sequences of sequences to be represented as a single line
 """
-# TODO: when upgrading to python3.12, use QUOTE_NOTNULL instead of
-# _load_csv
 from collections.abc import Collection, Hashable
-from csv import DictReader
 from io import TextIOWrapper
-from numpy import nan
-from pandas import read_csv, notna
 from typing import Any
 
+from numpy import nan
+from pandas import read_csv
 from yaml import Dumper, SequenceNode
 
 

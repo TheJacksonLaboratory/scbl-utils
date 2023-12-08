@@ -1,10 +1,8 @@
-# TODO: Remove the test_data directory, and create the output
-# expected from init-db when using the valid_env fixture.
 from pathlib import Path
 
 import pandas as pd
 from pytest import MonkeyPatch, fixture
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 from yaml import dump as dump_yml
 
 from scbl_utils.core import new_db_session
@@ -134,19 +132,11 @@ def full_db(delivery_parent_dir: Path) -> dict:
 
 
 @fixture
-def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
+def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
     """
-    Create a valid environment that contains all the necessary items for
-    database initialization.
-
-    - A valid configuration file, which instructs the
-
-    This includes valid data and a
-    configuration directory. It also creates delivery directories for
-    the PIs in the data, monkey patches the environment variable
-    DELIVERY_PARENT_DIR to point to the parent of these delivery
-    directories, and monkey patches the return value of the function
-    `pathlib.Path.group` to avoid playing with groups on the system.
+    Create a valid CSVs that can be passed to init-db for database
+    initialization. Also returns a dict mapping the relationship of labs
+    to institutions and PIs, since this is the key feature of init-db.
     """
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
@@ -154,9 +144,10 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
     for directory in ('ahmed_said', 'service_lab'):
         (delivery_parent_dir / directory).mkdir()
 
-    # Create the data. Note missing values and poorly formatted strings,
-    # which should be handled by init-db
-    dfs: dict[str, pd.DataFrame] = {}
+    # Create the data. Note missing values, which will be handled by
+    # init-db
+    input_dfs: dict[str, pd.DataFrame] = {}
+
     institutions = {
         'ror_id': ['02der9h97', '021sy4w91', None],
         'name': [
@@ -169,7 +160,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'state': [None, None, 'CT'],
         'city': [None, None, 'Farmington'],
     }
-    dfs['institution.csv'] = pd.DataFrame(institutions)
+    input_dfs['institution.csv'] = pd.DataFrame(institutions)
 
     labs = {
         'pi_first_name': ['Ahmed', 'John'],
@@ -183,7 +174,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'name': [None, 'Service Lab'],
         'delivery_dir': [None, 'service_lab'],
     }
-    dfs['lab.csv'] = pd.DataFrame(labs)
+    input_dfs['lab.csv'] = pd.DataFrame(labs)
 
     library_types = [
         'Antibody Capture',
@@ -195,7 +186,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'Multiplexing Capture',
         'Spatial Gene Expression',
     ]
-    dfs['librarytype.csv'] = pd.DataFrame({'name': library_types})
+    input_dfs['librarytype.csv'] = pd.DataFrame({'name': library_types})
 
     people = {
         'first_name': ['ahmed', 'john', 'jane'],
@@ -203,7 +194,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.doe@jax.org'],
         'orcid': ['0009-0008-3754-6150', None, None],
     }
-    dfs['person.csv'] = pd.DataFrame(people)
+    input_dfs['person.csv'] = pd.DataFrame(people)
 
     # TODO: can we use the canonical 10x names for these platforms?
     platforms = [
@@ -226,10 +217,10 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'Visium FFPE',
         'Visium CytAssist FFPE',
     ]
-    dfs['platform.csv'] = pd.DataFrame({'name': platforms})
+    input_dfs['platform.csv'] = pd.DataFrame({'name': platforms})
 
     # TODO: get this from 10X themselves for more recent?
-    dfs['tag.csv'] = pd.read_csv(
+    input_dfs['tag.csv'] = pd.read_csv(
         'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/tags.csv'
     ).rename(
         columns={
@@ -240,7 +231,10 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         }
     )
 
-    for filename, df in dfs.items():
+    for filename, df in input_dfs.items():
         df.to_csv(data_dir / filename, index=False)
 
-    return data_dir
+    return data_dir, {
+        1: {'pi_id': 1, 'institution_id': 3},
+        2: {'pi_id': 2, 'institution_id': 2},
+    }

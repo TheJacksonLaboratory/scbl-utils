@@ -14,7 +14,7 @@ Classes:
     - `Tag`: Represents a tag used to multiplex `Sample`s in a
     `Library`.
 """
-# TODO: Write docstrings and comments
+
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .bases import (
