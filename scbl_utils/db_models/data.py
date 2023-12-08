@@ -42,7 +42,7 @@ from sqlalchemy import Column, ForeignKey, Table, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
-from ..core import validate_str
+from ..core import validate_dir, validate_str
 from ..defaults import LIBRARY_ID_PATTERN, ORCID_PATTERN, PROJECT_ID_PATTERN
 from .bases import (
     Base,
@@ -160,40 +160,35 @@ class Lab(Base):
         # defaults instead of this
         delivery_parent_str = getenv('DELIVERY_PARENT_DIR', '/sc/service/delivery')
         delivery_parent_dir = Path(delivery_parent_str)
+
+        # If no delivery directory is provided, get it automatically
+        # from PI name
         if delivery_dir is None:
             pi = self.pi
 
             first_name = pi.first_name.lower()
             last_name = pi.last_name.lower()
 
-            direc = delivery_parent_dir / f'{first_name}_{last_name}'
-            abs_dir = direc.resolve(strict=True)
-        else:
-            abs_dir = Path(delivery_dir).resolve(strict=True)
-
-            if abs_dir.parent != delivery_parent_dir:
-                rprint(f'[orange1]{abs_dir}[/] not in {delivery_parent_dir}.')
-                raise Abort()
-
-        if not abs_dir.is_dir():
-            dir_not_exist_message = (
-                f'the directory [orange1]{abs_dir}[/] does not exist.'
+            delivery_path = Path(f'{first_name}_{last_name}')
+            error_prefix = (
+                '[green]scbl-utils[/] tried to automatically generate a '
+                f'delivery directory for [orange1]{self.name}[/] using '
+                f'the name of the PI [orange1]{self.pi.name}[/].'
             )
+        else:
+            delivery_path = Path(delivery_dir)
+            error_prefix = None
 
-            if delivery_dir is None:
-                rprint(
-                    '[green]scbl-utils[/] tried to automatically generate a '
-                    f'delivery directory for [orange1]{self.name}[/] using '
-                    f'the name of the PI [orange1]{self.pi.name}[/], but '
-                    f'{dir_not_exist_message}'
-                )
-                raise Abort()
+        # Validate and get absolute path
+        valid_delivery_paths = validate_dir(
+            delivery_parent_dir,
+            required_files=[delivery_path],
+            create=False,
+            error_prefix=error_prefix,
+        )
+        abs_delivery_path = valid_delivery_paths[delivery_path.name]
 
-            else:
-                rprint(dir_not_exist_message.capitalize())
-                raise Abort()
-
-        return str(abs_dir)
+        return str(abs_delivery_path)
 
     @validates('group')
     def set_group(self, key: str, group: None) -> str:  # type: ignore
@@ -278,7 +273,7 @@ class Person(Base):
     def check_orcid(self, key: str, orcid: str | None) -> str | None:
         if orcid is None:
             return orcid
-        
+
         orcid = orcid.strip()
         invalid_message = (
             f'The ORCID [orange1]{orcid}[/] (assigned to '

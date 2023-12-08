@@ -13,7 +13,8 @@ Functions:
 from collections.abc import Collection, Hashable
 from csv import DictReader
 from io import TextIOWrapper
-from pandas import read_csv
+from numpy import nan
+from pandas import read_csv, notna
 from typing import Any
 
 from yaml import Dumper, SequenceNode
@@ -29,6 +30,7 @@ def _load_csv(f: TextIOWrapper) -> list[dict[Hashable, Any]]:
     :rtype: `list[dict[str, Any]]`
     """
     data = read_csv(f)
+    data.replace(nan, None, inplace=True)
     return data.to_dict(orient='records')
 
 

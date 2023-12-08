@@ -5,7 +5,7 @@ from typer import Abort
 
 from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project
 
-from ..db_fixtures import full_db
+from ..db_fixtures import full_db, delivery_parent_dir
 
 
 class TestInstitutionModel:

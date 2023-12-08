@@ -112,7 +112,12 @@ def map_libs_to_fastqdirs(
     return sorted_lib_to_fastqdir
 
 
-def validate_dir(direc: Path, required_files: Collection[Path] = []) -> dict[str, Path]:
+def validate_dir(
+    direc: Path,
+    required_files: Collection[Path] = [],
+    create: bool = True,
+    error_prefix: str | None = None,
+) -> dict[str, Path]:
     """
     Checks that `direc` has required files and returns them,
     creating `direc` if necessary.
@@ -126,24 +131,24 @@ def validate_dir(direc: Path, required_files: Collection[Path] = []) -> dict[str
     :return: A `dict` mapping the filename to its absolute path
     :rtype: `dict[str, pathlib.Path]`
     """
-    # Create directory if it doesn't exist
-    direc = direc.resolve(strict=True)
-    direc.mkdir(exist_ok=True, parents=True)
+    # Create directory if desired
+    if create:
+        direc = direc.resolve(strict=True)
+        direc.mkdir(exist_ok=True, parents=True)
 
     # Generate absolute paths for required files, find missing ones
-    required_paths = {
-        path.name: (direc / path).resolve(strict=True) for path in required_files
-    }
+    required_paths = {path.name: (direc / path).resolve() for path in required_files}
     missing_files = '\n'.join(
         filename for filename, path in required_paths.items() if not path.exists()
     )
 
+    main_error = f'Please add the following paths to [orange1]{direc}[/]. {SEE_MORE}'
+    full_error = (
+        f'{error_prefix} {main_error}' if error_prefix is not None else main_error
+    )
+
     if missing_files:
-        rprint(
-            f'Please place the following files in {direc}. {SEE_MORE}',
-            missing_files,
-            sep='\n',
-        )
+        rprint(full_error, missing_files, sep='\n')
         raise Abort()
 
     return required_paths
@@ -190,7 +195,7 @@ def matching_rows_from_table(
 ) -> list:
     stmts = [select(model).filter_by(**filter_dict) for filter_dict in filter_dicts]
     found_rows = [session.execute(stmt).scalar() for stmt in stmts]
-    
+
     missing = [
         filter_dict.values()
         for filter_dict, obj in zip(filter_dicts, found_rows)
@@ -198,7 +203,7 @@ def matching_rows_from_table(
     ]
 
     if not missing:
-        return found_rows # type: ignore
+        return found_rows  # type: ignore
 
     headers = filter_dicts[0].keys()
     table = Table(*headers)

@@ -19,14 +19,13 @@ CONFIG_DIR = Path('/sc/service/etc/.config/scbl-utils')
 LIBRARY_GLOB_PATTERN = 'SC*fastq*'
 LIBRARY_ID_PATTERN = r'^SC\d{7}$'
 PROJECT_ID_PATTERN = r'^SCP\d{2}-\d{3}$'
-# DELIVERY_PARENT_DIR = '/sc/service/delivery'
 
 # Samplesheet formatting settings
 SEP_CHARS = r'\s_-'
 SEP_PATTERN = rf'[{SEP_CHARS}]'
 SAMPLENAME_BLACKLIST_PATTERN = rf'[^{ascii_letters + digits + SEP_CHARS}]'
 
-# Configuration files necesary for database connection
+# Configuration files necesary for script
 DB_CONFIG_FILES = [Path(filename) for filename in ('db-spec.yml',)]
 
 # CSV files necessary for database initialization
@@ -156,7 +155,7 @@ TAG_CSV_SCHEMA = {
         'type': 'object',
         'properties': {
             'id': {'type': 'string'},  # TODO: add a pattern to this?
-            'name': {'type': 'string'},
+            'name': {'type': ['string', 'null']},
             'five_prime_offset': {'type': 'integer'},
             'tag_type': {'type': 'string'},
             'read': {'type': 'string', 'pattern': r'^R\d$'},

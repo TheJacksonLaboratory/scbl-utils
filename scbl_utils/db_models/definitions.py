@@ -47,7 +47,7 @@ class Tag(Base):
 
     # TODO: add validation
     id: Mapped[samplesheet_str_pk]
-    name: Mapped[samplesheet_str]
+    name: Mapped[samplesheet_str | None]
     tag_type: Mapped[stripped_str]
     read: Mapped[stripped_str]
     sequence: Mapped[stripped_str]
