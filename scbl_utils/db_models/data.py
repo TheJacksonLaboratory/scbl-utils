@@ -346,6 +346,7 @@ class Sample(Base):
 class SequencingRun(Base):
     __tablename__ = 'sequencing_run'
 
+    # TODO: validate that this matches the pattern
     id: Mapped[samplesheet_str_pk]
 
     libraries: Mapped[list['Library']] = relationship(back_populates='sequencing_run')

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from pytest import MonkeyPatch, fixture
 from sqlalchemy.orm import sessionmaker, Session
-from yaml import safe_dump as yml_safe_dump
+from yaml import dump as dump_yml
 
 from scbl_utils.core import new_db_session
 from scbl_utils.db_models.bases import Base
@@ -69,7 +69,7 @@ def config_dir(tmp_path: Path, db_path: Path) -> Path:
 
     config_path = config_dir / 'db-spec.yml'
     with config_path.open('w') as f:
-        yml_safe_dump(db_config, f)
+        dump_yml(db_config, f)
 
     return config_dir.parent
 
@@ -161,13 +161,13 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'ror_id': ['02der9h97', '021sy4w91', None],
         'name': [
             None,
-            '\n\tThe Jackson Laboratory for Mammalian Genetics ',
+            'The Jackson Laboratory for Mammalian Genetics',
             'The Jackson Laboratory for Genomic Medicine',
         ],
-        'short_name': [None, '\n\tJAX-MG ', 'JAX-GM'],
+        'short_name': [None, 'JAX-MG', 'JAX-GM'],
         'country': [None, None, None],
         'state': [None, None, 'CT'],
-        'city': [None, None, '\n\tFarmington'],
+        'city': [None, None, 'Farmington'],
     }
     dfs['institution.csv'] = pd.DataFrame(institutions)
 
@@ -180,13 +180,13 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
             'The Jackson Laboratory for Genomic Medicine',
             'The Jackson Laboratory for Mammalian Genetics',
         ],
-        'name': [None, '\n\tService Lab '],
+        'name': [None, 'Service Lab'],
         'delivery_dir': [None, 'service_lab'],
     }
     dfs['lab.csv'] = pd.DataFrame(labs)
 
     library_types = [
-        '\n\tAntibody Capture ',
+        'Antibody Capture',
         'Chromatin Accessibility',
         'CRISPR Guide Capture',
         'CytAssist Gene Expression',
@@ -198,8 +198,8 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
     dfs['librarytype.csv'] = pd.DataFrame({'name': library_types})
 
     people = {
-        'first_name': ['\n\tahmed ', 'john', 'jane'],
-        'last_name': ['\n\tsaid ', 'doe', 'doe'],
+        'first_name': ['ahmed', 'john', 'jane'],
+        'last_name': ['said', 'doe', 'doe'],
         'email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.doe@jax.org'],
         'orcid': ['0009-0008-3754-6150', None, None],
     }
@@ -207,7 +207,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
 
     # TODO: can we use the canonical 10x names for these platforms?
     platforms = [
-        "\n\t3' RNA ",
+        "3' RNA",
         "3' RNA-HT",
         "5' RNA",
         "5' RNA-HT",
@@ -242,20 +242,5 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
 
     for filename, df in dfs.items():
         df.to_csv(data_dir / filename, index=False)
-
-
-    expected_institutions = {
-        'id': [1, 2, 3],
-        'name': [
-            'University of Connecticut',
-            'The Jackson Laboratory for Mammalian Genetics',
-            'The Jackson Laboratory for Genomic Medicine',
-        ],
-        'short_name': ['UConn', 'JAX-MG', 'JAX-GM'],
-        'country': ['US', 'US', 'US'],
-        'state': ['CT', 'CT', 'CT'],
-        'city': ['Storrs', 'Bar Harbor', 'Farmington'],
-    }
-    expected_institutions = pd.DataFrame(expected_institutions)
 
     return data_dir

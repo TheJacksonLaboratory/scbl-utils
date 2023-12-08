@@ -1,11 +1,14 @@
 from pathlib import Path
+from string import punctuation, whitespace
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker, Session
 from typer import Abort
 
-from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project
+from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project, Sample
 
-from ..db_fixtures import full_db, delivery_parent_dir
+from ..db_fixtures import full_db, delivery_parent_dir, db_session, db_path
 
 
 class TestInstitutionModel:
@@ -14,9 +17,10 @@ class TestInstitutionModel:
     """
 
     ror_id = '02der9h97'
+    manual_name = 'A manually assigned name'
     correct_dataset = [
         (
-            {'ror_id': ror_id},
+            {'ror_id': whitespace + ror_id + whitespace},
             {
                 'ror_id': ror_id,
                 'name': 'University of Connecticut',
@@ -28,17 +32,17 @@ class TestInstitutionModel:
         ),
         (
             {
-                'ror_id': ror_id,
-                'name': 'A manually assigned name',
-                'short_name': 'A manually assigned short name',
+                'ror_id': whitespace + ror_id + whitespace,
+                'name': whitespace + manual_name + whitespace,
+                'short_name': whitespace + manual_name + whitespace,
                 'country': 'wrong_country',
                 'state': 'wrong_state',
                 'city': 'wrong_city',
             },
             {
                 'ror_id': ror_id,
-                'name': 'A manually assigned name',
-                'short_name': 'A manually assigned short name',
+                'name': manual_name,
+                'short_name': manual_name,
                 'country': 'US',
                 'state': 'CT',
                 'city': 'Storrs',
@@ -50,16 +54,28 @@ class TestInstitutionModel:
         argnames=['institution_data', 'expected_institution'], argvalues=correct_dataset
     )
     def test_correct_ror_id(
-        self, institution_data: dict[str, str], expected_institution: dict[str, str]
+        self,
+        institution_data: dict[str, str],
+        expected_institution: dict[str, str],
+        db_session: sessionmaker[Session],
     ):
         """
         Test that given a correct ROR ID, the `Institution` model
-        retrieves data correctly.
+        retrieves data correctly. Also tests string stripping. Note
+        that this is the only time that `StrippedString` is tested,
+        as all other models use the same `StrippedString` type.
         """
         institution = Institution(**institution_data, labs=[])
 
-        for key, value in expected_institution.items():
-            assert getattr(institution, key) == value
+        with db_session.begin() as session:
+            session.add(institution)
+
+        with db_session.begin() as session:
+            stmt = select(Institution)
+            processed_institution = session.execute(stmt).scalar()
+
+            for key, value in expected_institution.items():
+                assert getattr(processed_institution, key) == value
 
     def test_incorrect_ror_id(self):
         """
@@ -75,35 +91,21 @@ class TestLabModel:
     Tests for the `Lab` model.
     """
 
-    def test_delivery_dir(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, full_db: dict
-    ):
+    def test_delivery_dir(self, full_db: dict, delivery_parent_dir: Path):
         """
         Test that the `Lab` model correctly sets the `delivery_dir`
         attribute.
         """
-        # Change the delivery_parent_dir to tmp_path
-        monkeypatch.setenv('DELIVERY_PARENT_DIR', str(tmp_path))
-
         # Get the two necessary objects for a Lab
         institution: Institution = full_db['institution']
         pi: Person = full_db['person']
 
-        # Define and create the expected delivery directory and group.
-        # Even though this is defined already by the full_db fixture,
-        # define it manually for the sake of test completeness
-        delivery_dir = tmp_path / 'ahmed_said'
-        delivery_dir.mkdir(exist_ok=True)
-        group = f'said_lab'
-
-        # tmp_path.group() does not work, so monkeypatch it to return a
-        # custom value
-        monkeypatch.setattr('pathlib.Path.group', lambda s: group)
-
-        # Define the expected lab and create the Lab object
+        # Define the expected lab and create the Lab object. Note that
+        # the group is hardcoded to 'test_group' because of the fixture
+        # delivery_parent_dir, which is called by full_db
         expected_lab = {
-            'delivery_dir': str(delivery_dir),
-            'group': group,
+            'delivery_dir': str(delivery_parent_dir / f'{pi.first_name.lower()}_{pi.last_name.lower()}'),
+            'group': 'test_group',
             'name': 'Said Lab',
             'projects': [],
         }
@@ -118,24 +120,9 @@ class TestProjectModel:
     Tests for the `Project` model.
     """
 
-    # TODO: this is essentially a copy-paste of the TestPersonModel.
-    # Figure out a better way to do this
-    @pytest.mark.parametrize(
-        argnames=['project_id', 'expected_project_id'],
-        argvalues=[('\n\tscp99-000 ', 'SCP99-000')],
-    )
-    def test_valid_project_id(
-        self, full_db: dict, project_id: str, expected_project_id: str
-    ):
-        """
-        Test that the `Library` model cleans the library ID.
-        """
-        project = Project(id=project_id, lab=full_db['lab'])
-        assert project.id == expected_project_id
-
     def test_invalid_project_id(self, full_db: dict):
         """
-        Test that the `Library` model raises error with invalid library ID.
+        Test that the `Project` model raises error with invalid project ID.
         """
         with pytest.raises(Abort):
             Project(id='fake-id', lab=full_db['lab'])
@@ -146,17 +133,10 @@ class TestPersonModel:
     Tests for the `Person` model.
     """
 
-    def test_name(self):
-        """
-        Test that the `Person` model correctly sets the `name` attribute
-        with a poorly formatted name.
-        """
-        person = Person(first_name='\n\tahmed ', last_name='\n\tsaid ')
-        assert person.name == 'Ahmed Said'
-
     def test_valid_orcid(self):
         """
-        Test that the `Person` model acceps the ORCID.
+        Test that the `Person` model accepts the ORCID, regardless of
+        the number of dashes.
         """
         orcid = '0009-0008-3754-6150'
         n_dashes = orcid.count('-')
@@ -169,13 +149,13 @@ class TestPersonModel:
         assert all(person.orcid == orcid for person in people)
 
     @pytest.mark.parametrize(
-        argnames=['orcid', 'expected_error'],
+        argnames=['orcid',],
         argvalues=[
-            ('fake-orcid', '.*pattern.*'),
-            ('9999-9999-9999-9999', '.*database.*'),
+            ('fake-orcid',),
+            ('9999-9999-9999-9999',),
         ],
     )
-    def test_invalid_orcid(self, orcid: str, expected_error: str):
+    def test_invalid_orcid(self, orcid: str):
         """
         Test that the `Person` model raises error with invalid ORCID.
         """
@@ -196,7 +176,25 @@ class TestSampleModel:
     Tests for the `Sample` model.
     """
 
-    pass
+    def test_sample_name(self, full_db: dict, db_session: sessionmaker[Session]):
+        """
+        Test that the `Sample` model correctly cleans the sample name.
+        """
+
+        # Get the necessary object for a sample
+        experiment = full_db['experiment']
+
+        illegal_punctuation = punctuation.replace('_', '').replace('-', '')
+        sample_name = f'{illegal_punctuation}some{whitespace}name{illegal_punctuation}'
+        sample = Sample(sample_name, experiment=experiment)
+
+        with db_session.begin() as session:
+            session.add(sample)
+        
+        with db_session.begin() as session:
+            stmt = select(Sample)
+            processed_sample: Sample = session.execute(stmt).scalar()
+            assert processed_sample.name == 'some-name'
 
 
 class TestSequencingRunModel:
@@ -214,7 +212,7 @@ class TestLibraryModel:
 
     @pytest.mark.parametrize(
         argnames=['library_id', 'expected_library_id'],
-        argvalues=[('\n\tsc9900000 ', 'SC9900000')],
+        argvalues=[(f'{whitespace}sc9900000{whitespace}', 'SC9900000')],
     )
     def test_valid_library_id(
         self, full_db: dict, library_id: str, expected_library_id: str

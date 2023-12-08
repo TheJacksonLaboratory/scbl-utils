@@ -20,7 +20,7 @@ from typing import Annotated
 from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass, mapped_column
 from sqlalchemy.types import String, TypeDecorator
 
-from ..defaults import SAMPLENAME_BLACKLIST_PATTERN, SEP_CHARS
+from ..defaults import SAMPLENAME_BLACKLIST_PATTERN, SEP_PATTERN
 
 
 class Base(MappedAsDataclass, DeclarativeBase):
@@ -54,9 +54,16 @@ class SamplesheetString(TypeDecorator):
         if string is None:
             return string
 
-        legalized = sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=string)
-        sanitized = sub(pattern=SEP_CHARS, repl='-', string=legalized)
-        return sanitized
+        # Remove illegal characters
+        string = sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=string)
+        
+        # Replace separator characters with hyphens
+        string = sub(pattern=SEP_PATTERN, repl='-', string=string)
+
+        # Replace occurrences of multiple hyphens with a single hyphen
+        string = sub(pattern=r'-+', repl='-', string=string)
+
+        return string
 
 
 # Commonly used primary key types
