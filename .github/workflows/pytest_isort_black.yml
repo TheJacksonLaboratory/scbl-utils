@@ -31,7 +31,7 @@ jobs:
         pipx install poetry
         pipx inject poetry poetry-plugin-export
 
-        poetry export --output requirements.txt --without-hashes
+        poetry export --output requirements.txt --without-hashes --with test dev
         
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt
