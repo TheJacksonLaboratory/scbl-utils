@@ -14,16 +14,12 @@ Functions:
 from pathlib import Path
 from typing import Annotated
 
-from rich import print as rprint
 import typer
-
-from .core.db import db_session
-
-from .core.validation import validate_dir
+from rich import print as rprint
 
 from .core.data_io import load_data
-
-from .core.db import matching_rows_from_table
+from .core.db import db_session, matching_rows_from_table
+from .core.validation import validate_dir
 from .db_models.bases import Base
 from .db_models.data import Institution, Lab, LibraryType, Person, Platform, Tag
 from .defaults import (
@@ -147,9 +143,11 @@ def generate_samplesheet():
     db_spec: dict = load_data(db_config_files['db-spec.yml'], schema=SPEC_SCHEMA)
 
     gdrive_config_dir = CONFIG_DIR / 'google-drive'
-    gdrive_config_files = validate_dir(gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES)
-    gdrive_spec: dict = load_data(gdrive_config_files['gdrive-spec.yml'], schema=SPEC_SCHEMA)
-
-
+    gdrive_config_files = validate_dir(
+        gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES
+    )
+    gdrive_spec: dict = load_data(
+        gdrive_config_files['gdrive-spec.yml'], schema=SPEC_SCHEMA
+    )
 
     pass

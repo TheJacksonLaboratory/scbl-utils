@@ -51,5 +51,3 @@ jobs:
 
       - name: Format with black
         uses: psf/black@stable
-        with:
-          options: "--skip-string-normalization"

@@ -8,7 +8,7 @@ from typer import Abort
 
 from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project, Sample
 
-from ..db_fixtures import memory_db_session, delivery_parent_dir, full_db
+from ..db_fixtures import delivery_parent_dir, full_db, memory_db_session
 
 
 class TestInstitutionModel:

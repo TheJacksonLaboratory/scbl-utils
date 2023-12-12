@@ -7,16 +7,14 @@ Functions:
 
     - `validate_str`: Validate a string against a pattern
 """
+from collections.abc import Collection
+from pathlib import Path
 from re import match
-from scbl_utils.defaults import SEE_MORE
-
 
 from rich import print as rprint
 from typer import Abort
 
-
-from collections.abc import Collection
-from pathlib import Path
+from scbl_utils.defaults import SEE_MORE
 
 
 def validate_dir(

@@ -17,6 +17,7 @@ from numpy import nan
 from pandas import read_csv
 from yaml import Dumper, SequenceNode
 
+
 # TODO: eventually remove dependency on pandas for performance?
 def _load_csv(f: TextIOWrapper) -> list[dict[Hashable, Any]]:
     """

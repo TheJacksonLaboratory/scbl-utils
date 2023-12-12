@@ -27,7 +27,9 @@ SAMPLENAME_BLACKLIST_PATTERN = rf'[^{ascii_letters + digits + SEP_CHARS}]'
 
 # Configuration files necesary for script
 DB_CONFIG_FILES = [Path(filename) for filename in ('db-spec.yml',)]
-GDRIVE_CONFIG_FILES = [Path(filename) for filename in ('gdrive-spec.yml', 'service-account.json')]
+GDRIVE_CONFIG_FILES = [
+    Path(filename) for filename in ('gdrive-spec.yml', 'service-account.json')
+]
 
 # CSV files necessary for database initialization
 DB_INIT_FILES = {
@@ -158,7 +160,7 @@ TAG_CSV_SCHEMA = {
     'items': {
         'type': 'object',
         'properties': {
-            'id': {'type': 'string'}, # TODO: add a pattern to this?
+            'id': {'type': 'string'},  # TODO: add a pattern to this?
             'name': {'type': ['string', 'null']},
             'five_prime_offset': {'type': 'integer'},
             'tag_type': {'type': 'string'},

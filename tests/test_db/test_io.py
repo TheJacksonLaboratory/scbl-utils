@@ -7,16 +7,13 @@ from typer.testing import CliRunner
 from scbl_utils.db_models.data import Lab
 from scbl_utils.main import app
 
-from .db_fixtures import (
-    config_dir,
-    memory_db_session,
-    delivery_parent_dir,
-    valid_data,
-)
+from .db_fixtures import config_dir, delivery_parent_dir, memory_db_session, valid_data
 
 
 def test_init_db(
-    config_dir: Path, valid_data: tuple[Path, dict], memory_db_session: sessionmaker[Session]
+    config_dir: Path,
+    valid_data: tuple[Path, dict],
+    memory_db_session: sessionmaker[Session],
 ):
     """
     Test that init-db correctly assigns institutions and people to labs.
@@ -30,7 +27,7 @@ def test_init_db(
     with memory_db_session.begin() as session:
         stmt = select(Lab)
         labs = session.execute(stmt).scalars().all()
-        
+
         assert all(
             lab.institution_id == lab_relationships[lab.id]['institution_id']
             for lab in labs

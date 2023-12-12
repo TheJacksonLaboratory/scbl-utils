@@ -10,19 +10,18 @@ Functions:
 """
 
 from collections.abc import Collection
-from scbl_utils.defaults import LIBRARY_GLOB_PATTERN, SEE_MORE
-from .utils import _load_csv
-
+from json import load as load_json
+from pathlib import Path
+from typing import Any
 
 from jsonschema import ValidationError, validate
 from rich import print as rprint
 from typer import Abort
 from yaml import safe_load as safe_load_yml
 
+from scbl_utils.defaults import LIBRARY_GLOB_PATTERN, SEE_MORE
 
-from json import load as load_json
-from pathlib import Path
-from typing import Any
+from .utils import _load_csv
 
 
 def load_data(data_path: Path, schema: dict = {}) -> Any:

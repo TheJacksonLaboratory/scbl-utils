@@ -42,9 +42,7 @@ from sqlalchemy import Column, ForeignKey, Table, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
-from ..core.validation import validate_dir
-
-from ..core.validation import validate_str
+from ..core.validation import validate_dir, validate_str
 from ..defaults import LIBRARY_ID_PATTERN, ORCID_PATTERN, PROJECT_ID_PATTERN
 from .bases import (
     Base,

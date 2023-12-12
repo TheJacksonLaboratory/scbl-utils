@@ -9,17 +9,16 @@ Functions:
     - `matching_rows_from_table`: Get rows from a table that match
     certain criteria
 """
+from typing import Any
+
 from rich.console import Console
 from rich.table import Table
-from typing import Any
 from sqlalchemy import URL, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from typer import Abort
 
 
-def db_session(
-    base_class: type[DeclarativeBase], **kwargs
-) -> sessionmaker[Session]:
+def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Session]:
     """Create and return a new database session, initializing the
     database if necessary.
 
