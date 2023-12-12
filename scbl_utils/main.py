@@ -6,16 +6,16 @@ containing information about labs and institutions.
 Functions:
     - init_db: Initialize the database with institutions and labs
 """
-# TODO: write github actions workflow that runs isort, black, then tests
-# TODO: write docstrings and comments especially for init-db
+# TODO: write comments for init-db
+
 # TODO: write tests that ensure defaults are correct - in particular,
 # check that csv_schemas and db_init_files contain the same keys. same
-# for init-db.csv_to_model
+# for init-db.csv_to_model. that way, these tests are not run when the
+# package is run
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from rich import print as rprint
 
 from .core.data_io import load_data
 from .core.db import db_session, matching_rows_from_table
