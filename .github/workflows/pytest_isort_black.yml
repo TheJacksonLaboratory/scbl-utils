@@ -5,12 +5,12 @@ name: Test, sort imports, and format
 on: [push, pull_request]
 
 jobs:
-  build:
+  test:
 
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
         pipx install poetry
         pipx inject poetry poetry-plugin-export
 
-        poetry export --output requirements.txt --without-hashes --with test,dev
+        poetry export --output requirements.txt --without-hashes --with test
         
         python -m pip install --upgrade pip
         python -m pip install -r requirements.txt
@@ -39,10 +39,17 @@ jobs:
       run: |
         python -m pytest
 
-    - name: Sort imports with isort
-      uses: isort/isort-action@v1.1.0
+  sort-imports_and_format:
 
-    - name: Format with black
-      uses: psf/black@stable
-      with:
-        options: "--skip-string-normalization"
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sort imports with isort
+        uses: isort/isort-action@v1.1.0
+
+      - name: Format with black
+        uses: psf/black@stable
+        with:
+          options: "--skip-string-normalization"
