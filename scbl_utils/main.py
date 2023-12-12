@@ -8,14 +8,22 @@ Functions:
 """
 # TODO: write github actions workflow that runs isort, black, then tests
 # TODO: write docstrings and comments especially for init-db
-# TODO: write one more test for init-db that tests bad input
+# TODO: write tests that ensure defaults are correct - in particular,
+# check that csv_schemas and db_init_files contain the same keys. same
+# for init-db.csv_to_model
 from pathlib import Path
 from typing import Annotated
 
+from rich import print as rprint
 import typer
-from sqlalchemy import func, select
 
-from .core import load_data, matching_rows_from_table, new_db_session, validate_dir
+from .core.db import db_session
+
+from .core.validation import validate_dir
+
+from .core.data_io import load_data
+
+from .core.db import matching_rows_from_table
 from .db_models.bases import Base
 from .db_models.data import Institution, Lab, LibraryType, Person, Platform, Tag
 from .defaults import (
@@ -23,6 +31,8 @@ from .defaults import (
     CSV_SCHEMAS,
     DB_CONFIG_FILES,
     DB_INIT_FILES,
+    GDRIVE_CONFIG_FILES,
+    SIBLING_REPOSITORY,
     SPEC_SCHEMA,
 )
 
@@ -65,7 +75,8 @@ def init_db(
     ],
 ):
     """
-    Initialize the database with the institutions, labs, people, platforms, library types, and tags.
+    Initialize the database with the institutions, labs, people,
+    platforms, library types, and tags.
     """
     db_config_dir = CONFIG_DIR / 'db'
     config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
@@ -92,7 +103,7 @@ def init_db(
         if filename != 'lab.csv'
     }
 
-    Session = new_db_session(base_class=Base, **spec)
+    Session = db_session(base_class=Base, **spec)
     with Session.begin() as session:
         for object_list in initial_data.values():
             session.add_all(object_list)
@@ -123,3 +134,22 @@ def init_db(
 
         labs = [Lab(institution=institution, pi=pi, name=lab_row['name'], delivery_dir=lab_row['delivery_dir']) for institution, pi, lab_row in zip(lab_institutions, lab_pis, data['lab.csv'])]  # type: ignore
         session.add_all(labs)
+
+
+@app.command()
+def generate_samplesheet():
+    f"""
+    Generate a samplesheet to use as input to the nf-tenx
+    ({SIBLING_REPOSITORY}) pipeline.
+    """
+    db_config_dir = CONFIG_DIR / 'db'
+    db_config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
+    db_spec: dict = load_data(db_config_files['db-spec.yml'], schema=SPEC_SCHEMA)
+
+    gdrive_config_dir = CONFIG_DIR / 'google-drive'
+    gdrive_config_files = validate_dir(gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES)
+    gdrive_spec: dict = load_data(gdrive_config_files['gdrive-spec.yml'], schema=SPEC_SCHEMA)
+
+
+
+    pass

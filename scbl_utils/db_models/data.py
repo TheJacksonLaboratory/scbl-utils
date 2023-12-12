@@ -42,7 +42,9 @@ from sqlalchemy import Column, ForeignKey, Table, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
-from ..core import validate_dir, validate_str
+from ..core.validation import validate_dir
+
+from ..core.validation import validate_str
 from ..defaults import LIBRARY_ID_PATTERN, ORCID_PATTERN, PROJECT_ID_PATTERN
 from .bases import (
     Base,
@@ -62,7 +64,7 @@ class Institution(Base):
 
     id: Mapped[int_pk] = mapped_column(init=False)
     name: Mapped[unique_stripped_str] = mapped_column(default=None)
-    short_name: Mapped[unique_stripped_str | None] = mapped_column(
+    short_name: Mapped[stripped_str | None] = mapped_column(
         default=None, insert_default=null()
     )
     country: Mapped[str] = mapped_column(StrippedString(length=2), default='US')

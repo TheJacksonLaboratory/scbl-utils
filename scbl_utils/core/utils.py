@@ -4,7 +4,8 @@ in the `scbl-utils` package.
 
 Functions:
     - `_load_csv`: Load a CSV file into a list of dicts, replacing empty
-    strings with `None`
+    strings with `None`'
+
     - `_sequence_representer`: Representer for `yaml` that allows for
     sequences of sequences to be represented as a single line
 """
@@ -16,9 +17,10 @@ from numpy import nan
 from pandas import read_csv
 from yaml import Dumper, SequenceNode
 
-
+# TODO: eventually remove dependency on pandas for performance?
 def _load_csv(f: TextIOWrapper) -> list[dict[Hashable, Any]]:
-    """Load a CSV file into a list of dicts, replacing empty strings
+    """
+    Load a CSV file into a list of dicts, replacing empty strings
     with `None`
 
     :param f: Opened file to load

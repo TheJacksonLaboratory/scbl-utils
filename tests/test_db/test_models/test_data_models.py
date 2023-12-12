@@ -8,7 +8,7 @@ from typer import Abort
 
 from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project, Sample
 
-from ..db_fixtures import db_path, db_session, delivery_parent_dir, full_db
+from ..db_fixtures import memory_db_session, delivery_parent_dir, full_db
 
 
 class TestInstitutionModel:
@@ -57,7 +57,7 @@ class TestInstitutionModel:
         self,
         institution_data: dict[str, str],
         expected_institution: dict[str, str],
-        db_session: sessionmaker[Session],
+        memory_db_session: sessionmaker[Session],
     ):
         """
         Test that given a correct ROR ID, the `Institution` model
@@ -67,10 +67,10 @@ class TestInstitutionModel:
         """
         institution = Institution(**institution_data, labs=[])
 
-        with db_session.begin() as session:
+        with memory_db_session.begin() as session:
             session.add(institution)
 
-        with db_session.begin() as session:
+        with memory_db_session.begin() as session:
             stmt = select(Institution)
             processed_institution = session.execute(stmt).scalar()
 
@@ -180,7 +180,7 @@ class TestSampleModel:
     Tests for the `Sample` model.
     """
 
-    def test_sample_name(self, full_db: dict, db_session: sessionmaker[Session]):
+    def test_sample_name(self, full_db: dict, memory_db_session: sessionmaker[Session]):
         """
         Test that the `Sample` model correctly cleans the sample name.
         """
@@ -192,10 +192,10 @@ class TestSampleModel:
         sample_name = f'{illegal_punctuation}some{whitespace}name{illegal_punctuation}'
         sample = Sample(sample_name, experiment=experiment)
 
-        with db_session.begin() as session:
+        with memory_db_session.begin() as session:
             session.add(sample)
 
-        with db_session.begin() as session:
+        with memory_db_session.begin() as session:
             stmt = select(Sample)
             processed_sample: Sample = session.execute(stmt).scalar()
             assert processed_sample.name == 'some-name'

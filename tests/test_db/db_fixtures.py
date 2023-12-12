@@ -5,7 +5,7 @@ from pytest import MonkeyPatch, fixture
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import dump as dump_yml
 
-from scbl_utils.core import new_db_session
+from scbl_utils.core.db import db_session
 from scbl_utils.db_models.bases import Base
 from scbl_utils.db_models.data import (
     Experiment,
@@ -21,20 +21,11 @@ from scbl_utils.db_models.definitions import LibraryType, Platform, Tag
 
 
 @fixture
-def db_path(tmp_path: Path) -> Path:
-    """
-    Create a temporary database for testing.
-    """
-    db_path = tmp_path / 'test.db'
-    return db_path
-
-
-@fixture
-def db_session(db_path: Path) -> sessionmaker[Session]:
+def memory_db_session() -> sessionmaker[Session]:
     """
     Create a database session for testing.
     """
-    Session = new_db_session(Base, drivername='sqlite', database=str(db_path))
+    Session = db_session(Base, drivername='sqlite')
     return Session
 
 
@@ -56,14 +47,14 @@ def delivery_parent_dir(monkeypatch: MonkeyPatch, tmp_path: Path) -> Path:
 
 
 @fixture
-def config_dir(tmp_path: Path, db_path: Path) -> Path:
+def config_dir(tmp_path: Path) -> Path:
     """
     Create a temporary configuration directory for testing.
     """
     config_dir = tmp_path / '.config' / 'db'
     config_dir.mkdir(parents=True)
 
-    db_config = {'drivername': 'sqlite', 'database': str(db_path)}
+    db_config = {'drivername': 'sqlite'}
 
     config_path = config_dir / 'db-spec.yml'
     with config_path.open('w') as f:
@@ -146,21 +137,21 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
 
     # Create the data. Note missing values, which will be handled by
     # init-db
-    input_dfs: dict[str, pd.DataFrame] = {}
+    dfs: dict[str, pd.DataFrame] = {}
 
     institutions = {
         'ror_id': ['02der9h97', '021sy4w91', None],
         'name': [
             None,
-            'The Jackson Laboratory for Mammalian Genetics',
-            'The Jackson Laboratory for Genomic Medicine',
+            'Jackson Laboratory for Mammalian Genetics',
+            'Jackson Laboratory for Genomic Medicine',
         ],
         'short_name': [None, 'JAX-MG', 'JAX-GM'],
         'country': [None, None, None],
         'state': [None, None, 'CT'],
         'city': [None, None, 'Farmington'],
     }
-    input_dfs['institution.csv'] = pd.DataFrame(institutions)
+    dfs['institution.csv'] = pd.DataFrame(institutions)
 
     labs = {
         'pi_first_name': ['Ahmed', 'John'],
@@ -168,13 +159,13 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
         'pi_email': ['ahmed.said@jax.org', 'john.doe@jax.org'],
         'pi_orcid': ['0009-0008-3754-6150', None],
         'institution_name': [
-            'The Jackson Laboratory for Genomic Medicine',
-            'The Jackson Laboratory for Mammalian Genetics',
+            'Jackson Laboratory for Genomic Medicine',
+            'Jackson Laboratory for Mammalian Genetics',
         ],
         'name': [None, 'Service Lab'],
         'delivery_dir': [None, 'service_lab'],
     }
-    input_dfs['lab.csv'] = pd.DataFrame(labs)
+    dfs['lab.csv'] = pd.DataFrame(labs)
 
     library_types = [
         'Antibody Capture',
@@ -186,7 +177,7 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
         'Multiplexing Capture',
         'Spatial Gene Expression',
     ]
-    input_dfs['librarytype.csv'] = pd.DataFrame({'name': library_types})
+    dfs['librarytype.csv'] = pd.DataFrame({'name': library_types})
 
     people = {
         'first_name': ['ahmed', 'john', 'jane'],
@@ -194,7 +185,7 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
         'email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.doe@jax.org'],
         'orcid': ['0009-0008-3754-6150', None, None],
     }
-    input_dfs['person.csv'] = pd.DataFrame(people)
+    dfs['person.csv'] = pd.DataFrame(people)
 
     # TODO: can we use the canonical 10x names for these platforms?
     platforms = [
@@ -217,10 +208,10 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
         'Visium FFPE',
         'Visium CytAssist FFPE',
     ]
-    input_dfs['platform.csv'] = pd.DataFrame({'name': platforms})
+    dfs['platform.csv'] = pd.DataFrame({'name': platforms})
 
     # TODO: get this from 10X themselves for more recent?
-    input_dfs['tag.csv'] = pd.read_csv(
+    dfs['tag.csv'] = pd.read_csv(
         'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/tags.csv'
     ).rename(
         columns={
@@ -231,7 +222,7 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
         }
     )
 
-    for filename, df in input_dfs.items():
+    for filename, df in dfs.items():
         df.to_csv(data_dir / filename, index=False)
 
     return data_dir, {

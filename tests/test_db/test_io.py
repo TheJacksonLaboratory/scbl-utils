@@ -9,15 +9,14 @@ from scbl_utils.main import app
 
 from .db_fixtures import (
     config_dir,
-    db_path,
-    db_session,
+    memory_db_session,
     delivery_parent_dir,
     valid_data,
 )
 
 
 def test_init_db(
-    config_dir: Path, valid_data: tuple[Path, dict], db_session: sessionmaker[Session]
+    config_dir: Path, valid_data: tuple[Path, dict], memory_db_session: sessionmaker[Session]
 ):
     """
     Test that init-db correctly assigns institutions and people to labs.
@@ -28,7 +27,7 @@ def test_init_db(
     _ = runner.invoke(app, args=args)
 
     lab_relationships = valid_data[1]
-    with db_session.begin() as session:
+    with memory_db_session.begin() as session:
         stmt = select(Lab)
         labs = session.execute(stmt).scalars().all()
         
