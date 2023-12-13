@@ -68,7 +68,7 @@ def map_libs_to_fastqdirs(
     fastqdirs: Collection[Path], glob_pattern: str = LIBRARY_GLOB_PATTERN
 ) -> dict[str, str]:
     """
-    Go from a list of fastq directories to a mapping of library ID
+    Go from a `list` of fastq directories to a mapping of library ID
     to fastq directory.
 
     :param fastqdirs: list of fastq dirs

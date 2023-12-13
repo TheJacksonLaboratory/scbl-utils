@@ -1,13 +1,8 @@
 """
 This module contains some handy defaults for the `scbl-utils` package.
 """
-from itertools import zip_longest
 from pathlib import Path
 from string import ascii_letters, digits
-
-from rich.console import Console
-from rich.table import Table
-from typer import Abort
 
 # Package metadata
 DOCUMENTATION = 'https://github.com/TheJacksonLaboratory/scbl-utils/'
@@ -44,10 +39,10 @@ DB_INIT_FILES = [
     )
 ]
 
-# JSON schema for configuration file
+# JSON schema for db configuration file
 _schema_draft_version = 'https://json-schema.org/draft/2020-12/schema'
 _db_drivers = ['sqlite']
-SPEC_SCHEMA = {
+DB_SPEC_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'object',
     'properties': {
@@ -55,6 +50,35 @@ SPEC_SCHEMA = {
         'drivername': {'type': 'string', 'enum': _db_drivers},
     },
     'required': ['database', 'drivername'],
+    'additionalProperties': False,
+}
+
+# JSON schema for Google Drive configuration file
+GDRIVE_SPEC_SCHEMA = {
+    '$schema': _schema_draft_version,
+    'type': 'object',
+    'properties': {
+        'spreadsheet_url': {
+            'type': 'string',
+            'pattern': r'^https://docs.google.com/spreadsheets/d/.*$',
+        },
+        'worksheets': {
+            'type': 'array',
+            'items': {
+                'type': 'object',
+                'properties': {
+                    'id': {'type': 'string'},
+                    'db_table': {
+                        'type': 'string'
+                    },  # TODO: add enum to limit to database tables
+                    'colunns': {
+                        'type': 'object'
+                    },  # TODO: add regex that enforces values in this object are table.column notation, but specifically for the tables that exist in our db
+                },
+            },
+        },
+    },
+    'required': ['folder_id', 'service_account_file'],
     'additionalProperties': False,
 }
 

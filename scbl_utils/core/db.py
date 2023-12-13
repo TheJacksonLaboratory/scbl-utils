@@ -9,7 +9,7 @@ Functions:
     - `matching_rows_from_table`: Get rows from a table that match
     certain criteria
 """
-from typing import Any
+from typing import Any, Hashable
 
 from rich.console import Console
 from rich.table import Table
@@ -88,3 +88,11 @@ def matching_rows_from_table(
     )
 
     raise Abort()
+
+
+def multi_table_records_to_models(
+    records: list[dict[Hashable, Any]], models: list[type[DeclarativeBase]]
+):
+    """ """
+    data = []
+    pass

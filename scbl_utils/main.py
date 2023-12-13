@@ -15,21 +15,34 @@ Functions:
 from pathlib import Path
 from typing import Annotated
 
+import gspread as gs
 import typer
 
 from .core.data_io import load_data
-from .core.db import db_session, matching_rows_from_table
+from .core.db import db_session, matching_rows_from_table, multi_table_records_to_models
+from .core.gdrive import gsheet_to_compatible_records
 from .core.validation import validate_dir
 from .db_models.bases import Base
-from .db_models.data import Institution, Lab, LibraryType, Person, Platform, Tag
+from .db_models.data import (
+    Experiment,
+    Institution,
+    Lab,
+    Library,
+    LibraryType,
+    Person,
+    Platform,
+    Sample,
+    SequencingRun,
+    Tag,
+)
 from .defaults import (
     CONFIG_DIR,
     CSV_SCHEMAS,
     DB_CONFIG_FILES,
     DB_INIT_FILES,
+    DB_SPEC_SCHEMA,
     GDRIVE_CONFIG_FILES,
     SIBLING_REPOSITORY,
-    SPEC_SCHEMA,
 )
 
 app = typer.Typer()
@@ -75,7 +88,7 @@ def init_db(
     """
     db_config_dir = CONFIG_DIR / 'db'
     config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
-    spec: dict = load_data(config_files['db-spec.yml'], schema=SPEC_SCHEMA)
+    spec: dict = load_data(config_files['db-spec.yml'], schema=DB_SPEC_SCHEMA)
 
     data_files = validate_dir(data_dir, required_files=DB_INIT_FILES)
     data = {
@@ -127,26 +140,61 @@ def init_db(
             session, model=Person, filter_dicts=filter_dicts, data_filename='lab.csv'
         )
 
-        labs = [Lab(institution=institution, pi=pi, name=lab_row['name'], delivery_dir=lab_row['delivery_dir']) for institution, pi, lab_row in zip(lab_institutions, lab_pis, data['lab.csv'])]  # type: ignore
+        labs = [
+            Lab(
+                institution=institution,
+                pi=pi,
+                name=lab_row['name'],
+                delivery_dir=lab_row['delivery_dir'],
+            )
+            for institution, pi, lab_row in zip(
+                lab_institutions, lab_pis, data['lab.csv']
+            )
+        ]
         session.add_all(labs)
 
 
 @app.command()
-def generate_samplesheet():
+def sync_db_with_gdrive():
     f"""
     Generate a samplesheet to use as input to the nf-tenx
     ({SIBLING_REPOSITORY}) pipeline.
     """
     db_config_dir = CONFIG_DIR / 'db'
     db_config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
-    db_spec: dict = load_data(db_config_files['db-spec.yml'], schema=SPEC_SCHEMA)
+    db_spec: dict = load_data(db_config_files['db-spec.yml'], schema=DB_SPEC_SCHEMA)
 
     gdrive_config_dir = CONFIG_DIR / 'google-drive'
     gdrive_config_files = validate_dir(
         gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES
     )
     gdrive_spec: dict = load_data(
-        gdrive_config_files['gdrive-spec.yml'], schema=SPEC_SCHEMA
+        gdrive_config_files['gdrive-spec.yml'], schema=DB_SPEC_SCHEMA
     )
 
+    gclient = gs.service_account(filename=gdrive_config_files['service-account.json'])
+    tracking_sheet = gclient.open_by_url(gdrive_spec['spreadsheet_url'])
+
+    for worksheet in gdrive_spec['worksheets']:
+        records = gsheet_to_compatible_records(
+            tracking_sheet,
+            worksheet_id=worksheet['id'],
+            columns=worksheet['columns'],
+            head=worksheet['head'],
+        )
+        data = multi_table_records_to_models(
+            records,
+            models=[
+                Institution,
+                Lab,
+                Person,
+                Platform,
+                LibraryType,
+                Tag,
+                Library,
+                Experiment,
+                Sample,
+                SequencingRun,
+            ],
+        )
     pass
