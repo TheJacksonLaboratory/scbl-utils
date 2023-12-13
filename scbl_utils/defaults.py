@@ -32,7 +32,7 @@ DB_INIT_FILES = [
     for table_name in (
         'institution',
         'lab',
-        'librarytype',
+        'library_type',
         'person',
         'platform',
         'tag',
@@ -210,6 +210,6 @@ CSV_SCHEMAS = {
     'lab.csv': LAB_CSV_SCHEMA,
     'person.csv': PERSON_CSV_SCHEMA,
     'platform.csv': PLATFORM_CSV_SCHEMA,
-    'librarytype.csv': LIBRARY_TYPE_CSV_SCHEMA,
+    'library_type.csv': LIBRARY_TYPE_CSV_SCHEMA,
     'tag.csv': TAG_CSV_SCHEMA,
 }

@@ -9,12 +9,14 @@ Functions:
     - `matching_rows_from_table`: Get rows from a table that match
     certain criteria
 """
-from typing import Any, Hashable
+from itertools import zip_longest
+from typing import Any, Hashable, Sequence
 
+from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import URL, create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy import URL, and_, create_engine, or_, select
+from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Session, sessionmaker
 from typer import Abort
 
 
@@ -39,60 +41,67 @@ def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Sess
 
 def matching_rows_from_table(
     session: Session,
-    model,
-    filter_dicts: list[dict[str, Any]],
+    model: type[DeclarativeBase],
+    model_attribute_to_data_col: dict[str, str],
+    data: list[dict[str, Any]],
     data_filename: str,
-) -> list:
-    """Get rows from a table that match the filter dicts.
+) -> Sequence:
+    """Get rows from a table that match the specified columnds of `data`.
 
     :param session: A database session that has been begun
     :type session: `sqlalchemy.Session`
     :param model: The model class for the table
     :type model: `type[scbl_utils.db_models.bases.Base]`
-    :param filter_dicts: A list of dicts where each dict has keys that
-    are columns and values that are the values to filter by
-    :type filter_dicts: `list[dict[str, Any]]`
+    :param model_attribute_to_data_col: A mapping from model attributes
+    to the column names in the data. For example, we want to get all
+    people who match the first name and last name in a list of labs, we
+    would pass in
+    `{'first_name': 'pi_first_name', 'last_name': 'pi_last_name'}`
+    :type model_attribute_to_data_col:
+    `dict[str, str]`
+    :param data: A list of dicts representing the data to match
+    :type data: `list[dict[str, Any]]`
     :param data_filename: The name of the CSV file that the data comes
     from. Used for error reporting.
     :type data_filename: `str`
     :raises Abort: If the table contains no rows matching the filter,
-    raise
+    raise error
     :return: A list of rows from the table that match the filter dicts
     :rtype: `list`
     """
-    stmts = [select(model).filter_by(**filter_dict) for filter_dict in filter_dicts]
+    stmts = [
+        select(model).filter_by(
+            **{
+                model_att: record[col]
+                for model_att, col in model_attribute_to_data_col.items()
+            }
+        )
+        for record in data
+    ]
     found_rows = [session.execute(stmt).scalar() for stmt in stmts]
 
     missing = [
-        [str(v) for v in filter_dict.values()]
-        for filter_dict, obj in zip(filter_dicts, found_rows)
+        [str(v) for k, v in record.items() if k in model_attribute_to_data_col.values()]
+        for record, obj in zip_longest(data, found_rows)
         if obj is None
     ]
 
     if not missing:
-        return found_rows  # type: ignore
+        return found_rows
 
-    headers = filter_dicts[0].keys()
-    table = Table(*headers)
+    headers = data[0].keys()
+    error_table = Table(*headers)
 
     for values in missing:
-        table.add_row(*values)
+        error_table.add_row(*values)
 
     console = Console()
     console.print(
-        f'The table [green]{model.__tablename__.capitalize()}[/] contained no '
+        f'The table [green]{model.__tablename__}[/] contained no '
         'rows matching the table below, which was found in [orange1]'
         f'{data_filename}[/]',
-        table,
+        error_table,
         sep='\n',
     )
 
     raise Abort()
-
-
-def multi_table_records_to_models(
-    records: list[dict[Hashable, Any]], models: list[type[DeclarativeBase]]
-):
-    """ """
-    data = []
-    pass

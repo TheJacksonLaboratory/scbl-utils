@@ -19,8 +19,7 @@ import gspread as gs
 import typer
 
 from .core.data_io import load_data
-from .core.db import db_session, matching_rows_from_table, multi_table_records_to_models
-from .core.gdrive import gsheet_to_compatible_records
+from .core.db import db_session, matching_rows_from_table
 from .core.validation import validate_dir
 from .db_models.bases import Base
 from .db_models.data import (
@@ -42,6 +41,7 @@ from .defaults import (
     DB_INIT_FILES,
     DB_SPEC_SCHEMA,
     GDRIVE_CONFIG_FILES,
+    GDRIVE_SPEC_SCHEMA,
     SIBLING_REPOSITORY,
 )
 
@@ -97,12 +97,7 @@ def init_db(
     }
 
     csv_to_model = {
-        'institution.csv': Institution,
-        'lab.csv': Lab,
-        'person.csv': Person,
-        'platform.csv': Platform,
-        'librarytype.csv': LibraryType,
-        'tag.csv': Tag,
+        f'{model.__tablename__}.csv': model for model in Base.__subclasses__()
     }
 
     initial_data = {
@@ -117,27 +112,27 @@ def init_db(
             session.add_all(object_list)
 
     with Session.begin() as session:
-        filter_dicts = [
-            {'name': lab_row['institution_name']} for lab_row in data['lab.csv']
-        ]
+        institution_att_to_csv_col = {'name': 'institution_name'}
         lab_institutions = matching_rows_from_table(
             session,
-            model=Institution,
-            filter_dicts=filter_dicts,
+            Institution,
+            institution_att_to_csv_col,
+            data=data['lab.csv'],
             data_filename='lab.csv',
         )
 
-        filter_dicts = [
-            {
-                'first_name': lab_row['pi_first_name'],
-                'last_name': lab_row['pi_last_name'],
-                'email': lab_row['pi_email'],
-                'orcid': lab_row['pi_orcid'],
-            }
-            for lab_row in data['lab.csv']
-        ]
+        person_att_to_csv_col = {
+            'first_name': 'pi_first_name',
+            'last_name': 'pi_last_name',
+            'email': 'pi_email',
+            'orcid': 'pi_orcid',
+        }
         lab_pis = matching_rows_from_table(
-            session, model=Person, filter_dicts=filter_dicts, data_filename='lab.csv'
+            session,
+            Person,
+            person_att_to_csv_col,
+            data=data['lab.csv'],
+            data_filename='lab.csv',
         )
 
         labs = [
@@ -154,47 +149,50 @@ def init_db(
         session.add_all(labs)
 
 
-@app.command()
-def sync_db_with_gdrive():
-    f"""
-    Generate a samplesheet to use as input to the nf-tenx
-    ({SIBLING_REPOSITORY}) pipeline.
-    """
-    db_config_dir = CONFIG_DIR / 'db'
-    db_config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
-    db_spec: dict = load_data(db_config_files['db-spec.yml'], schema=DB_SPEC_SCHEMA)
+# @app.command()
+# def sync_db_with_gdrive():
+#     f"""
+#     Generate a samplesheet to use as input to the nf-tenx
+#     ({SIBLING_REPOSITORY}) pipeline.
+#     """
+#     db_config_dir = CONFIG_DIR / 'db'
+#     db_config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
+#     db_spec: dict = load_data(db_config_files['db-spec.yml'], schema=DB_SPEC_SCHEMA)
 
-    gdrive_config_dir = CONFIG_DIR / 'google-drive'
-    gdrive_config_files = validate_dir(
-        gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES
-    )
-    gdrive_spec: dict = load_data(
-        gdrive_config_files['gdrive-spec.yml'], schema=DB_SPEC_SCHEMA
-    )
+#     gdrive_config_dir = CONFIG_DIR / 'google-drive'
+#     gdrive_config_files = validate_dir(
+#         gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES
+#     )
+#     gdrive_spec: dict = load_data(
+#         gdrive_config_files['gdrive-spec.yml'], schema=GDRIVE_SPEC_SCHEMA
+#     )
 
-    gclient = gs.service_account(filename=gdrive_config_files['service-account.json'])
-    tracking_sheet = gclient.open_by_url(gdrive_spec['spreadsheet_url'])
 
-    for worksheet in gdrive_spec['worksheets']:
-        records = gsheet_to_compatible_records(
-            tracking_sheet,
-            worksheet_id=worksheet['id'],
-            columns=worksheet['columns'],
-            head=worksheet['head'],
-        )
-        data = multi_table_records_to_models(
-            records,
-            models=[
-                Institution,
-                Lab,
-                Person,
-                Platform,
-                LibraryType,
-                Tag,
-                Library,
-                Experiment,
-                Sample,
-                SequencingRun,
-            ],
-        )
-    pass
+#     gclient = gs.service_account(filename=gdrive_config_files['service-account.json'])
+#     tracking_sheet = gclient.open_by_url(gdrive_spec['spreadsheet_url'])
+
+#     tracking_sheet
+#     for worksheet in gdrive_spec['worksheets']:
+#         records = somefunc(
+#             tracking_sheet,
+#             worksheet_id=worksheet['id'],
+#             columns=worksheet['columns'],
+#             head=worksheet['head'],
+#         )
+#         data = multi_table_records_to_models(
+#             records,
+#             models=[
+#                 Institution,
+#                 Lab,
+#                 Person,
+#                 Platform,
+#                 LibraryType,
+#                 Tag,
+#                 Library,
+#                 Experiment,
+#                 Sample,
+#                 SequencingRun,
+#             ],
+#         )
+
+#     pass

@@ -297,9 +297,7 @@ class Person(Base):
 
         if not response.ok:
             rprint(
-                invalid_message
-                + f'{invalid_message} because it was not found with database '
-                f'search of {base_url}.'
+                f'{invalid_message} because it was not found with database search of {base_url}'
             )
             raise Abort()
 
