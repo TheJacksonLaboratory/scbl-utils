@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from pytest import MonkeyPatch, fixture
@@ -64,12 +65,12 @@ def config_dir(tmp_path: Path) -> Path:
 
 
 @fixture
-def full_db(delivery_parent_dir: Path) -> dict:
+def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
     """
     Create valid, interlinked objects for each table in the database.
     Useful for testing models that depend on other models, so you have
     the necessary models made without having to make them in the test
-    itself.
+    itself. Note that these models are not added to a database.
     """
     # Definition models
     platform = Platform(name='platform')

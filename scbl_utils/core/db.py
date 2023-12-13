@@ -64,7 +64,7 @@ def matching_rows_from_table(
     found_rows = [session.execute(stmt).scalar() for stmt in stmts]
 
     missing = [
-        filter_dict.values()
+        [str(v) for v in filter_dict.values()]
         for filter_dict, obj in zip(filter_dicts, found_rows)
         if obj is None
     ]

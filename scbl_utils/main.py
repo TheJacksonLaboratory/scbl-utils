@@ -65,8 +65,7 @@ def init_db(
         typer.Argument(
             help='Path to a directory containing the data necessary to '
             'initialize the database. This directory must contain the '
-            'following files:\n'
-            + '\n'.join(path.name for path in DB_INIT_FILES.values())
+            'following files:\n' + '\n'.join(path.name for path in DB_INIT_FILES)
         ),
     ],
 ):
@@ -78,7 +77,7 @@ def init_db(
     config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
     spec: dict = load_data(config_files['db-spec.yml'], schema=SPEC_SCHEMA)
 
-    data_files = validate_dir(data_dir, required_files=DB_INIT_FILES.values())
+    data_files = validate_dir(data_dir, required_files=DB_INIT_FILES)
     data = {
         filename: load_data(path, schema=CSV_SCHEMAS[filename])
         for filename, path in data_files.items()

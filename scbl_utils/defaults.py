@@ -32,8 +32,8 @@ GDRIVE_CONFIG_FILES = [
 ]
 
 # CSV files necessary for database initialization
-DB_INIT_FILES = {
-    f'{table_name}.csv': Path(f'{table_name}.csv')
+DB_INIT_FILES = [
+    Path(f'{table_name}.csv')
     for table_name in (
         'institution',
         'lab',
@@ -42,7 +42,7 @@ DB_INIT_FILES = {
         'platform',
         'tag',
     )
-}
+]
 
 # JSON schema for configuration file
 _schema_draft_version = 'https://json-schema.org/draft/2020-12/schema'
@@ -189,19 +189,3 @@ CSV_SCHEMAS = {
     'librarytype.csv': LIBRARY_TYPE_CSV_SCHEMA,
     'tag.csv': TAG_CSV_SCHEMA,
 }
-
-if DB_INIT_FILES.keys() != CSV_SCHEMAS.keys():
-    mismatch_table = Table('CSV Schemas', 'Database Initialization Files')
-    for row in zip_longest(CSV_SCHEMAS.keys(), DB_INIT_FILES.keys(), fillvalue=''):
-        mismatch_table.add_row(*row)
-
-    console = Console()
-    console.print(
-        'The CSV schemas ([green]CSV_SCHEMAS[/]) and the required database '
-        'initialization files ([green]DB_INIT_FILES[/]) must have the same '
-        f'keys. All are defined in {__file__}.',
-        mismatch_table,
-        sep='\n',
-    )
-
-    raise Abort()

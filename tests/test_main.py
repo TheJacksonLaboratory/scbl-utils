@@ -7,7 +7,12 @@ from typer.testing import CliRunner
 from scbl_utils.db_models.data import Lab
 from scbl_utils.main import app
 
-from .db_fixtures import config_dir, delivery_parent_dir, memory_db_session, valid_data
+from .fixtures.db_fixtures import (
+    config_dir,
+    delivery_parent_dir,
+    memory_db_session,
+    valid_data,
+)
 
 
 def test_init_db(

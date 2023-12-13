@@ -8,7 +8,11 @@ from typer import Abort
 
 from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project, Sample
 
-from ..db_fixtures import delivery_parent_dir, full_db, memory_db_session
+from ..fixtures.db_fixtures import (
+    complete_db_objects,
+    delivery_parent_dir,
+    memory_db_session,
+)
 
 
 class TestInstitutionModel:
@@ -91,14 +95,14 @@ class TestLabModel:
     Tests for the `Lab` model.
     """
 
-    def test_auto_setting(self, full_db: dict, delivery_parent_dir: Path):
+    def test_auto_setting(self, complete_db_objects: dict, delivery_parent_dir: Path):
         """
         Test that the `Lab` model correctly sets the `delivery_dir` and
         `name` attributes when given the minimum required information.
         """
         # Get the two necessary objects for a Lab
-        institution: Institution = full_db['institution']
-        pi: Person = full_db['person']
+        institution: Institution = complete_db_objects['institution']
+        pi: Person = complete_db_objects['person']
 
         # Define the expected lab and create the Lab object. Note that
         # the group is hardcoded to 'test_group' because of the fixture
@@ -122,12 +126,12 @@ class TestProjectModel:
     Tests for the `Project` model.
     """
 
-    def test_invalid_project_id(self, full_db: dict):
+    def test_invalid_project_id(self, complete_db_objects: dict):
         """
         Test that the `Project` model raises error with invalid project ID.
         """
         with pytest.raises(Abort):
-            Project(id='fake-id', lab=full_db['lab'])
+            Project(id='fake-id', lab=complete_db_objects['lab'])
 
 
 class TestPersonModel:
@@ -180,13 +184,15 @@ class TestSampleModel:
     Tests for the `Sample` model.
     """
 
-    def test_sample_name(self, full_db: dict, memory_db_session: sessionmaker[Session]):
+    def test_sample_name(
+        self, complete_db_objects: dict, memory_db_session: sessionmaker[Session]
+    ):
         """
         Test that the `Sample` model correctly cleans the sample name.
         """
 
         # Get the necessary object for a sample
-        experiment = full_db['experiment']
+        experiment = complete_db_objects['experiment']
 
         illegal_punctuation = punctuation.replace('_', '').replace('-', '')
         sample_name = f'{illegal_punctuation}some{whitespace}name{illegal_punctuation}'
@@ -219,24 +225,24 @@ class TestLibraryModel:
         argvalues=[(f'{whitespace}sc9900000{whitespace}', 'SC9900000')],
     )
     def test_valid_library_id(
-        self, full_db: dict, library_id: str, expected_library_id: str
+        self, complete_db_objects: dict, library_id: str, expected_library_id: str
     ):
         """
         Test that the `Library` model cleans the library ID.
         """
-        experiment = full_db['experiment']
-        library_type = full_db['library_type']
+        experiment = complete_db_objects['experiment']
+        library_type = complete_db_objects['library_type']
         library = Library(
             id=library_id, experiment=experiment, library_type=library_type
         )
         assert library.id == expected_library_id
 
-    def test_invalid_library_id(self, full_db: dict):
+    def test_invalid_library_id(self, complete_db_objects: dict):
         """
         Test that the `Library` model raises error with invalid library ID.
         """
-        experiment = full_db['experiment']
-        library_type = full_db['library_type']
+        experiment = complete_db_objects['experiment']
+        library_type = complete_db_objects['library_type']
         with pytest.raises(Abort):
-            experiment = full_db['experiment']
+            experiment = complete_db_objects['experiment']
             Library(id='fake-id', experiment=experiment, library_type=library_type)
