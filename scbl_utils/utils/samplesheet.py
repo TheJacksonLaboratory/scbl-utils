@@ -269,7 +269,7 @@ def get_design(
             tag: {'name': name, 'description': description}
             for tag, name, description in lib_multiplexing_info[
                 ['tag_id', 'sub_sample_name', 'description']
-            ]
+            ].itertuples(index=False)
         }
 
     elif isinstance(lib_multiplexing_info, pd.Series):
