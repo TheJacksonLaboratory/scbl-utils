@@ -151,7 +151,7 @@ AGG_FUNCS = {
     'sample_name': 'first',
     'date_submitted': 'first',
     'pi': 'first',
-    'submitter_email': 'first',
+    'submitter_name': 'first',
     'libraries': tuple,
     'library_types': tuple,
     '10x_platform': tuple,

@@ -123,7 +123,7 @@ def genomes_from_user(
         # Ask the user which genome they want and construct the full
         # ref path, appending to output
         genome = Prompt.ask(
-            f'Choose a genome in [bold green]{ref_dir.absolute()}[/] for [bold orange1]{sample_name} ({libraries})[/] ->',
+            f'Choose a genome in [bold green]{ref_dir.absolute()}[/] for [bold orange1]{sample_name} {libraries}[/] ->',
             choices=genome_choices,
         )
         full_ref_path = str((ref_dir / genome).absolute())
