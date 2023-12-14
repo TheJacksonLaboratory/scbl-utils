@@ -18,76 +18,94 @@ class TestMatchingRowsFromTable:
     Tests for the `matching_rows_from_table` function.
     """
 
-    # TODO: these have to be rewritten for new function signature
+    def test_matching_rows_from_table(
+        self,
+        memory_db_session: sessionmaker[Session],
+        complete_db_objects: dict[str, Base],
+    ):
+        """
+        Test that `matching_rows_from_table` returns the correct rows.
+        """
+        # Add all the objects to the database
+        with memory_db_session.begin() as session:
+            session.add_all(complete_db_objects.values())
 
-    # def test_matching_rows_from_table(
-    #     self,
-    #     memory_db_session: sessionmaker[Session],
-    #     complete_db_objects: dict[str, Base],
-    # ):
-    #     """
-    #     Test that `matching_rows_from_table` returns the correct rows.
-    #     """
-    #     with memory_db_session.begin() as session:
-    #         session.add_all(complete_db_objects.values())
+        # Iterate over each model instance and get a row from the table
+        # then, feed that into matching_rows_from_table
+        for model_instance in complete_db_objects.values():
+            with memory_db_session.begin() as session:
+                # Get the only row from this table
+                stmt = select(type(model_instance))
+                stored_obj: Base = session.execute(stmt).scalar()
 
-    #     # Iterate over each model instance and get a row from the table
-    #     # then, feed that into matching_rows_from_table
-    #     for model_instance in complete_db_objects.values():
-    #         with memory_db_session.begin() as session:
-    #             # Get the one row from this table
-    #             stmt = select(type(model_instance))
-    #             data_in_db = session.execute(stmt).scalar()
+                # Construct a dict from this object
+                stored_obj_dict = {
+                    key: value
+                    for key, value in vars(stored_obj).items()
+                    if not key.startswith('_') and not isinstance(value, Base)
+                }
 
-    #             # Construct the filter_dict from this row and get the
-    #             # row using it
-    #             filter_dict = {
-    #                 key: value
-    #                 for key, value in vars(data_in_db).items()
-    #                 if not key.startswith('_') and not isinstance(value, Base)
-    #             }
-    #             found_rows = matching_rows_from_table(
-    #                 session,
-    #                 model=type(data_in_db),
-    #                 filter_dicts=filter_dict,
-    #                 data=,
-    #                 data_filename='test.csv',
-    #             )
+                # Create a dict that maps the model attributes to
+                # themselves, as the keys in the above dictionary are
+                # the model attributes
+                att_to_data_col = {col: col for col in stored_obj_dict}
 
-    #             assert found_rows == [data_in_db]
+                found_rows = matching_rows_from_table(
+                    session,
+                    model=type(stored_obj),
+                    model_attribute_to_data_col=att_to_data_col,
+                    data=[stored_obj_dict],
+                    data_filename='test.csv',
+                )
 
-    # def test_non_matching_rows_from_table(
-    #     self,
-    #     memory_db_session: sessionmaker[Session],
-    #     complete_db_objects: dict[str, Base],
-    # ):
-    #     """
-    #     Test that `matching_rows_from_table` raises an error if there
-    #     are no matching rows.
-    #     """
-    #     with memory_db_session.begin() as session:
-    #         session.add_all(complete_db_objects.values())
+                assert found_rows == [stored_obj]
 
-    #     for model_instance in complete_db_objects.values():
-    #         with memory_db_session.begin() as session:
-    #             # Get the one row from this table
-    #             stmt = select(type(model_instance))
-    #             data_in_db = session.execute(stmt).scalar()
+                # Modify one of the values to make it incorrect
+                key = list(stored_obj_dict.keys())[0]
+                stored_obj_dict[key] = 'wrong_value'
 
-    #             # Construct the filter_dict, changing a value to make it
-    #             # fail
-    #             filter_dict = {
-    #                 key: value
-    #                 for key, value in vars(data_in_db).items()
-    #                 if not key.startswith('_') and not isinstance(value, Base)
-    #             }
-    #             key = list(filter_dict.keys())[0]
-    #             filter_dict[key] = 'wrong_value'
+    def test_non_matching_rows_from_table(
+        self,
+        memory_db_session: sessionmaker[Session],
+        complete_db_objects: dict[str, Base],
+    ):
+        """
+        Test that `matching_rows_from_table` raises an error if there
+        are no matching rows.
+        """
+        # Add all the objects to the database
+        with memory_db_session.begin() as session:
+            session.add_all(complete_db_objects.values())
 
-    #             with pytest.raises(Abort):
-    #                 matching_rows_from_table(
-    #                     session,
-    #                     model=type(data_in_db),
-    #                     filter_dicts=[filter_dict],
-    #                     data_filename='test.csv',
-    #                 )
+        # Iterate over each model instance and get a row from the table
+        # then, feed that into matching_rows_from_table
+        for model_instance in complete_db_objects.values():
+            with memory_db_session.begin() as session:
+                # Get the only row from this table
+                stmt = select(type(model_instance))
+                stored_obj: Base = session.execute(stmt).scalar()
+
+                # Construct a dict from this object
+                stored_obj_dict = {
+                    key: value
+                    for key, value in vars(stored_obj).items()
+                    if not key.startswith('_') and not isinstance(value, Base)
+                }
+
+                # Modify one of the values to make it incorrect
+                key = list(stored_obj_dict.keys())[0]
+                stored_obj_dict[key] = 'wrong_value'
+
+                # Create a dict that maps the model attributes to
+                # themselves, as the keys in the above dictionary are
+                # the model attributes
+                att_to_data_col = {col: col for col in stored_obj_dict}
+
+                with pytest.raises(Abort):
+                    matching_rows_from_table(
+                        session,
+                        model=type(stored_obj),
+                        model_attribute_to_data_col=att_to_data_col,
+                        data=[stored_obj_dict],
+                        data_filename='test.csv',
+                    )
