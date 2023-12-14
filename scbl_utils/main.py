@@ -130,7 +130,7 @@ def samplesheet_from_gdrive(
         samplesheet_df[new_col] = samplesheet_df[old_col].map(mapping)
 
     # Group by sample_name and aggregate
-    grouped_samplesheet_df = samplesheet_df.groupby(['date_submitted', 'pi', 'sample_name', 'submitter'], as_index=False).agg(
+    grouped_samplesheet_df = samplesheet_df.groupby(['date_submitted', 'pi', 'sample_name', 'submitter_name'], as_index=False).agg(
         AGG_FUNCS
     )
 

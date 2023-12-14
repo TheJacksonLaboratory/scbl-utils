@@ -133,9 +133,9 @@ def get_project_params(
 
     # Get credentials, project, tool, and reference dirs
     creds = gclient.auth
-    sample_name, project, tool, reference_dirs, species = (
+    libraries, sample_name, project, tool, reference_dirs, species = (
         df_row[col]
-        for col in ('sample_name', 'project', 'tool', 'reference_dirs', 'species')
+        for col in ('libraries', 'sample_name', 'project', 'tool', 'reference_dirs', 'species')
     )
 
     # Build service
@@ -224,6 +224,7 @@ def get_project_params(
         message=message,
         reference_dirs=reference_dirs,
         sample_name=sample_name,
+        libraries=libraries
     )
 
     return params
