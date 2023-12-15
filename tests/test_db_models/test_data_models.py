@@ -238,7 +238,7 @@ class TestDataSetModel:
             submitter=new_person,
         )
 
-        assert data_set_0.batch_id != data_set_3.batch_id != data_set_2.batch_id
+        assert data_set_0.batch_id != data_set_2.batch_id != data_set_3.batch_id
 
     pass
 

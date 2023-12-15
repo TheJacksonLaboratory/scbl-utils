@@ -323,7 +323,7 @@ class DataSet(Base):
 
     # TODO: there should be another column for the date that work was begun on the dataset (?)
     date_submitted: Mapped[date] = mapped_column(default_factory=date.today)
-    batch_id: Mapped[int] = mapped_column(init=False)
+    batch_id: Mapped[int] = mapped_column(init=False, default=None)
 
     samples: Mapped[list['Sample']] = relationship(
         back_populates='data_set', default_factory=list
@@ -335,8 +335,25 @@ class DataSet(Base):
     @validates('batch_id')
     def set_batch_id(self, key: str, batch_id: None) -> int:
         # If it's decided that more things constitute a batch, this will
-        # be easy to update
-        to_hash = self.date_submitted.isoformat() + str(self.submitter_id)
+        # be easy to update.
+
+        # Note that submitter name and email have been picked instead of
+        # the person ID because a person is not assigned an ID until
+        # they enter the database.
+
+        # Note also that two people with the same name might submit on
+        # the same day, so their emails have been included in the hash
+        # as well.
+
+        # However, not everyone has an email because the field is not
+        # required because it might be unreasonable to expect a wet-lab
+        # person to track down an obscure email before being able to
+        # enter a person into the database.
+
+        # Therefore, we are relying on the low probability that two
+        # email-less people with the same name will submit samples on
+        # the same day.
+        to_hash = (self.date_submitted, self.submitter.name, self.submitter.email)
         return hash(to_hash)
 
 
