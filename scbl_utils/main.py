@@ -23,7 +23,7 @@ from .core.db import db_session, matching_rows_from_table
 from .core.validation import validate_dir
 from .db_models.bases import Base
 from .db_models.data import (
-    Experiment,
+    DataSet,
     Institution,
     Lab,
     Library,

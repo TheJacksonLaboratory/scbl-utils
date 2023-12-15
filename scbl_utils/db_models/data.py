@@ -11,16 +11,16 @@ Classes:
     - `Lab`: Lab at an `Institution`. Can be a PI's lab, or a
     consortium/project headed by a PI.
     
-    - `Project`: SCBL project, used to group `Experiment`s. Not to be
+    - `Project`: SCBL project, used to group `data_set`s. Not to be
     confused with a consortium/project headed by a PI.
     
     - `Person`: A person, who can be on multiple `Project`s.
     
-    - `Experiment`: Experiment in a `Project`. This table essentially
+    - `data_set`: data_set in a `Project`. This table essentially
     handles the complex mappings between `Sample`s, `Library`s, and
     `Project`s.
     
-    - `Sample`: Biological sample in an `Experiment`. Can be associated
+    - `Sample`: Biological sample in an `data_set`. Can be associated
     with multiple `Library`s, or multiple `Library`s can be associated
     with it.
     
@@ -31,6 +31,7 @@ Classes:
 """
 # TODO: submit entries to ROR for JAX?
 # TODO Write docstrings and comments for all classes and methods
+from datetime import date
 from os import getenv
 from pathlib import Path
 from re import match
@@ -211,7 +212,7 @@ class Project(Base):
     lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False)
 
     lab: Mapped[Lab] = relationship(back_populates='projects')
-    experiments: Mapped[list['Experiment']] = relationship(
+    data_sets: Mapped[list['DataSet']] = relationship(
         back_populates='project', default_factory=list
     )
     people: Mapped[list['Person']] = relationship(
@@ -304,25 +305,39 @@ class Person(Base):
         return formatted_orcid
 
 
-class Experiment(Base):
-    __tablename__ = 'experiment'
+class DataSet(Base):
+    __tablename__ = 'data_set'
 
     id: Mapped[int_pk] = mapped_column(init=False)
     name: Mapped[samplesheet_str]
+    ilab_request_id: Mapped[stripped_str]  # TODO: ilab validation
 
     project_id: Mapped[str] = mapped_column(ForeignKey('project.id'), init=False)
     platform_id: Mapped[int] = mapped_column(ForeignKey('platform.id'), init=False)
+    submitter_id: Mapped[int] = mapped_column(ForeignKey('person.id'), init=False)
     # TODO: add actual data (species n stuff)
 
     platform: Mapped[Platform] = relationship()
-    project: Mapped[Project] = relationship(back_populates='experiments')
+    project: Mapped[Project] = relationship(back_populates='data_sets')
+    submitter: Mapped[Person] = relationship()
+
+    # TODO: there should be another column for the date that work was begun on the dataset (?)
+    date_submitted: Mapped[date] = mapped_column(default_factory=date.today)
+    batch_id: Mapped[int] = mapped_column(init=False)
 
     samples: Mapped[list['Sample']] = relationship(
-        back_populates='experiment', default_factory=list
+        back_populates='data_set', default_factory=list
     )
     libraries: Mapped[list['Library']] = relationship(
-        back_populates='experiment', default_factory=list
+        back_populates='data_set', default_factory=list
     )
+
+    @validates('batch_id')
+    def set_batch_id(self, key: str, batch_id: None) -> int:
+        # If it's decided that more things constitute a batch, this will
+        # be easy to update
+        to_hash = self.date_submitted.isoformat() + str(self.submitter_id)
+        return hash(to_hash)
 
 
 class Sample(Base):
@@ -331,13 +346,13 @@ class Sample(Base):
     id: Mapped[int_pk] = mapped_column(init=False)
     name: Mapped[samplesheet_str]
 
-    experiment_id: Mapped[int] = mapped_column(ForeignKey('experiment.id'), init=False)
+    data_set_id: Mapped[int] = mapped_column(ForeignKey('data_set.id'), init=False)
     tag_id: Mapped[str | None] = mapped_column(
         ForeignKey('tag.id'), init=False, insert_default=null()
     )
     # TODO: add actual data
 
-    experiment: Mapped[Experiment] = relationship(back_populates='samples')
+    data_set: Mapped[DataSet] = relationship(back_populates='samples')
     tag: Mapped[Tag] = relationship(default=None)
 
 
@@ -354,7 +369,7 @@ class Library(Base):
     __tablename__ = 'library'
 
     id: Mapped[samplesheet_str_pk]
-    experiment_id: Mapped[int] = mapped_column(ForeignKey('experiment.id'), init=False)
+    data_set_id: Mapped[int] = mapped_column(ForeignKey('data_set.id'), init=False)
     library_type_id: Mapped[int] = mapped_column(
         ForeignKey('library_type.id'), init=False
     )
@@ -363,7 +378,7 @@ class Library(Base):
     )
     # TODO: add actual data
 
-    experiment: Mapped[Experiment] = relationship(back_populates='libraries')
+    data_set: Mapped[DataSet] = relationship(back_populates='libraries')
     library_type: Mapped[LibraryType] = relationship()
     sequencing_run: Mapped[SequencingRun] = relationship(
         back_populates='libraries', default=None

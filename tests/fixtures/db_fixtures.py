@@ -9,7 +9,7 @@ from yaml import dump as dump_yml
 from scbl_utils.core.db import db_session
 from scbl_utils.db_models.bases import Base
 from scbl_utils.db_models.data import (
-    Experiment,
+    DataSet,
     Institution,
     Lab,
     Library,
@@ -103,9 +103,15 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
     lab = Lab(institution=institution, pi=person)
     project = Project(id='SCP99-000', lab=lab, people=[person])
     platform = Platform(name='platform')
-    experiment = Experiment(name='experiment', project=project, platform=platform)
-    sample = Sample(name='sample', experiment=experiment, tag=tag)
-    library = Library(id='SC9900000', experiment=experiment, library_type=library_type)
+    data_set = DataSet(
+        name='data_set',
+        project=project,
+        platform=platform,
+        ilab_request_id='ilab_request_id',
+        submitter=person,
+    )
+    sample = Sample(name='sample', data_set=data_set, tag=tag)
+    library = Library(id='SC9900000', data_set=data_set, library_type=library_type)
     sequencing_run = SequencingRun(id='99-scbct-000', libraries=[library])
 
     return {
@@ -116,7 +122,7 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
         'person': person,
         'lab': lab,
         'project': project,
-        'experiment': experiment,
+        'data_set': data_set,
         'sample': sample,
         'library': library,
         'sequencing_run': sequencing_run,

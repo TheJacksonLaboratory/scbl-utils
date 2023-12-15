@@ -4,14 +4,23 @@ This module contains functions related to Google Drive that are used in
 
 Functions:
 """
-# from pathlib import Path
-# from pydantic import model_validator, field_validator
-# from pydantic.dataclasses import dataclass
-# from typing import Any, Hashable, Literal
+from pathlib import Path
+from typing import Any, Hashable, Literal
 
-# import gspread as gs
-# import pandas as pd
-# from ..db_models.bases import Base
+import gspread as gs
+import pandas as pd
+from pydantic import field_validator, model_validator
+from pydantic.dataclasses import dataclass
+
+from ..db_models.bases import Base
+
+
+@dataclass
+class Sheet:
+    worksheet: gs.Worksheet
+    db_table: type[Base]
+    index_col: str
+    col_renamer: dict[str, str]
 
 
 # TODO: should there be validation in this class? There is validation in

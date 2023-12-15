@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from pathlib import Path
 from string import punctuation, whitespace
 
@@ -6,7 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from typer import Abort
 
-from scbl_utils.db_models.data import Institution, Lab, Library, Person, Project, Sample
+from scbl_utils.db_models.data import (
+    DataSet,
+    Institution,
+    Lab,
+    Library,
+    Person,
+    Project,
+    Sample,
+)
 
 from ..fixtures.db_fixtures import (
     complete_db_objects,
@@ -171,10 +180,65 @@ class TestPersonModel:
             Person(first_name='Ahmed', last_name='Said', orcid=orcid)
 
 
-class TestExperimentModel:
+class TestDataSetModel:
     """
-    Tests for the `Experiment` model.
+    Tests for the `data_set` model.
     """
+
+    def test_batch_id(self, complete_db_objects: dict):
+        """
+        Test that two `DataSet`s with the same date submitted and the
+        same sample submitter have the same batch ID.
+        """
+        # Get the necessary objects for a DataSet
+        project = complete_db_objects['project']
+        platform = complete_db_objects['platform']
+        submitter = complete_db_objects['person']
+
+        # Create two DataSets with the same date submitted and the same
+        # sample submitter. Also test that the date_submitted is
+        # automatically set to today's date.
+        data_set_0 = DataSet(
+            name='data_set_0',
+            date_submitted=date.today(),
+            project=project,
+            platform=platform,
+            ilab_request_id='ilab_request_id',
+            submitter=submitter,
+        )
+        data_set_1 = DataSet(
+            name='data_set_1',
+            project=project,
+            platform=platform,
+            ilab_request_id='ilab_request_id',
+            submitter=submitter,
+        )
+
+        assert data_set_0.batch_id == data_set_1.batch_id
+
+        # Also create a DataSet with a different date submitted
+        data_set_2 = DataSet(
+            name='data_set_2',
+            date_submitted=date.today() - timedelta(days=1),
+            project=project,
+            platform=platform,
+            ilab_request_id='ilab_request_id',
+            submitter=submitter,
+        )
+
+        assert data_set_0.batch_id != data_set_2.batch_id
+
+        # Also create a DataSet with a different sample submitter
+        new_person = Person(first_name='new', last_name='person')
+        data_set_3 = DataSet(
+            name='data_set_3',
+            project=project,
+            platform=platform,
+            ilab_request_id='ilab_request_id',
+            submitter=new_person,
+        )
+
+        assert data_set_0.batch_id != data_set_3.batch_id != data_set_2.batch_id
 
     pass
 
@@ -192,18 +256,22 @@ class TestSampleModel:
         """
 
         # Get the necessary object for a sample
-        experiment = complete_db_objects['experiment']
+        data_set = complete_db_objects['data_set']
 
         illegal_punctuation = punctuation.replace('_', '').replace('-', '')
         sample_name = f'{illegal_punctuation}some{whitespace}name{illegal_punctuation}'
-        sample = Sample(sample_name, experiment=experiment)
+        sample = Sample(sample_name, data_set=data_set)
 
         with memory_db_session.begin() as session:
             session.add(sample)
 
         with memory_db_session.begin() as session:
             stmt = select(Sample)
-            processed_sample: Sample = session.execute(stmt).scalar()
+            processed_sample = session.execute(stmt).scalar()
+
+            if processed_sample is None:
+                pytest.fail('No rows found in table Sample')
+
             assert processed_sample.name == 'some-name'
 
 
@@ -230,19 +298,17 @@ class TestLibraryModel:
         """
         Test that the `Library` model cleans the library ID.
         """
-        experiment = complete_db_objects['experiment']
+        data_set = complete_db_objects['data_set']
         library_type = complete_db_objects['library_type']
-        library = Library(
-            id=library_id, experiment=experiment, library_type=library_type
-        )
+        library = Library(id=library_id, data_set=data_set, library_type=library_type)
         assert library.id == expected_library_id
 
     def test_invalid_library_id(self, complete_db_objects: dict):
         """
         Test that the `Library` model raises error with invalid library ID.
         """
-        experiment = complete_db_objects['experiment']
+        data_set = complete_db_objects['data_set']
         library_type = complete_db_objects['library_type']
         with pytest.raises(Abort):
-            experiment = complete_db_objects['experiment']
-            Library(id='fake-id', experiment=experiment, library_type=library_type)
+            data_set = complete_db_objects['data_set']
+            Library(id='fake-id', data_set=data_set, library_type=library_type)

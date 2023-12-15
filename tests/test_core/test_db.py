@@ -36,7 +36,13 @@ class TestMatchingRowsFromTable:
             with memory_db_session.begin() as session:
                 # Get the only row from this table
                 stmt = select(type(model_instance))
-                stored_obj: Base = session.execute(stmt).scalar()
+                stored_obj = session.execute(stmt).scalar()
+
+                # This is mainly here for type-checking
+                if stored_obj is None:
+                    pytest.fail(
+                        f'No rows found in table {model_instance.__tablename__}'
+                    )
 
                 # Construct a dict from this object
                 stored_obj_dict = {
@@ -63,43 +69,6 @@ class TestMatchingRowsFromTable:
                 # Modify one of the values to make it incorrect
                 key = list(stored_obj_dict.keys())[0]
                 stored_obj_dict[key] = 'wrong_value'
-
-    def test_non_matching_rows_from_table(
-        self,
-        memory_db_session: sessionmaker[Session],
-        complete_db_objects: dict[str, Base],
-    ):
-        """
-        Test that `matching_rows_from_table` raises an error if there
-        are no matching rows.
-        """
-        # Add all the objects to the database
-        with memory_db_session.begin() as session:
-            session.add_all(complete_db_objects.values())
-
-        # Iterate over each model instance and get a row from the table
-        # then, feed that into matching_rows_from_table
-        for model_instance in complete_db_objects.values():
-            with memory_db_session.begin() as session:
-                # Get the only row from this table
-                stmt = select(type(model_instance))
-                stored_obj: Base = session.execute(stmt).scalar()
-
-                # Construct a dict from this object
-                stored_obj_dict = {
-                    key: value
-                    for key, value in vars(stored_obj).items()
-                    if not key.startswith('_') and not isinstance(value, Base)
-                }
-
-                # Modify one of the values to make it incorrect
-                key = list(stored_obj_dict.keys())[0]
-                stored_obj_dict[key] = 'wrong_value'
-
-                # Create a dict that maps the model attributes to
-                # themselves, as the keys in the above dictionary are
-                # the model attributes
-                att_to_data_col = {col: col for col in stored_obj_dict}
 
                 with pytest.raises(Abort):
                     matching_rows_from_table(
