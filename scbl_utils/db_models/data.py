@@ -16,7 +16,7 @@ Classes:
     
     - `Person`: A person, who can be on multiple `Project`s.
     
-    - `data_set`: data_set in a `Project`. This table essentially
+    - `DataSet`: data_set in a `Project`. This table essentially
     handles the complex mappings between `Sample`s, `Library`s, and
     `Project`s.
     
@@ -30,7 +30,6 @@ Classes:
     - `Library`: A cDNA library, the ultimate item that is sequenced.
 """
 # TODO: submit entries to ROR for JAX?
-# TODO Write docstrings and comments for all classes and methods
 from datetime import date
 from os import getenv
 from pathlib import Path
@@ -237,7 +236,7 @@ class Project(Base):
 class Person(Base):
     __tablename__ = 'person'
 
-    id: Mapped[int_pk] = mapped_column(init=False)  # TODO: will this become orcid ID?
+    id: Mapped[int_pk] = mapped_column(init=False)
     first_name: Mapped[stripped_str] = mapped_column(
         repr=False
     )  # TODO: maybe these can just be retrieved from orcid

@@ -7,11 +7,6 @@ Functions:
     - init_db: Initialize the database with institutions and labs
 """
 # TODO: write comments for init-db
-
-# TODO: write tests that ensure defaults are correct - in particular,
-# check that csv_schemas and db_init_files contain the same keys. same
-# for init-db.csv_to_model. that way, these tests are not run when the
-# package is run
 from pathlib import Path
 from typing import Annotated
 
