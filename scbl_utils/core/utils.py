@@ -15,7 +15,21 @@ from typing import Any
 
 from numpy import nan
 from pandas import read_csv
+from rich.prompt import Prompt
+from sqlalchemy.orm import InstrumentedAttribute
 from yaml import Dumper, SequenceNode
+
+
+def _get_user_input(
+    prompt: str, none_allowed: bool = False, default: str | None = None
+) -> str | None:
+    if none_allowed:
+        return Prompt.ask(prompt, default=default)
+
+    while True:
+        result = Prompt.ask(prompt)
+        if result is not None:
+            return result
 
 
 # TODO: eventually remove dependency on pandas for performance?

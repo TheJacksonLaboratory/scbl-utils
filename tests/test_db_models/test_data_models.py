@@ -2,7 +2,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from string import punctuation, whitespace
 
-import pytest
+from pytest import exit as test_exit
+from pytest import mark, raises
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from typer import Abort
@@ -19,8 +20,9 @@ from scbl_utils.db_models.data import (
 
 from ..fixtures.db_fixtures import (
     complete_db_objects,
+    db_path,
     delivery_parent_dir,
-    memory_db_session,
+    test_db_session,
 )
 
 
@@ -63,14 +65,14 @@ class TestInstitutionModel:
         ),
     ]
 
-    @pytest.mark.parametrize(
+    @mark.parametrize(
         argnames=['institution_data', 'expected_institution'], argvalues=correct_dataset
     )
     def test_correct_ror_id(
         self,
         institution_data: dict[str, str],
         expected_institution: dict[str, str],
-        memory_db_session: sessionmaker[Session],
+        test_db_session: sessionmaker[Session],
     ):
         """
         Test that given a correct ROR ID, the `Institution` model
@@ -80,10 +82,10 @@ class TestInstitutionModel:
         """
         institution = Institution(**institution_data, labs=[])
 
-        with memory_db_session.begin() as session:
+        with test_db_session.begin() as session:
             session.add(institution)
 
-        with memory_db_session.begin() as session:
+        with test_db_session.begin() as session:
             stmt = select(Institution)
             processed_institution = session.execute(stmt).scalar()
 
@@ -95,7 +97,7 @@ class TestInstitutionModel:
         Test that given an incorrect ROR ID, the `Institution` model
         throws an error.
         """
-        with pytest.raises(Abort):
+        with raises(Abort):
             Institution(ror_id='nonexistent_ror_id')
 
 
@@ -139,7 +141,7 @@ class TestProjectModel:
         """
         Test that the `Project` model raises error with invalid project ID.
         """
-        with pytest.raises(Abort):
+        with raises(Abort):
             Project(id='fake-id', lab=complete_db_objects['lab'])
 
 
@@ -163,7 +165,7 @@ class TestPersonModel:
         ]
         assert all(person.orcid == orcid for person in people)
 
-    @pytest.mark.parametrize(
+    @mark.parametrize(
         argnames=[
             'orcid',
         ],
@@ -176,7 +178,7 @@ class TestPersonModel:
         """
         Test that the `Person` model raises error with invalid ORCID.
         """
-        with pytest.raises(Abort):
+        with raises(Abort):
             Person(first_name='Ahmed', last_name='Said', orcid=orcid)
 
 
@@ -249,7 +251,7 @@ class TestSampleModel:
     """
 
     def test_sample_name(
-        self, complete_db_objects: dict, memory_db_session: sessionmaker[Session]
+        self, complete_db_objects: dict, test_db_session: sessionmaker[Session]
     ):
         """
         Test that the `Sample` model correctly cleans the sample name.
@@ -262,15 +264,18 @@ class TestSampleModel:
         sample_name = f'{illegal_punctuation}some{whitespace}name{illegal_punctuation}'
         sample = Sample(sample_name, data_set=data_set)
 
-        with memory_db_session.begin() as session:
+        with test_db_session.begin() as session:
             session.add(sample)
 
-        with memory_db_session.begin() as session:
+        with test_db_session.begin() as session:
             stmt = select(Sample)
             processed_sample = session.execute(stmt).scalar()
 
             if processed_sample is None:
-                pytest.fail('No rows found in table Sample')
+                test_exit(
+                    f'Something went wrong. {sample} was supposed to be added to an in-memory databse, but it was not.',
+                    returncode=1,
+                )
 
             assert processed_sample.name == 'some-name'
 
@@ -288,7 +293,7 @@ class TestLibraryModel:
     Tests for the `Library` model.
     """
 
-    @pytest.mark.parametrize(
+    @mark.parametrize(
         argnames=['library_id', 'expected_library_id'],
         argvalues=[(f'{whitespace}sc9900000{whitespace}', 'SC9900000')],
     )
@@ -309,6 +314,6 @@ class TestLibraryModel:
         """
         data_set = complete_db_objects['data_set']
         library_type = complete_db_objects['library_type']
-        with pytest.raises(Abort):
+        with raises(Abort):
             data_set = complete_db_objects['data_set']
             Library(id='fake-id', data_set=data_set, library_type=library_type)

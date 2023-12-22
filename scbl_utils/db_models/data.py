@@ -60,22 +60,20 @@ from .definitions import LibraryType, Platform, Tag
 class Institution(Base):
     __tablename__ = 'institution'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
-    name: Mapped[unique_stripped_str] = mapped_column(default=None)
-    short_name: Mapped[stripped_str | None] = mapped_column(
-        default=None, insert_default=null()
-    )
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    name: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
+    short_name: Mapped[stripped_str] = mapped_column(default=None, index=True)
     country: Mapped[str] = mapped_column(StrippedString(length=2), default='US')
     state: Mapped[str | None] = mapped_column(
         StrippedString(length=2), default=None, insert_default=null()
     )
     city: Mapped[stripped_str] = mapped_column(default=None)
     ror_id: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null()
+        default=None, insert_default=null(), repr=False
     )
 
     labs: Mapped[list['Lab']] = relationship(
-        back_populates='institution', default_factory=list
+        back_populates='institution', default_factory=list, repr=False
     )
 
     @validates('ror_id')
@@ -132,26 +130,32 @@ class Institution(Base):
 class Lab(Base):
     __tablename__ = 'lab'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
 
     institution_id: Mapped[int] = mapped_column(
-        ForeignKey('institution.id'), init=False
+        ForeignKey('institution.id'), init=False, repr=False
     )
-    pi_id: Mapped[int] = mapped_column(ForeignKey('person.id'), init=False)
+    pi_id: Mapped[int] = mapped_column(ForeignKey('person.id'), init=False, repr=False)
 
     institution: Mapped[Institution] = relationship(back_populates='labs')
     pi: Mapped['Person'] = relationship()
     projects: Mapped[list['Project']] = relationship(
-        back_populates='lab', default_factory=list
+        back_populates='lab', default_factory=list, repr=False
     )
 
-    name: Mapped[stripped_str] = mapped_column(default=None)
-    delivery_dir: Mapped[unique_stripped_str] = mapped_column(default=None)
-    group: Mapped[stripped_str] = mapped_column(init=False, default=None)
+    name: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
+    delivery_dir: Mapped[unique_stripped_str] = mapped_column(default=None, repr=False)
+    group: Mapped[stripped_str] = mapped_column(init=False, default=None, repr=False)
 
     @validates('name')
     def set_name(self, key: str, name: str | None) -> str:
-        return f'{self.pi.last_name} Lab' if name is None else name.title()
+        # This assumes that no two PIs share the same name and
+        # institution. Might have to change in production
+        return (
+            f'{self.pi.name} Lab - {self.institution.short_name}'
+            if name is None
+            else name.title()
+        )
 
     @validates('delivery_dir')
     def set_delivery_dir(self, key: str, delivery_dir: str | None) -> str:
@@ -195,8 +199,8 @@ class Lab(Base):
         return Path(self.delivery_dir).group()
 
 
-project_people_mapping = Table(
-    'project_people_mapping',
+project_person_mapping = Table(
+    'project_person_mapping',
     Base.metadata,
     Column('project_id', ForeignKey('project.id'), primary_key=True),
     Column('person_id', ForeignKey('person.id'), primary_key=True),
@@ -206,22 +210,23 @@ project_people_mapping = Table(
 class Project(Base):
     __tablename__ = 'project'
 
-    id: Mapped[stripped_str_pk]
+    id: Mapped[stripped_str_pk] = mapped_column()
 
-    lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False)
+    lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False, repr=False)
 
     lab: Mapped[Lab] = relationship(back_populates='projects')
     data_sets: Mapped[list['DataSet']] = relationship(
-        back_populates='project', default_factory=list
+        back_populates='project', default_factory=list, repr=False
     )
     people: Mapped[list['Person']] = relationship(
         back_populates='projects',
         default_factory=list,
-        secondary=project_people_mapping,
+        secondary=project_person_mapping,
+        repr=False,
     )
 
     description: Mapped[stripped_str | None] = mapped_column(
-        default=None, insert_default=null()
+        default=None, insert_default=null(), index=True
     )
 
     @validates('id')
@@ -236,21 +241,22 @@ class Project(Base):
 class Person(Base):
     __tablename__ = 'person'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
-    first_name: Mapped[stripped_str] = mapped_column(
-        repr=False
-    )  # TODO: maybe these can just be retrieved from orcid
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    first_name: Mapped[stripped_str] = mapped_column(repr=False)
     last_name: Mapped[stripped_str] = mapped_column(repr=False)
     email: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null()
+        default=None, insert_default=null(), index=True
     )
-    name: Mapped[stripped_str] = mapped_column(init=False, default=None)
+    name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
     orcid: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null()
+        default=None, insert_default=null(), repr=False
     )
 
     projects: Mapped[list[Project]] = relationship(
-        back_populates='people', default_factory=list, secondary=project_people_mapping
+        back_populates='people',
+        default_factory=list,
+        secondary=project_person_mapping,
+        repr=False,
     )
 
     @validates('email')
@@ -258,12 +264,14 @@ class Person(Base):
         if email is None:
             return email
 
-        email_info = validate_email(email, check_deliverability=True)
+        email_info = validate_email(email.lower(), check_deliverability=True)
         return email_info.normalized
 
     @validates('first_name', 'last_name')
     def capitalize_name(self, key: str, name: str) -> str:
-        return name.strip().title()
+        formatted = name.strip().title()
+        noramlized_inner_whitespace = ' '.join(formatted.split())
+        return noramlized_inner_whitespace
 
     @validates('name')
     def set_name(self, key: str, name: None) -> str:  # type: ignore
@@ -307,13 +315,21 @@ class Person(Base):
 class DataSet(Base):
     __tablename__ = 'data_set'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
-    name: Mapped[samplesheet_str]
-    ilab_request_id: Mapped[stripped_str]  # TODO: ilab validation
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    name: Mapped[samplesheet_str] = mapped_column(index=True)
+    ilab_request_id: Mapped[stripped_str] = mapped_column(
+        index=True
+    )  # TODO: ilab validation
 
-    project_id: Mapped[str] = mapped_column(ForeignKey('project.id'), init=False)
-    platform_id: Mapped[int] = mapped_column(ForeignKey('platform.id'), init=False)
-    submitter_id: Mapped[int] = mapped_column(ForeignKey('person.id'), init=False)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey('project.id'), init=False, repr=False
+    )
+    platform_id: Mapped[int] = mapped_column(
+        ForeignKey('platform.id'), init=False, repr=False
+    )
+    submitter_id: Mapped[int] = mapped_column(
+        ForeignKey('person.id'), init=False, repr=False
+    )
     # TODO: add actual data (species n stuff)
 
     platform: Mapped[Platform] = relationship()
@@ -322,13 +338,13 @@ class DataSet(Base):
 
     # TODO: there should be another column for the date that work was begun on the dataset (?)
     date_submitted: Mapped[date] = mapped_column(default_factory=date.today)
-    batch_id: Mapped[int] = mapped_column(init=False, default=None)
+    batch_id: Mapped[int] = mapped_column(init=False, default=None, repr=False)
 
     samples: Mapped[list['Sample']] = relationship(
-        back_populates='data_set', default_factory=list
+        back_populates='data_set', default_factory=list, repr=False
     )
     libraries: Mapped[list['Library']] = relationship(
-        back_populates='data_set', default_factory=list
+        back_populates='data_set', default_factory=list, repr=False
     )
 
     @validates('batch_id')
@@ -359,35 +375,41 @@ class DataSet(Base):
 class Sample(Base):
     __tablename__ = 'sample'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
-    name: Mapped[samplesheet_str]
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    name: Mapped[samplesheet_str] = mapped_column(index=True)
 
-    data_set_id: Mapped[int] = mapped_column(ForeignKey('data_set.id'), init=False)
+    data_set_id: Mapped[int] = mapped_column(
+        ForeignKey('data_set.id'), init=False, repr=False
+    )
     tag_id: Mapped[str | None] = mapped_column(
         ForeignKey('tag.id'), init=False, insert_default=null()
     )
     # TODO: add actual data
 
     data_set: Mapped[DataSet] = relationship(back_populates='samples')
-    tag: Mapped[Tag] = relationship(default=None)
+    tag: Mapped[Tag] = relationship(default=None, repr=False)
 
 
 class SequencingRun(Base):
     __tablename__ = 'sequencing_run'
 
-    # TODO: validate that this matches the pattern
+    # TODO: validate that this matches a pattern
     id: Mapped[samplesheet_str_pk]
 
-    libraries: Mapped[list['Library']] = relationship(back_populates='sequencing_run')
+    libraries: Mapped[list['Library']] = relationship(
+        back_populates='sequencing_run', default_factory=list, repr=False
+    )
 
 
 class Library(Base):
     __tablename__ = 'library'
 
     id: Mapped[samplesheet_str_pk]
-    data_set_id: Mapped[int] = mapped_column(ForeignKey('data_set.id'), init=False)
+    data_set_id: Mapped[int] = mapped_column(
+        ForeignKey('data_set.id'), init=False, repr=False
+    )
     library_type_id: Mapped[int] = mapped_column(
-        ForeignKey('library_type.id'), init=False
+        ForeignKey('library_type.id'), init=False, repr=False
     )
     sequencing_run_id: Mapped[str | None] = mapped_column(
         ForeignKey('sequencing_run.id'), init=False, insert_default=null()
@@ -397,7 +419,7 @@ class Library(Base):
     data_set: Mapped[DataSet] = relationship(back_populates='libraries')
     library_type: Mapped[LibraryType] = relationship()
     sequencing_run: Mapped[SequencingRun] = relationship(
-        back_populates='libraries', default=None
+        back_populates='libraries', default=None, repr=False
     )
 
     @validates('id')

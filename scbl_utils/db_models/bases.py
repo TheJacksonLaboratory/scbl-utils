@@ -17,6 +17,7 @@ Classes:
 from re import sub
 from typing import Annotated
 
+from rich import print as rprint
 from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass, mapped_column
 from sqlalchemy.types import String, TypeDecorator
 
@@ -24,7 +25,19 @@ from ..defaults import SAMPLENAME_BLACKLIST_PATTERN, SEP_PATTERN
 
 
 class Base(MappedAsDataclass, DeclarativeBase):
-    pass
+    @classmethod
+    def get_model(cls, tablename: str) -> type['Base']:
+        tablename_to_model = {
+            model.__tablename__: model for model in cls.__subclasses__()
+        }
+        model = tablename_to_model.get(tablename)
+
+        if model is None:
+            raise KeyError(
+                f'{tablename} is not a valid table name. Make sure you have imported all database models in the code that calls this function.'
+            )
+
+        return model
 
 
 class StrippedString(TypeDecorator):

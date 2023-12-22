@@ -22,11 +22,19 @@ from scbl_utils.db_models.definitions import LibraryType, Platform, Tag
 
 
 @fixture
-def memory_db_session() -> sessionmaker[Session]:
+def db_path(tmp_path: Path) -> Path:
+    """
+    Create a temporary database path for testing.
+    """
+    return tmp_path / 'test.db'
+
+
+@fixture
+def test_db_session(db_path: Path) -> sessionmaker[Session]:
     """
     Create a database session for testing.
     """
-    Session = db_session(Base, drivername='sqlite')
+    Session = db_session(Base, drivername='sqlite', database=str(db_path))
     return Session
 
 
@@ -48,14 +56,14 @@ def delivery_parent_dir(monkeypatch: MonkeyPatch, tmp_path: Path) -> Path:
 
 
 @fixture
-def config_dir(tmp_path: Path) -> Path:
+def config_dir(tmp_path: Path, db_path: Path) -> Path:
     """
     Create a temporary configuration directory for testing.
     """
     config_dir = tmp_path / '.config' / 'db'
     config_dir.mkdir(parents=True)
 
-    db_config = {'drivername': 'sqlite'}
+    db_config = {'drivername': 'sqlite', 'database': str(db_path)}
 
     config_path = config_dir / 'db-spec.yml'
     with config_path.open('w') as f:
@@ -130,17 +138,14 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
 
 
 @fixture
-def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
+def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
     """
-    Create a valid CSVs that can be passed to init-db for database
+    Create valid CSVs that can be passed to init-db for database
     initialization. Also returns a dict mapping the relationship of labs
     to institutions and PIs, since this is the key feature of init-db.
     """
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
-
-    for directory in ('ahmed_said', 'service_lab'):
-        (delivery_parent_dir / directory).mkdir()
 
     # Create the data. Note missing values, which will be handled by
     # init-db
@@ -161,17 +166,20 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
     dfs['institution.csv'] = pd.DataFrame(institutions)
 
     labs = {
-        'pi_first_name': ['Ahmed', 'John'],
-        'pi_last_name': ['Said', 'Doe'],
-        'pi_email': ['ahmed.said@jax.org', 'john.doe@jax.org'],
-        'pi_orcid': ['0009-0008-3754-6150', None],
-        'institution_name': [
+        'pi.first_name': ['Ahmed', 'John', 'Jane'],
+        'pi.last_name': ['Said', 'Doe', 'Foe'],
+        'pi.email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
+        'pi.orcid': ['0009-0008-3754-6150', None, None],
+        'institution.name': [
             'Jackson Laboratory for Genomic Medicine',
             'Jackson Laboratory for Mammalian Genetics',
+            'Jackson Laboratory for Genomic Medicine',
         ],
-        'name': [None, 'Service Lab'],
-        'delivery_dir': [None, 'service_lab'],
+        'name': [None, 'Service Lab', None],
+        'delivery_dir': [None, 'service_lab', None],
     }
+    for directory in ('ahmed_said', 'service_lab', 'jane_foe'):
+        (delivery_parent_dir / directory).mkdir()
     dfs['lab.csv'] = pd.DataFrame(labs)
 
     library_types = [
@@ -184,12 +192,12 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
         'Multiplexing Capture',
         'Spatial Gene Expression',
     ]
-    dfs['librarytype.csv'] = pd.DataFrame({'name': library_types})
+    dfs['library_type.csv'] = pd.DataFrame({'name': library_types})
 
     people = {
-        'first_name': ['ahmed', 'john', 'jane'],
-        'last_name': ['said', 'doe', 'doe'],
-        'email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.doe@jax.org'],
+        'first_name': ['Ahmed', 'John', 'Jane'],
+        'last_name': ['Said', 'Doe', 'Foe'],
+        'email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
         'orcid': ['0009-0008-3754-6150', None, None],
     }
     dfs['person.csv'] = pd.DataFrame(people)
@@ -232,7 +240,51 @@ def valid_data(tmp_path: Path, delivery_parent_dir: Path) -> tuple[Path, dict]:
     for filename, df in dfs.items():
         df.to_csv(data_dir / filename, index=False)
 
-    return data_dir, {
-        1: {'pi_id': 1, 'institution_id': 3},
-        2: {'pi_id': 2, 'institution_id': 2},
+    return data_dir
+
+
+@fixture
+def table_relationships(valid_data_dir: Path):
+    """
+    Return the relationships between labs, institutions, and PIs for
+    testing. Can be easily extended for more relationships
+    """
+    # Read the tables and rename the 'person' table to 'pi' because a
+    # Lab has a PI, not a Person
+    tables = ('institution', 'lab', 'person')
+    dfs = {table: pd.read_csv(valid_data_dir / f'{table}.csv') for table in tables}
+    dfs['pi'] = dfs['person'].copy()
+    del dfs['person']
+
+    # Add 1-indexed IDs to the tables that will match the IDs in the
+    # database
+    for table, df in dfs.items():
+        df[f'{table}_id'] = dfs[table].index + 1
+
+    # This maps a combination of tables to the columns used to join
+    # those two tables. For example, the 'institution_name' column in
+    # the lab table is the same as the 'name' column in the institution
+    # table.
+    table_relations = {
+        ('lab', 'institution'): (['institution.name'], ['name']),
+        ('lab', 'pi'): (
+            ['pi.first_name', 'pi.last_name', 'pi.email', 'pi.orcid'],
+            ['first_name', 'last_name', 'email', 'orcid'],
+        ),
     }
+
+    # Merge the tables
+    mappings = {}
+    for (left_table, right_table), (left_cols, right_cols) in table_relations.items():
+        mappings[(left_table, right_table)] = dfs[left_table].merge(
+            dfs[right_table], how='left', left_on=left_cols, right_on=right_cols
+        )
+
+    return mappings
+
+
+@fixture
+def n_rows_per_table(valid_data_dir: Path):
+    """ """
+    dfs = {path.stem: pd.read_csv(path) for path in valid_data_dir.iterdir()}
+    return {table: df.shape[0] for table, df in dfs.items()}

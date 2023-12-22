@@ -31,15 +31,15 @@ from .bases import (
 class Platform(Base):
     __tablename__ = 'platform'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
-    name: Mapped[unique_stripped_str]
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    name: Mapped[unique_stripped_str] = mapped_column(index=True)
 
 
 class LibraryType(Base):
     __tablename__ = 'library_type'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
-    name: Mapped[unique_samplesheet_str]
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    name: Mapped[unique_samplesheet_str] = mapped_column(index=True)
 
 
 class Tag(Base):

@@ -5,87 +5,96 @@ This module contains functions related to Google Drive that are used in
 Functions:
 """
 from pathlib import Path
-from typing import Any, Hashable, Literal
+from typing import Any, Collection, Hashable, Literal
 
 import gspread as gs
 import pandas as pd
-from pydantic import field_validator, model_validator
+from numpy import nan
+from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
 
 from ..db_models.bases import Base
 
+sheet_config = ConfigDict(arbitrary_types_allowed=True)
 
-@dataclass
+
+@dataclass(config=sheet_config)
 class Sheet:
     worksheet: gs.Worksheet
-    db_table: type[Base]
     index_col: str
-    col_renamer: dict[str, str]
+    required_cols: list[str]
+    col_renamer: dict[str, str] = Field(default_factory=dict)
+    none_values: Collection[str] = Field(default_factory=list)
+    type_converters: dict[str, str] = Field(default_factory=dict)
+    head: int = 0
+    cols_to_add: dict[str, Any] = Field(
+        default_factory=dict
+    )  # TODO: make this a separate class with its own validation
 
+    # TODO: The same set difference and error message is calculated 3 times. Fix that
+    @model_validator(mode='after')
+    def check_column_matching(self):
+        if not self.col_renamer:
+            return self
 
-# TODO: should there be validation in this class? There is validation in
-# defaults.py which will be used to validate the worksheet spec, but
-# could this class be filled from a different source?
-# @dataclass
+        if self.index_col not in self.col_renamer.values():
+            raise ValueError(
+                f'index_col {self.index_col} must be in the values of col_renamer.'
+            )
 
-# TODO: this is not ready
+        if self.type_converters.keys() - set(self.col_renamer.values()):
+            raise ValueError(
+                f'The keys of type_converters must be a subset of the values of col_renamer. The following are the keys of type_converters that are not in the values of col_renamer:\n{self.type_converters.keys() - set(self.col_renamer.values())}'
+            )
 
-# class Spread:
-#     client: gs.Client
-#     spreadsheet_url: str # This will be validated by the defaults.py schema. Should it be validated here too?
-#     worksheet_specs: dict[str, int | str | dict[str, str | int]] # Same as above
-#     db_tables: dict[str, type[Base]] = {model.__tablename__: model for model in Base.__subclasses__()}
-#     index_col: str = 'library.id' # validated here, should be validated in defaults.py schema
+        if any(
+            spec['from'] not in self.col_renamer.values()
+            for spec in self.cols_to_add.values()
+        ):
+            raise ValueError('something is wrong')
 
-#     @field_validator('index_col')
-#     def check_index_col(self, value: str) -> str:
-#         if '.' not in value or value.count('.') != 1:
-#             raise ValueError(f'index_col must be of the form <table>.<column>, but {value} was given.')
+        if set(self.required_cols) - set(self.col_renamer.values()):
+            raise ValueError(
+                f'The columns specified in required_cols ({self.required_cols}) must be in the values of col_renamer.'
+            )
 
-#         return value
+        return self
 
-#     @model_validator(mode='after')
-#     def index_col_in_db(self):
-#         equiv_db_table, column = self.index_col.split('.')
+    def to_df(self) -> pd.DataFrame:
+        # Get the data out of the sheet, assigning header_row and data
+        values = self.worksheet.get_values(
+            combine_merged_cells=True, value_render_option='UNFORMATTED_VALUE'
+        )
+        header = values[self.head]
+        data = values[self.head + 1 :]
 
-#         if equiv_db_table not in self.db_tables:
-#             raise ValueError(f'index_col must be of the form <table>.<column>. <table> must be one of {self.db_tables}, but {equiv_db_table} was given.')
+        df = pd.DataFrame(data, columns=header)
 
-#         if not hasattr(self.db_tables[equiv_db_table], column):
-#             raise ValueError(f'index_col must be of the form <table>.<column>. <column> must be one of {self.db_tables[equiv_db_table].__table__.columns}, but {column} was given.')
+        # Strip whitespace
+        for col, series in df.select_dtypes(include='object').items():
+            df[col] = series.str.strip()
 
-#         return self
+        # Replace none_values with None and TRUE/FALSE with True/False
+        replacement_dict = {none_value: None for none_value in self.none_values} | {
+            'TRUE': True,
+            'FALSE': False,
+        }
+        df.replace(replacement_dict, inplace=True)
 
-#     def split_combine_worksheets(self) -> dict[str, pd.DataFrame]:
-#         """
-#         Split the worksheets into tables and combine them into a single
-#         dictionary of DataFrames
-#         """
-#         spread = self.client.open_by_url(self.spreadsheet_url)
-#         dfs: list[pd.DataFrame] = []
+        # Rename columns and convert types
+        df.rename(columns=self.col_renamer, inplace=True)
+        df = df.astype(self.type_converters)
 
-#         for worksheet_id, worksheet_spec in self.worksheet_specs.items():
-#             sheet = spread.get_worksheet_by_id(worksheet_id)
-#             values = sheet.get_values(combine_merged_cells=True)
-#             header = values[worksheet_spec['head']]
-#             data = values[worksheet_spec['head'] + 1:]
-#             df = pd.DataFrame(data, columns=header)
+        # Set index and drop blank rows
+        df.set_index(self.index_col, inplace=True)
+        df.dropna(subset=self.required_cols, inplace=True, how='any')
 
-#             df.drop(columns=[col for col in df.columns if col not in worksheet_spec['columns']], inplace=True)
-#             df.rename(columns=worksheet_spec['columns'], inplace=True)
-#             df.set_index(f'{self.equiv_db_table}.{self.index_col}', inplace=True)
+        # Create new columns from old columns based passed-in mapping
+        for new_col, replacement_spec in self.cols_to_add.items():
+            old_col = replacement_spec['from']
+            df[new_col] = df[old_col].replace(replacement_spec['mapper'])
 
-#             dfs.append(df)
+        return df
 
-#         split_combined_dfs = {}
-#         for table_name in self.db_tables:
-#             table_dfs = []
-#             for df in dfs:
-#                 columns = [col for col in df.columns if table_name in col]
-#                 table_dfs.append(df[columns])
-#             split_combined_dfs[table_name] = pd.concat(table_dfs, axis=1)
-
-#         return split_combined_dfs
-
-
-# client = gs.service_account(filename=Path('/Users/saida/.config/scbl-utils/google-drive/service-account.json'))
+    def to_records(self) -> list[dict[Hashable, Any]]:
+        return self.to_df().reset_index(names=self.index_col).to_dict(orient='records')

@@ -54,6 +54,7 @@ DB_SPEC_SCHEMA = {
 }
 
 # JSON schema for Google Drive configuration file
+# TODO: fix this
 GDRIVE_SPEC_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'object',
@@ -82,12 +83,19 @@ GDRIVE_SPEC_SCHEMA = {
     'additionalProperties': False,
 }
 
+# TODO: write test for this or some kind of spec validation
+SPLIT_TABLES_JOIN_ON_COLUMNS = {
+    'library': 'id',
+    'project': 'id',
+    'person': ['name', 'email'],
+    'project_person_mapping': [],
+}
 # TODO: should these schema be replaced by auto-generated schema using
 # sqlmodel, a wrapper of sqlalchemy and pydantic?
 
 # JSON schemas for CSV files
 _string_or_null = ['string', 'null']
-INSTITUION_CSV_SCHEMA = {
+INSTITUION_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'array',
     'items': {
@@ -106,26 +114,26 @@ INSTITUION_CSV_SCHEMA = {
 }
 
 ORCID_PATTERN = r'^(\d{4})-?(\d{4})-?(\d{4})-?(\d{4}|\d{3}X)$'
-LAB_CSV_SCHEMA = {
+LAB_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'array',
     'items': {
         'type': 'object',
         'properties': {
-            'institution_name': {'type': 'string'},
-            'pi_email': {'type': _string_or_null, 'format': 'email'},
-            'pi_first_name': {'type': 'string'},
-            'pi_last_name': {'type': 'string'},
-            'pi_orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+            'institution.name': {'type': 'string'},
+            'pi.email': {'type': _string_or_null, 'format': 'email'},
+            'pi.first_name': {'type': 'string'},
+            'pi.last_name': {'type': 'string'},
+            'pi.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
             'delivery_dir': {'type': _string_or_null},
             'name': {'type': _string_or_null},
         },
         'required': [
-            'pi_email',
-            'pi_first_name',
-            'pi_last_name',
-            'pi_orcid',
-            'institution_name',
+            'pi.email',
+            'pi.first_name',
+            'pi.last_name',
+            'pi.orcid',
+            'institution.name',
             'delivery_dir',
             'name',
         ],
@@ -133,7 +141,7 @@ LAB_CSV_SCHEMA = {
     },
 }
 
-PERSON_CSV_SCHEMA = {
+PERSON_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'array',
     'items': {
@@ -150,7 +158,7 @@ PERSON_CSV_SCHEMA = {
 }
 
 # TODO: eventually update this
-PLATFORM_CSV_SCHEMA = {
+PLATFORM_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'array',
     'items': {
@@ -164,7 +172,7 @@ PLATFORM_CSV_SCHEMA = {
 }
 
 # TODO eventually update this
-LIBRARY_TYPE_CSV_SCHEMA = {
+LIBRARY_TYPE_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'array',
     'items': {
@@ -178,7 +186,7 @@ LIBRARY_TYPE_CSV_SCHEMA = {
 }
 
 # TODO: eventually update this
-TAG_CSV_SCHEMA = {
+TAG_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'array',
     'items': {
@@ -205,11 +213,11 @@ TAG_CSV_SCHEMA = {
     },
 }
 
-CSV_SCHEMAS = {
-    'institution.csv': INSTITUION_CSV_SCHEMA,
-    'lab.csv': LAB_CSV_SCHEMA,
-    'person.csv': PERSON_CSV_SCHEMA,
-    'platform.csv': PLATFORM_CSV_SCHEMA,
-    'library_type.csv': LIBRARY_TYPE_CSV_SCHEMA,
-    'tag.csv': TAG_CSV_SCHEMA,
+DATA_SCHEMAS = {
+    'institution': INSTITUION_SCHEMA,
+    'lab': LAB_SCHEMA,
+    'person': PERSON_SCHEMA,
+    'platform': PLATFORM_SCHEMA,
+    'library_type': LIBRARY_TYPE_SCHEMA,
+    'tag': TAG_SCHEMA,
 }
