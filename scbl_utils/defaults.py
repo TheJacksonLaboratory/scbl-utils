@@ -20,6 +20,23 @@ SEP_CHARS = r'\s_-'
 SEP_PATTERN = rf'[{SEP_CHARS}]'
 SAMPLENAME_BLACKLIST_PATTERN = rf'[^{ascii_letters + digits + SEP_CHARS}]'
 
+# TODO: write a test to make sure that these are all the tables and that the email_format_variable_chars are just two chars
+DATA_INSERTION_ORDER = (
+    'institution',
+    'person',
+    'lab',
+    'project',
+    'platform',
+    'library_type',
+    'tag',
+    'data_set',
+    'library',
+    'sequencing_run',
+    'sample',
+)
+LEFT_FORMAT_CHAR, RIGHT_FORMAT_CHAR = r'{', r'}'
+EMAIL_FORMAT_VARIABLE_PATTERN = r'{[^{}]+}'
+
 # Configuration files necesary for script
 DB_CONFIG_FILES = [Path(filename) for filename in ('db-spec.yml',)]
 GDRIVE_CONFIG_FILES = [
@@ -27,6 +44,7 @@ GDRIVE_CONFIG_FILES = [
 ]
 
 # CSV files necessary for database initialization
+# This isn't even necessary
 DB_INIT_FILES = [
     Path(f'{table_name}.csv')
     for table_name in (
@@ -38,6 +56,8 @@ DB_INIT_FILES = [
         'tag',
     )
 ]
+OBJECT_SEP_CHAR = '.'
+OBJECT_SEP_PATTERN = r'\.'
 
 # JSON schema for db configuration file
 _schema_draft_version = 'https://json-schema.org/draft/2020-12/schema'
@@ -83,16 +103,6 @@ GDRIVE_SPEC_SCHEMA = {
     'additionalProperties': False,
 }
 
-# TODO: write test for this or some kind of spec validation
-SPLIT_TABLES_JOIN_ON_COLUMNS = {
-    'library': 'id',
-    'project': 'id',
-    'person': ['name', 'email'],
-    'project_person_mapping': [],
-}
-# TODO: should these schema be replaced by auto-generated schema using
-# sqlmodel, a wrapper of sqlalchemy and pydantic?
-
 # JSON schemas for CSV files
 _string_or_null = ['string', 'null']
 INSTITUION_SCHEMA = {
@@ -103,12 +113,21 @@ INSTITUION_SCHEMA = {
         'properties': {
             'name': {'type': _string_or_null},
             'short_name': {'type': _string_or_null},
+            'email_format': {'type': 'string'},
             'country': {'type': _string_or_null, 'minLength': 2, 'maxLength': 2},
             'state': {'type': _string_or_null, 'minLength': 2, 'maxLength': 2},
             'city': {'type': _string_or_null},
             'ror_id': {'type': _string_or_null},
         },
-        'required': ['name', 'short_name', 'country', 'state', 'city', 'ror_id'],
+        'required': [
+            'name',
+            'short_name',
+            'email_format',
+            'country',
+            'state',
+            'city',
+            'ror_id',
+        ],
         'additionalProperties': False,
     },
 }
@@ -120,22 +139,22 @@ LAB_SCHEMA = {
     'items': {
         'type': 'object',
         'properties': {
-            'institution.name': {'type': 'string'},
-            'pi.email': {'type': _string_or_null, 'format': 'email'},
-            'pi.first_name': {'type': 'string'},
-            'pi.last_name': {'type': 'string'},
-            'pi.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
-            'delivery_dir': {'type': _string_or_null},
-            'name': {'type': _string_or_null},
+            'lab.institution.name': {'type': 'string'},
+            'lab.pi.email': {'type': _string_or_null, 'format': 'email'},
+            'lab.pi.first_name': {'type': 'string'},
+            'lab.pi.last_name': {'type': 'string'},
+            'lab.pi.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+            'lab.delivery_dir': {'type': _string_or_null},
+            'lab.name': {'type': _string_or_null},
         },
         'required': [
-            'pi.email',
-            'pi.first_name',
-            'pi.last_name',
-            'pi.orcid',
-            'institution.name',
-            'delivery_dir',
-            'name',
+            'lab.pi.email',
+            'lab.pi.first_name',
+            'lab.pi.last_name',
+            'lab.pi.orcid',
+            'lab.institution.name',
+            'lab.delivery_dir',
+            'lab.name',
         ],
         'additionalProperties': False,
     },
@@ -147,12 +166,18 @@ PERSON_SCHEMA = {
     'items': {
         'type': 'object',
         'properties': {
-            'first_name': {'type': 'string'},
-            'last_name': {'type': 'string'},
-            'email': {'type': _string_or_null, 'format': 'email'},
-            'orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+            'person.first_name': {'type': 'string'},
+            'person.last_name': {'type': 'string'},
+            'person.email': {'type': _string_or_null, 'format': 'email'},
+            'person.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+            'person.institution.name': {'type': 'string'},
         },
-        'required': ['first_name', 'last_name', 'email', 'orcid'],
+        'required': [
+            'person.first_name',
+            'person.last_name',
+            'person.email',
+            'person.orcid',
+        ],
         'additionalProperties': False,
     },
 }

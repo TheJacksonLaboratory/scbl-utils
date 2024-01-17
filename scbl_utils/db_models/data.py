@@ -33,17 +33,25 @@ Classes:
 from datetime import date
 from os import getenv
 from pathlib import Path
-from re import match
+from re import findall, match, search, sub
 
 from email_validator import validate_email
 from requests import get
 from rich import print as rprint
-from sqlalchemy import Column, ForeignKey, Table, null
+from sqlalchemy import Column, ForeignKey, Table, inspect, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
+from ..core.utils import _get_format_string_vars
 from ..core.validation import validate_dir, validate_str
-from ..defaults import LIBRARY_ID_PATTERN, ORCID_PATTERN, PROJECT_ID_PATTERN
+from ..defaults import (
+    EMAIL_FORMAT_VARIABLE_PATTERN,
+    LEFT_FORMAT_CHAR,
+    LIBRARY_ID_PATTERN,
+    ORCID_PATTERN,
+    PROJECT_ID_PATTERN,
+    RIGHT_FORMAT_CHAR,
+)
 from .bases import (
     Base,
     StrippedString,
@@ -61,6 +69,7 @@ class Institution(Base):
     __tablename__ = 'institution'
 
     id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    email_format: Mapped[stripped_str] = mapped_column(repr=False)
     name: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
     short_name: Mapped[stripped_str] = mapped_column(default=None, index=True)
     country: Mapped[str] = mapped_column(StrippedString(length=2), default='US')
@@ -75,6 +84,31 @@ class Institution(Base):
     labs: Mapped[list['Lab']] = relationship(
         back_populates='institution', default_factory=list, repr=False
     )
+
+    # TODO needs more validation to check that the email format is correct
+    @validates('email_format')
+    def check_email_format(self, key: str, email_format: str) -> str:
+        email_format = email_format.strip().lower()
+
+        variables = _get_format_string_vars(email_format)
+
+        person_columns = set(inspect(Person).columns.keys())
+        non_existent_person_columns = variables - person_columns
+
+        if non_existent_person_columns:
+            rprint(
+                f'The email format [orange1]{email_format}[/] is invalid because it contains the following variables, which are not members of [green]{person_columns}[/]:',
+                f'[orange1]{non_existent_person_columns}[/]',
+                sep='\n',
+            )
+            raise Abort()
+
+        example_values = {var: 'string' for var in variables}
+        example_email = email_format.format_map(example_values)
+
+        validate_email(example_email)
+
+        return email_format
 
     @validates('ror_id')
     def check_ror_id(self, key: str, ror_id: str | None) -> str | None:
@@ -149,13 +183,9 @@ class Lab(Base):
 
     @validates('name')
     def set_name(self, key: str, name: str | None) -> str:
-        # This assumes that no two PIs share the same name and
-        # institution. Might have to change in production
-        return (
-            f'{self.pi.name} Lab - {self.institution.short_name}'
-            if name is None
-            else name.title()
-        )
+        # This assumes that no two PIs share the same name. Might have
+        # to change in production
+        return f'{self.pi.name} Lab' if name is None else name.title()
 
     @validates('delivery_dir')
     def set_delivery_dir(self, key: str, delivery_dir: str | None) -> str:
@@ -244,10 +274,14 @@ class Person(Base):
     id: Mapped[int_pk] = mapped_column(init=False, repr=False)
     first_name: Mapped[stripped_str] = mapped_column(repr=False)
     last_name: Mapped[stripped_str] = mapped_column(repr=False)
-    email: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null(), index=True
+
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey('institution.id'), repr=False, init=False
     )
+    institution: Mapped[Institution] = relationship(repr=False)
+
     name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
+    email: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
     orcid: Mapped[unique_stripped_str | None] = mapped_column(
         default=None, insert_default=null(), repr=False
     )
@@ -259,14 +293,6 @@ class Person(Base):
         repr=False,
     )
 
-    @validates('email')
-    def check_email(self, key: str, email: str | None) -> str | None:
-        if email is None:
-            return email
-
-        email_info = validate_email(email.lower(), check_deliverability=True)
-        return email_info.normalized
-
     @validates('first_name', 'last_name')
     def capitalize_name(self, key: str, name: str) -> str:
         formatted = name.strip().title()
@@ -274,7 +300,7 @@ class Person(Base):
         return noramlized_inner_whitespace
 
     @validates('name')
-    def set_name(self, key: str, name: None) -> str:  # type: ignore
+    def set_name(self, key: str, name: None) -> str:
         return f'{self.first_name} {self.last_name}'
 
     @validates('orcid')
@@ -310,6 +336,29 @@ class Person(Base):
             raise Abort()
 
         return formatted_orcid
+
+    @validates('email')
+    def check_email(self, key: str, email: str | None) -> str | None:
+        variables = _get_format_string_vars(self.institution.email_format)
+        var_values = {var: getattr(self, var) for var in variables}
+
+        theoretical_email = self.institution.email_format.format_map(var_values).lower()
+
+        email = email.strip().lower() if email is not None else email
+
+        if email is None:
+            email = theoretical_email
+            rprint(
+                f'[yellow bold]WARNING[/]: [orange1]{self.name}[/] has no email. Using [orange1]{email}[/] based on format [orange1]{self.institution.email_format}[/].'
+            )
+
+        elif email != theoretical_email:
+            rprint(
+                f'[yellow bold]WARNING[/]: [orange1]{self.name}[/]\'s email [orange1]{email.lower()}[/] does not match the email format [orange1]{self.institution.email_format}[/].'
+            )
+
+        email_info = validate_email(email, check_deliverability=True)
+        return email_info.normalized
 
 
 class DataSet(Base):

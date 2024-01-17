@@ -11,6 +11,7 @@ Functions:
 """
 from collections.abc import Collection, Hashable
 from io import TextIOWrapper
+from re import findall
 from typing import Any
 
 from numpy import nan
@@ -68,3 +69,10 @@ def _sequence_representer(dumper: Dumper, data: list | tuple) -> SequenceNode:
         return dumper.represent_sequence(
             tag='tag:yaml.org,2002:seq', sequence=data, flow_style=True
         )
+
+
+def _get_format_string_vars(string: str) -> set[str]:
+    pattern = r'{(\w+)(?:\[\d+\])?}'
+    variables = set(findall(pattern, string))
+
+    return variables

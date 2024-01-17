@@ -39,7 +39,7 @@ def test_init_db(
     monkeypatch.setattr('rich.prompt.Prompt.ask', lambda *args, **kwargs: None)
 
     result = runner.invoke(app, args=args, input='\n', color=True)
-
+    print(result.stdout)
     assert result.exit_code == 0
 
     with test_db_session.begin() as session:

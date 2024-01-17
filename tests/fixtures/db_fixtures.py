@@ -94,12 +94,17 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
     )
 
     # Data models
-    institution = Institution(ror_id='021sy4w91', short_name='JAX-GM')
+    institution = Institution(
+        ror_id='021sy4w91',
+        short_name='JAX-GM',
+        email_format='{first_name}.{last_name}@jax.org',
+    )
     person = Person(
         first_name='ahmed',
         last_name='said',
         email='ahmed.said@jax.org',
         orcid='0009-0008-3754-6150',
+        institution=institution,
     )
 
     # Create delivery directory for the lab before creating the lab
@@ -162,21 +167,26 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'country': [None, None, None],
         'state': [None, None, 'CT'],
         'city': [None, None, 'Farmington'],
+        'email_format': [
+            '{first_name}.{last_name}@uconn.edu',
+            '{first_name}.{last_name}@jax.org',
+            '{first_name}.{last_name}@jax.org',
+        ],
     }
     dfs['institution.csv'] = pd.DataFrame(institutions)
 
     labs = {
-        'pi.first_name': ['Ahmed', 'John', 'Jane'],
-        'pi.last_name': ['Said', 'Doe', 'Foe'],
-        'pi.email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
-        'pi.orcid': ['0009-0008-3754-6150', None, None],
-        'institution.name': [
+        'lab.pi.first_name': ['Ahmed', 'John', 'Jane'],
+        'lab.pi.last_name': ['Said', 'Doe', 'Foe'],
+        'lab.pi.email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
+        'lab.pi.orcid': ['0009-0008-3754-6150', None, None],
+        'lab.institution.name': [
             'Jackson Laboratory for Genomic Medicine',
             'Jackson Laboratory for Mammalian Genetics',
             'Jackson Laboratory for Genomic Medicine',
         ],
-        'name': [None, 'Service Lab', None],
-        'delivery_dir': [None, 'service_lab', None],
+        'lab.name': [None, 'Service Lab', None],
+        'lab.delivery_dir': [None, 'service_lab', None],
     }
     for directory in ('ahmed_said', 'service_lab', 'jane_foe'):
         (delivery_parent_dir / directory).mkdir()
@@ -195,10 +205,15 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
     dfs['library_type.csv'] = pd.DataFrame({'name': library_types})
 
     people = {
-        'first_name': ['Ahmed', 'John', 'Jane'],
-        'last_name': ['Said', 'Doe', 'Foe'],
-        'email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
-        'orcid': ['0009-0008-3754-6150', None, None],
+        'person.first_name': ['Ahmed', 'John', 'Jane'],
+        'person.last_name': ['Said', 'Doe', 'Foe'],
+        'person.email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
+        'person.orcid': ['0009-0008-3754-6150', None, None],
+        'person.institution.name': [
+            'Jackson Laboratory for Genomic Medicine',
+            'Jackson Laboratory for Mammalian Genetics',
+            'Jackson Laboratory for Genomic Medicine',
+        ],
     }
     dfs['person.csv'] = pd.DataFrame(people)
 
@@ -254,7 +269,6 @@ def table_relationships(valid_data_dir: Path):
     tables = ('institution', 'lab', 'person')
     dfs = {table: pd.read_csv(valid_data_dir / f'{table}.csv') for table in tables}
     dfs['pi'] = dfs['person'].copy()
-    del dfs['person']
 
     # Add 1-indexed IDs to the tables that will match the IDs in the
     # database
@@ -266,10 +280,11 @@ def table_relationships(valid_data_dir: Path):
     # the lab table is the same as the 'name' column in the institution
     # table.
     table_relations = {
-        ('lab', 'institution'): (['institution.name'], ['name']),
+        ('person', 'institution'): (['person.institution.name', 'name']),
+        ('lab', 'institution'): (['lab.institution.name'], ['name']),
         ('lab', 'pi'): (
-            ['pi.first_name', 'pi.last_name', 'pi.email', 'pi.orcid'],
-            ['first_name', 'last_name', 'email', 'orcid'],
+            ['lab.pi.first_name', 'lab.pi.last_name', 'lab.pi.email', 'lab.pi.orcid'],
+            ['person.first_name', 'person.last_name', 'person.email', 'person.orcid'],
         ),
     }
 
