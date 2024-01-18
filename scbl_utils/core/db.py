@@ -21,7 +21,13 @@ from rich.prompt import Prompt
 from rich.table import Table
 from sqlalchemy import URL, create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute, Session, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    InstrumentedAttribute,
+    Relationship,
+    Session,
+    sessionmaker,
+)
 from typer import Abort
 
 from ..db_models.bases import Base
@@ -53,14 +59,44 @@ def get_matching_obj(
 ) -> Base | None:
     where_conditions = []
 
-    # TODO: this might be a bit slower than some neat vectorized function
-    for col, val in data.items():
+    excessively_nested_cols = {
+        col for col in data.keys() if col.count(OBJECT_SEP_CHAR) > 1
+    }
+    if excessively_nested_cols:
+        rprint(
+            f'While trying to retrieve a [green]{model.__tablename__}[/] that matches the data row shown below, the columns [orange]{excessively_nested_cols}[/] will be excluded from the query because they require matching an attribute of a parent of a parent of a [green]{model.__tablename__}[/], which is currently not supported.',
+            f'[orange]{data.to_dict()}[/]',
+            sep='\n\n',
+        )
+
+    # TODO: could this be sped up with a neat vectorized function
+    cleaned_data = {
+        col: val for col, val in data.items() if col not in excessively_nested_cols
+    }
+    for col, val in cleaned_data.items():
         if not isinstance(col, str) or val is None:
             continue
 
-        att: InstrumentedAttribute = getattr(model, col)
+        inspector = inspect(model)
+        if OBJECT_SEP_CHAR in col:
+            parent_name, parent_att_name = col.split(OBJECT_SEP_CHAR)
+            parent_model: type[Base] = (
+                inspect(model).relationships[parent_name].mapper.class_
+            )
 
-        where = att.ilike(val) if isinstance(val, str) else att == val
+            parent = inspector.attrs[parent_name].class_attribute
+            parent_inspector = inspect(parent_model)
+            parent_att = parent_inspector.attrs[parent_att_name].class_attribute
+
+            where = (
+                parent.has(parent_att.ilike(val))
+                if isinstance(val, str)
+                else parent.has(parent_att == val)
+            )
+        else:
+            att = inspector.attrs[col].class_attribute
+            where = att.ilike(val) if isinstance(val, str) else att == val
+
         where_conditions.append(where)
 
     # TODO: this assumes that there is only one unique match in the table
@@ -83,8 +119,6 @@ def add_dependent_rows(
     ]
     tables = {col.split(OBJECT_SEP_CHAR)[0] for col in inherent_attribute_cols}
 
-    # TODO: gracefully handle the case where a model is really just a collection of parent models.
-    # an example is the "Lab" model, which is just a PI and institution. this will involve getting the model and then removing the table from the column names
     if len(tables) == 0:
         tables = {col.split(OBJECT_SEP_CHAR)[0] for col in data.columns}
 
@@ -114,7 +148,7 @@ def add_dependent_rows(
     data_to_add = renamed_unique_data[renamed_unique_inherent_data['match'].isna()]
 
     parent_attribute_cols = [
-        col for col in data.columns if col.count(OBJECT_SEP_CHAR) == 2
+        col for col in data.columns if col.count(OBJECT_SEP_CHAR) > 1
     ]
     parent_names = {col.split(OBJECT_SEP_CHAR)[1] for col in parent_attribute_cols}
 
@@ -128,7 +162,9 @@ def add_dependent_rows(
         parent_cols = data.columns[data.columns.str.match(parent_col_pattern)].to_list()
         unique_parent_data = data[parent_cols].drop_duplicates()
 
-        renamed_cols = [col.split(OBJECT_SEP_CHAR)[2] for col in parent_cols]
+        renamed_cols = [
+            col.split(OBJECT_SEP_CHAR, maxsplit=2)[2] for col in parent_cols
+        ]
         renamed_unique_parent_data = unique_parent_data.rename(
             columns=dict(zip(parent_cols, renamed_cols))
         )
@@ -143,7 +179,7 @@ def add_dependent_rows(
 
         for idx, parent_row in unique_parent_data.loc[no_matches].iterrows():
             # Filter and str() for type-checking
-            error_table.add_row(str(idx), *parent_row.values)
+            error_table.add_row(str(idx), *(str(v) for v in parent_row.values))
 
         if error_table.row_count > 0:
             console = Console()
@@ -161,13 +197,26 @@ def add_dependent_rows(
         data_to_add.columns.isin(model.__match_args__)
     ]
 
-    # This "filtration" is also for type-checkers
-    records_to_add = [
-        {key: val for key, val in rec.items() if isinstance(key, str)}
-        for rec in data_to_add[model_attributes].to_dict(orient='records')
-    ]
+    # TODO: Is this robust? What if I miss something with 'first'
+    if 'id' in data_to_add.columns and data_to_add['id'].notna().all():
+        collection_class = {
+            att: inspector.relationships.get(att, Relationship()).collection_class
+            for att in model_attributes
+        }
+        agg_funcs = {
+            att: 'first' if collection_class[att] is None else collection_class[att]
+            for att in model_attributes
+        }
+        records_to_add = (
+            data_to_add[model_attributes]
+            .groupby('id')
+            .agg(func=agg_funcs)
+            .to_dict(orient='records')
+        )
+    else:
+        records_to_add = data_to_add[model_attributes].to_dict(orient='records')
 
-    models_to_add = (model(**record) for record in records_to_add)
+    models_to_add = [model(**record) for record in records_to_add]  # type: ignore
     unique_models_to_add = []
 
     for model_to_add in models_to_add:

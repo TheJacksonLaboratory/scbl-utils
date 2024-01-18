@@ -29,9 +29,9 @@ DATA_INSERTION_ORDER = (
     'platform',
     'library_type',
     'tag',
+    'sequencing_run',
     'data_set',
     'library',
-    'sequencing_run',
     'sample',
 )
 LEFT_FORMAT_CHAR, RIGHT_FORMAT_CHAR = r'{', r'}'

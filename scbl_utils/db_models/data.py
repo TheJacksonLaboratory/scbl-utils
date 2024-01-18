@@ -469,6 +469,7 @@ class Library(Base):
     sequencing_run_id: Mapped[str | None] = mapped_column(
         ForeignKey('sequencing_run.id'), init=False, insert_default=null()
     )
+    status: Mapped[stripped_str]
     # TODO: add actual data
 
     data_set: Mapped[DataSet] = relationship(back_populates='libraries')

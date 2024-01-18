@@ -25,6 +25,7 @@ import typer
 from rich import print as rprint
 from rich.prompt import Prompt
 from sqlalchemy import select
+from sqlalchemy.orm import Relationship
 
 from .core.data_io import load_data
 from .core.db import add_dependent_rows, db_session

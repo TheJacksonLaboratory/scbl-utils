@@ -1,10 +1,20 @@
 import pandas as pd
 
-# Create a dummy dataframe
-df = pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']})
+data = {
+    'Name': ['John', 'Alice', 'Bob', 'Emma', 'Michael', 'Olivia', 'Sophia', 'Daniel'],
+    'Age': [25, 30, 27, 22, 35, 29, 31, 26],
+    'Major': [
+        'Computer Science',
+        'Mathematics',
+        'Engineering',
+        'Mathematics',
+        'Biology',
+        'Chemistry',
+        'Computer Science',
+        'History',
+    ],
+}
 
-# Add 4 empty rows to the dataframe
-df = pd.concat([df, pd.DataFrame(columns=df.columns)], sort=False)
+df = pd.DataFrame(data)
 
-# Print the updated dataframe
-print(df)
+print(df.groupby('Major').agg({'Name': 'first', 'Age': 'first', 'Major': list}))
