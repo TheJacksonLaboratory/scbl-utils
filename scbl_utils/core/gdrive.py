@@ -128,10 +128,46 @@ class TrackingSheet:
             column = col_conversion['from']
             target_list = col_conversion['to']
             mapper = col_conversion.get('mapper', {})
+
             for target in target_list:
                 tablename = target.split(OBJECT_SEP_CHAR)[0]
                 df = dfs[tablename]
-                # TODO: you are here. you need to figure out how to either make a new column in the dataframe or add these values to an existing column
+
+                cleaned_data_column = whole_df[column].replace(mapper)
+
+                if target in df.columns:
+                    df[f'{target}_1'] = cleaned_data_column.copy()
+                else:
+                    df[target] = cleaned_data_column.copy()
+
+        # TODO: variable names here are bad and this isn't really clean
+        for tablename, df in dfs.items():
+            col_contains_suffix = df.columns.str.fullmatch(r'.+_\d+')
+
+            if not col_contains_suffix.any():
+                continue
+
+            cols_to_append = df.columns[col_contains_suffix]
+            renamed_cols_to_append = cols_to_append.str.replace(
+                pat=r'_\d+', repl=r'', regex=True
+            )
+
+            cols_to_fill = df.columns[
+                (~df.columns.isin(renamed_cols_to_append)) & (~col_contains_suffix)
+            ]
+
+            dummy_data = {col: [None] * len(df) for col in cols_to_fill}
+            dummy_df = pd.DataFrame(dummy_data)
+
+            rows_to_append = pd.DataFrame()
+            rows_to_append[renamed_cols_to_append] = df[cols_to_append].copy()
+            rows_to_append[cols_to_fill] = dummy_df.copy()
+
+            dfs[tablename] = pd.concat(
+                [df[df.columns[~col_contains_suffix]], rows_to_append],
+                axis=0,
+                ignore_index=True,
+            )
 
         # TODO: some additional validation is needed to make sure the following keys actually exist
         # This can probably be dynamically done
@@ -145,9 +181,5 @@ class TrackingSheet:
             df[[first_name_col, last_name_col]] = df[f'{col}.name'].str.split(
                 n=1, expand=True
             )
-
-        for df in dfs.values():
-            print(df)
-        quit()
 
         return dfs

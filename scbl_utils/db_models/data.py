@@ -171,7 +171,9 @@ class Lab(Base):
     )
     pi_id: Mapped[int] = mapped_column(ForeignKey('person.id'), init=False, repr=False)
 
-    institution: Mapped[Institution] = relationship(back_populates='labs')
+    institution: Mapped[Institution] = relationship(
+        back_populates='labs'
+    )  # TODO: if a person has an institution, a lab probably does not need an institution?
     pi: Mapped['Person'] = relationship()
     projects: Mapped[list['Project']] = relationship(
         back_populates='lab', default_factory=list, repr=False
@@ -282,6 +284,9 @@ class Person(Base):
 
     name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
     email: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
+    email_auto_generated: Mapped[bool] = mapped_column(
+        init=False, default=False, repr=False
+    )
     orcid: Mapped[unique_stripped_str | None] = mapped_column(
         default=None, insert_default=null(), repr=False
     )
@@ -351,6 +356,7 @@ class Person(Base):
             rprint(
                 f'[yellow bold]WARNING[/]: [orange1]{self.name}[/] has no email. Using [orange1]{email}[/] based on format [orange1]{self.institution.email_format}[/].'
             )
+            self.email_auto_generated = True
 
         elif email != theoretical_email:
             rprint(

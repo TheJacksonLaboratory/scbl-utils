@@ -55,8 +55,9 @@ def get_matching_obj(
 
     # TODO: this might be a bit slower than some neat vectorized function
     for col, val in data.items():
-        if not isinstance(col, str):
+        if not isinstance(col, str) or val is None:
             continue
+
         att: InstrumentedAttribute = getattr(model, col)
 
         where = att.ilike(val) if isinstance(val, str) else att == val
@@ -81,6 +82,11 @@ def add_dependent_rows(
         col for col in data.columns if col.count(OBJECT_SEP_CHAR) == 1
     ]
     tables = {col.split(OBJECT_SEP_CHAR)[0] for col in inherent_attribute_cols}
+
+    # TODO: gracefully handle the case where a model is really just a collection of parent models.
+    # an example is the "Lab" model, which is just a PI and institution. this will involve getting the model and then removing the table from the column names
+    if len(tables) == 0:
+        tables = {col.split(OBJECT_SEP_CHAR)[0] for col in data.columns}
 
     # TODO: this validation can be taken elsewhere. Probably in the CSV schema. also improve the error message here
     if len(tables) != 1:
