@@ -15,7 +15,7 @@ scbl-utils samplesheet-from-gdrive /path/to/fastq_dir /path/to/another/fastq_dir
 ```
 
 ### Top-level Options
-- `--config-dir, -c`: Configuration directory containing files necessary for script to run. [default: `/sc/service/etc/.config/scbl-utils`]
+- `--config-dir, -c`: Configuration directory containing files necessary for script to run. (default: `/sc/service/etc/.config/scbl-utils`)
 
 ### Commands
 
@@ -123,3 +123,6 @@ scbl-utils samplesheet-from-gdrive /path/to/fastq_dir /path/to/another/fastq_dir
                 Sample ID: libraries
             ```
     - `service-account.json`: A `json` file that stores credentials for a service account associated with a Google Cloud Project. This shouldn't be an issue, but if the script is throwing Google Drive login errors, this file might need to be regenerated and put in `{config-dir}/google-drive`. See the [gspread documentation](https://docs.gspread.org/en/v5.12.0/oauth2.html#service-account) for instructions.
+
+    #### Adding New Tool Versions
+    Because `scbl-utils samplesheet-from-gdrive` is designed to be used in conjunction with the [`nf-tenx`](https://github.com/TheJacksonLaboratory/nf-tenx) pipeline, it queries the the pipeline's `README` to know what versions of tools are available. If you are a maintainer of the `nf-tenx` project, you can simply add a new row to [this table](https://github.com/TheJacksonLaboratory/nf-tenx?tab=readme-ov-file#tools-available-on-jaxreg), and `scbl-utils` will now use that new row as the latest tool version for a given tool. Please ensure that you update the line above the table indicating when it was updated, and ensure that the tool is actually available in the [`singlecell` collection on JAXReg](https://jaxreg.jax.org/collections/3). 
