@@ -175,11 +175,19 @@ class TrackingSheet:
         for col in person_columns:
             tablename = col.split(OBJECT_SEP_CHAR)[0]
             df = dfs[tablename]
-            first_name_col, last_name_col = (
-                f'{col}.{suffix}' for suffix in ('first_name', 'last_name')
+            first_name_col, last_name_col, email_col = (
+                f'{col}.{suffix}' for suffix in ('first_name', 'last_name', 'email')
             )
             df[[first_name_col, last_name_col]] = df[f'{col}.name'].str.split(
                 n=1, expand=True
             )
+
+            if email_col in df.columns:
+                df[email_col] = df[[last_name_col, email_col]].agg(
+                    func=lambda row: row[email_col]
+                    if row[last_name_col] in str(row[email_col])
+                    else None,
+                    axis=1,
+                )
 
         return dfs

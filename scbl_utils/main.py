@@ -7,25 +7,12 @@ Functions:
     - init_db: Initialize the database with institutions and labs
 """
 # TODO list in order of priority
-# TODO implement google sheet ingestion
-# TODO improve add_rows function to recursively handle parents not in the database
-# TODO simplify code (factor things into functions)
-# TODO: make sure user errors are rprint, while internal errors are raised.
-# TODO write/fix tests
-# TODO: make distinction between models and tables and key, att, or col in var names
-# TODO add google drive spec schema
-# TODO have some kind of rule for when a list or a tuple is used if either works
-# TODO docstrings and comments (see notebook for methodology)
 # TODO remove unused imports
 from pathlib import Path
 from typing import Annotated
 
 import gspread as gs
 import typer
-from rich import print as rprint
-from rich.prompt import Prompt
-from sqlalchemy import select
-from sqlalchemy.orm import Relationship
 
 from .core.data_io import load_data
 from .core.db import add_dependent_rows, db_session

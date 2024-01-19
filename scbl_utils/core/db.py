@@ -198,7 +198,7 @@ def add_dependent_rows(
     ]
 
     # TODO: Is this robust? What if I miss something with 'first'
-    if 'id' in data_to_add.columns and data_to_add['id'].notna().all():
+    if 'id' in data_to_add.columns:
         collection_class = {
             att: inspector.relationships.get(att, Relationship()).collection_class
             for att in model_attributes
@@ -209,18 +209,26 @@ def add_dependent_rows(
         }
         records_to_add = (
             data_to_add[model_attributes]
-            .groupby('id')
+            .groupby(
+                'id', dropna=False
+            )  # TODO: this means that anything with a missing ID will be grouped together. Test this
             .agg(func=agg_funcs)
             .to_dict(orient='records')
         )
     else:
         records_to_add = data_to_add[model_attributes].to_dict(orient='records')
 
-    models_to_add = [model(**record) for record in records_to_add]  # type: ignore
+    models_to_add = (model(**rec) for rec in records_to_add)  # type: ignore
     unique_models_to_add = []
 
+    # try:
     for model_to_add in models_to_add:
         if model_to_add not in unique_models_to_add:
             unique_models_to_add.append(model_to_add)
+    # except:
+    #     print(model)
+    #     print(*records_to_add, sep='\n')
+    #     print(renamed_unique_data)
+    #     quit()
 
     session.add_all(unique_models_to_add)

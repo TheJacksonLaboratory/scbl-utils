@@ -30,6 +30,7 @@ Classes:
     - `Library`: A cDNA library, the ultimate item that is sequenced.
 """
 # TODO: submit entries to ROR for JAX?
+# TODO: make sure that compare operations are correct
 from datetime import date
 from os import getenv
 from pathlib import Path
@@ -278,9 +279,9 @@ class Person(Base):
     last_name: Mapped[stripped_str] = mapped_column(repr=False)
 
     institution_id: Mapped[int] = mapped_column(
-        ForeignKey('institution.id'), repr=False, init=False
+        ForeignKey('institution.id'), repr=False, init=False, compare=False
     )
-    institution: Mapped[Institution] = relationship(repr=False)
+    institution: Mapped[Institution] = relationship(repr=False, compare=False)
 
     name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
     email: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
@@ -347,7 +348,11 @@ class Person(Base):
         variables = _get_format_string_vars(self.institution.email_format)
         var_values = {var: getattr(self, var) for var in variables}
 
-        theoretical_email = self.institution.email_format.format_map(var_values).lower()
+        theoretical_email = (
+            self.institution.email_format.format_map(var_values)
+            .lower()
+            .replace(' ', '')
+        )
 
         email = email.strip().lower() if email is not None else email
 

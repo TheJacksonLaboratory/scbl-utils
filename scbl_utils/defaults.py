@@ -12,7 +12,7 @@ SIBLING_REPOSITORY = 'https://github.com/TheJacksonLaboratory/nf-tenx'
 # SCBL-specific settings
 CONFIG_DIR = Path('/sc/service/etc/.config/scbl-utils')
 LIBRARY_GLOB_PATTERN = 'SC*fastq*'
-LIBRARY_ID_PATTERN = r'^SC\d{7}$'
+LIBRARY_ID_PATTERN = r'^SC\d{7}\w?$'
 PROJECT_ID_PATTERN = r'^SCP\d{2}-\d{3}$'
 
 # Samplesheet formatting settings
