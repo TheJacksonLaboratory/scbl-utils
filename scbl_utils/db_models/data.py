@@ -44,7 +44,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
 from ..core.utils import _get_format_string_vars
-from ..core.validation import validate_dir, validate_str
+from ..core.validation import valid_str, validate_dir
 from ..defaults import (
     EMAIL_FORMAT_VARIABLE_PATTERN,
     LEFT_FORMAT_CHAR,
@@ -263,12 +263,13 @@ class Project(Base):
     )
 
     @validates('id')
-    def check_id(self, key: str, id: str) -> str:
-        return validate_str(
+    def check_id(self, key: str, id: str) -> str | None:
+        if valid_str(
             string=id.upper().strip(),
-            pattern=PROJECT_ID_PATTERN,
-            string_name='project ID',
-        )
+            pattern=LIBRARY_ID_PATTERN,
+            string_name='library ID',
+        ):
+            return id
 
 
 class Person(Base):
@@ -484,9 +485,10 @@ class Library(Base):
     )
 
     @validates('id')
-    def check_id(self, key: str, id: str) -> str:
-        return validate_str(
+    def check_id(self, key: str, id: str) -> str | None:
+        if valid_str(
             string=id.upper().strip(),
             pattern=LIBRARY_ID_PATTERN,
             string_name='library ID',
-        )
+        ):
+            return id

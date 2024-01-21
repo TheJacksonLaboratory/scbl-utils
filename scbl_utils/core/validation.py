@@ -12,9 +12,11 @@ from pathlib import Path
 from re import match
 
 from rich import print as rprint
+from sqlalchemy import inspect
 from typer import Abort
 
-from scbl_utils.defaults import SEE_MORE
+from ..db_models.bases import Base
+from ..defaults import OBJECT_SEP_CHAR, SEE_MORE
 
 
 def validate_dir(
@@ -60,8 +62,14 @@ def validate_dir(
 
 
 # what's a better name for the function below?
-def validate_str(string: str, pattern: str, string_name: str):
+def valid_str(
+    string: str, pattern: str, string_name: str, raise_error: bool = True
+) -> bool | str:
+    """ """
     if match(pattern, string=string) is None:
+        if not raise_error:
+            return False
+
         rprint(
             f'The {string_name} [orange1]{string}[/] does not match '
             f'the pattern [green]{pattern}[/].'
@@ -69,3 +77,25 @@ def validate_str(string: str, pattern: str, string_name: str):
         raise Abort()
 
     return string
+
+
+def valid_db_target(target: str) -> bool:
+    """_summary_
+
+    :param target: _description_
+    :type target: str
+    :return: _description_
+    :rtype: bool
+    """
+    if not 1 <= target.count(OBJECT_SEP_CHAR) <= 3:
+        return False
+
+    table, column = target.split(OBJECT_SEP_CHAR, maxsplit=1)
+
+    if table not in Base.metadata.tables.keys():
+        return False
+
+    if column.count(OBJECT_SEP_CHAR) != 0:
+        return valid_db_target(column)
+
+    return column in Base.metadata.tables[table].columns

@@ -39,7 +39,7 @@ def test_init_db(
     monkeypatch.setattr('rich.prompt.Prompt.ask', lambda *args, **kwargs: None)
 
     result = runner.invoke(app, args=args, input='\n', color=True)
-    print(result.stdout)
+
     assert result.exit_code == 0
 
     with test_db_session.begin() as session:
@@ -67,3 +67,7 @@ def test_init_db(
                     getattr(obj, f'{right_table_name}_id')
                     == joined_df.loc[i, f'{right_table_name}_id']
                 )
+
+
+def test_sync_db_with_gdrive(config_dir: Path, monkeypatch: MonkeyPatch):
+    ...

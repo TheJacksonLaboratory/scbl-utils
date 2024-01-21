@@ -107,7 +107,6 @@ def init_db(
     with Session.begin() as session:
         session.add_all(parent_data)
 
-    child_data = ('person', 'lab')
     for tablename in child_data:
         with Session.begin() as session:
             add_dependent_rows(
@@ -127,7 +126,7 @@ def sync_db_with_gdrive():
         gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES
     )
     gdrive_spec: dict = load_data(
-        gdrive_config_files['gdrive-spec.yml'],  # schema=GDRIVE_SPEC_SCHEMA
+        gdrive_config_files['gdrive-spec.yml'], schema=GDRIVE_SPEC_SCHEMA
     )
 
     gclient = gs.service_account(filename=gdrive_config_files['service-account.json'])

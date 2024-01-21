@@ -2,12 +2,14 @@ from datetime import date, timedelta
 from pathlib import Path
 from string import punctuation, whitespace
 
+from email_validator.exceptions_types import EmailUndeliverableError
 from pytest import exit as test_exit
 from pytest import mark, raises
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from typer import Abort
 
+from scbl_utils.db_models.bases import Base
 from scbl_utils.db_models.data import (
     DataSet,
     Institution,
@@ -68,7 +70,7 @@ class TestInstitutionModel:
     @mark.parametrize(
         argnames=['institution_data', 'expected_institution'], argvalues=correct_dataset
     )
-    def test_correct_ror_id(
+    def test_ror_id(
         self,
         institution_data: dict[str, str],
         expected_institution: dict[str, str],
@@ -92,13 +94,34 @@ class TestInstitutionModel:
             for key, value in expected_institution.items():
                 assert getattr(processed_institution, key) == value
 
-    def test_incorrect_ror_id(self):
+    def test_invalid_ror_id(self):
         """
         Test that given an incorrect ROR ID, the `Institution` model
         throws an error.
         """
         with raises(Abort):
-            Institution(ror_id='nonexistent_ror_id')
+            Institution(
+                ror_id='nonexistent_ror_id',
+                email_format=r'{first_name}.{last_name}@jax.org',
+            )
+
+    def test_invalid_email_format(self):
+        """
+        Test that given an incorrect email format, the `Institution`
+        model throws an error.
+        """
+        with raises(Abort):
+            Institution(
+                ror_id=self.ror_id, email_format=r'{non_existent_attribute}@jax.org'
+            )
+
+        with raises(Abort):
+            Institution(ror_id=self.ror_id, email_format=r'contant_email@jax.org')
+
+        with raises(EmailUndeliverableError):
+            Institution(
+                ror_id=self.ror_id, email_format=r'{first_name}.{last_name}@jax.abc'
+            )
 
 
 class TestLabModel:
@@ -142,7 +165,7 @@ class TestProjectModel:
         Test that the `Project` model raises error with invalid project ID.
         """
         with raises(Abort):
-            Project(id='fake-id', lab=complete_db_objects['lab'])
+            Project(id='invalid-id', lab=complete_db_objects['lab'])
 
 
 class TestPersonModel:
@@ -150,7 +173,7 @@ class TestPersonModel:
     Tests for the `Person` model.
     """
 
-    def test_valid_orcid(self):
+    def test_valid_orcid(self, complete_db_objects: dict[str, Base]):
         """
         Test that the `Person` model accepts the ORCID, regardless of
         the number of dashes.
@@ -159,7 +182,7 @@ class TestPersonModel:
         n_dashes = orcid.count('-')
         people = [
             Person(
-                first_name='Ahmed', last_name='Said', orcid=orcid.replace('-', '', i)
+                first_name='Ahmed', last_name='Said', orcid=orcid.replace('-', '', i), institution=complete_db_objects['institution']  # type: ignore
             )
             for i in range(1, n_dashes + 1)
         ]
@@ -174,12 +197,32 @@ class TestPersonModel:
             ('9999-9999-9999-9999',),
         ],
     )
-    def test_invalid_orcid(self, orcid: str):
+    def test_invalid_orcid(self, orcid: str, complete_db_objects: dict[str, Base]):
         """
         Test that the `Person` model raises error with invalid ORCID.
         """
+        # Get the necessary object for a Person
+        institution: Institution = complete_db_objects['institution']  # type: ignore
+
         with raises(Abort):
-            Person(first_name='Ahmed', last_name='Said', orcid=orcid)
+            Person(
+                first_name='Ahmed',
+                last_name='Said',
+                orcid=orcid,
+                institution=institution,
+            )
+
+    def test_autoset_email(self, complete_db_objects: dict[str, Base]):
+        """
+        Test that the `Person` model correctly sets the email attribute
+        when given the minimum required information.
+        """
+        # Get the necessary object for a Person
+        institution: Institution = complete_db_objects['institution']  # type: ignore
+        person = Person(first_name='Ahmed', last_name='Said', institution=institution)
+
+        assert person.email == f'ahmed.said@{institution.email_format.split("@")[1]}'
+        assert person.email_auto_generated == True
 
 
 class TestDataSetModel:
@@ -231,7 +274,11 @@ class TestDataSetModel:
         assert data_set_0.batch_id != data_set_2.batch_id
 
         # Also create a DataSet with a different sample submitter
-        new_person = Person(first_name='new', last_name='person')
+        new_person = Person(
+            first_name='new',
+            last_name='person',
+            institution=complete_db_objects['institution'],
+        )
         data_set_3 = DataSet(
             name='data_set_3',
             project=project,
@@ -305,7 +352,9 @@ class TestLibraryModel:
         """
         data_set = complete_db_objects['data_set']
         library_type = complete_db_objects['library_type']
-        library = Library(id=library_id, data_set=data_set, library_type=library_type)
+        library = Library(
+            id=library_id, data_set=data_set, library_type=library_type, status='status'
+        )
         assert library.id == expected_library_id
 
     def test_invalid_library_id(self, complete_db_objects: dict):
@@ -316,4 +365,6 @@ class TestLibraryModel:
         library_type = complete_db_objects['library_type']
         with raises(Abort):
             data_set = complete_db_objects['data_set']
-            Library(id='fake-id', data_set=data_set, library_type=library_type)
+            Library(
+                id='id', data_set=data_set, library_type=library_type, status='status'
+            )

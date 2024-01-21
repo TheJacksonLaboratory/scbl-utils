@@ -19,7 +19,7 @@ from rich import print as rprint
 from rich.console import Console, RenderableType
 from rich.prompt import Prompt
 from rich.table import Table
-from sqlalchemy import URL, create_engine, inspect, select
+from sqlalchemy import URL, create_engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -30,9 +30,10 @@ from sqlalchemy.orm import (
 )
 from typer import Abort
 
+from scbl_utils.core.utils import _get_matching_obj
+
 from ..db_models.bases import Base
 from ..defaults import DOCUMENTATION, OBJECT_SEP_CHAR, OBJECT_SEP_PATTERN
-from .utils import _get_user_input
 
 
 def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Session]:
@@ -54,58 +55,6 @@ def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Sess
     return Session
 
 
-def get_matching_obj(
-    data: pd.Series, session: Session, model: type[Base]
-) -> Base | None:
-    where_conditions = []
-
-    excessively_nested_cols = {
-        col for col in data.keys() if col.count(OBJECT_SEP_CHAR) > 1
-    }
-    if excessively_nested_cols:
-        rprint(
-            f'While trying to retrieve a [green]{model.__tablename__}[/] that matches the data row shown below, the columns [orange]{excessively_nested_cols}[/] will be excluded from the query because they require matching an attribute of a parent of a parent of a [green]{model.__tablename__}[/], which is currently not supported.',
-            f'[orange]{data.to_dict()}[/]',
-            sep='\n\n',
-        )
-
-    # TODO: could this be sped up with a neat vectorized function
-    cleaned_data = {
-        col: val for col, val in data.items() if col not in excessively_nested_cols
-    }
-    for col, val in cleaned_data.items():
-        if not isinstance(col, str) or val is None:
-            continue
-
-        inspector = inspect(model)
-        if OBJECT_SEP_CHAR in col:
-            parent_name, parent_att_name = col.split(OBJECT_SEP_CHAR)
-            parent_model: type[Base] = (
-                inspect(model).relationships[parent_name].mapper.class_
-            )
-
-            parent = inspector.attrs[parent_name].class_attribute
-            parent_inspector = inspect(parent_model)
-            parent_att = parent_inspector.attrs[parent_att_name].class_attribute
-
-            where = (
-                parent.has(parent_att.ilike(val))
-                if isinstance(val, str)
-                else parent.has(parent_att == val)
-            )
-        else:
-            att = inspector.attrs[col].class_attribute
-            where = att.ilike(val) if isinstance(val, str) else att == val
-
-        where_conditions.append(where)
-
-    # TODO: this assumes that there is only one unique match in the table
-    stmt = select(model).where(*where_conditions)
-    match = session.execute(stmt).scalar()
-
-    return match
-
-
 # TODO: this function is good but needs some simplification. Come back to it
 def add_dependent_rows(
     session: Session, data: pd.DataFrame | list[dict[str, Any]], data_source: str
@@ -113,7 +62,6 @@ def add_dependent_rows(
     """ """
     data = pd.DataFrame.from_records(data) if isinstance(data, list) else data
 
-    # TODO: again, some kind of validation about the format of column names will have to happen, whether using jsonschema or pydantic
     inherent_attribute_cols = [
         col for col in data.columns if col.count(OBJECT_SEP_CHAR) == 1
     ]
@@ -122,7 +70,6 @@ def add_dependent_rows(
     if len(tables) == 0:
         tables = {col.split(OBJECT_SEP_CHAR)[0] for col in data.columns}
 
-    # TODO: this validation can be taken elsewhere. Probably in the CSV schema. also improve the error message here
     if len(tables) != 1:
         rprint(
             f'The data must represent only one table in the database, but [orange1]{tables}[/] were found.'
@@ -143,7 +90,7 @@ def add_dependent_rows(
     ].copy()
 
     renamed_unique_inherent_data['match'] = renamed_unique_inherent_data.agg(
-        get_matching_obj, axis=1, session=session, model=model
+        _get_matching_obj, axis=1, session=session, model=model
     )
     data_to_add = renamed_unique_data[renamed_unique_inherent_data['match'].isna()]
 
@@ -170,7 +117,7 @@ def add_dependent_rows(
         )
 
         unique_parent_data[parent_name] = renamed_unique_parent_data.agg(
-            get_matching_obj, axis=1, session=session, model=parent_model
+            _get_matching_obj, axis=1, session=session, model=parent_model
         )
         no_matches = unique_parent_data[parent_name].isna()
 
@@ -221,14 +168,8 @@ def add_dependent_rows(
     models_to_add = (model(**rec) for rec in records_to_add)  # type: ignore
     unique_models_to_add = []
 
-    # try:
     for model_to_add in models_to_add:
         if model_to_add not in unique_models_to_add:
             unique_models_to_add.append(model_to_add)
-    # except:
-    #     print(model)
-    #     print(*records_to_add, sep='\n')
-    #     print(renamed_unique_data)
-    #     quit()
 
     session.add_all(unique_models_to_add)

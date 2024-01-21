@@ -18,8 +18,10 @@ from rich import print as rprint
 from sqlalchemy import inspect
 from typer import Abort
 
+from ..db_models import data, definitions
 from ..db_models.bases import Base
 from ..defaults import OBJECT_SEP_CHAR
+from .validation import valid_db_target
 
 sheet_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -42,16 +44,21 @@ class TrackingSheet:
         cls,
         cols_to_targets: Collection[dict[str, str | Collection[str] | dict[str, str]]],
     ):
-        tables = set()
-        for col_dict in cols_to_targets:
-            for target in col_dict['to']:
-                tables.add(target.split(OBJECT_SEP_CHAR)[0])
-        not_in_db = {f'[orange1]{t}' for t in (tables - Base.metadata.tables.keys())}
+        invalid_db_targets = {
+            col_dict['from']: {
+                target for target in col_dict['to'] if not valid_db_target(target)
+            }
+            for col_dict in cols_to_targets
+        }
 
-        if not_in_db:
+        # TODO: informative error messages
+        if any(invalid_db_targets.values()):
             rprint(
-                f'The targets in [green]cols_to_targets[/] specified in [orange1]gdrive-spec.yml[/] must be tables in the database. The following tables are not:\n',
-                *not_in_db,
+                'something about columns',
+                *(
+                    f'[orange]{sheet_column}[/]: [orange1]{invalid_targets}[/]'
+                    for sheet_column, invalid_targets in invalid_db_targets.items()
+                ),
                 sep='\n',
             )
             raise Abort()
@@ -89,31 +96,47 @@ class TrackingSheet:
 
         return self
 
-    def to_dfs(self) -> dict[str, pd.DataFrame]:
-        # Get the data out of the sheet, assigning header_row and data
-        values = self.worksheet.get_values(
-            combine_merged_cells=True,  # value_render_option='UNFORMATTED_VALUE' # TODO: this argument messes up dates
-        )
-        header = values[self.head]
-        data = values[self.head + 1 :]
+    def _clean_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        """_summary_
 
-        whole_df = pd.DataFrame(data, columns=header)
-
+        :param df: _description_
+        :type df: pd.DataFrame
+        :param replace: _description_
+        :type replace: dict[str, Any]
+        :param empty_means_drop: _description_
+        :type empty_means_drop: list[str]
+        :param type_converters: _description_
+        :type type_converters: dict[str, str]
+        :return: _description_
+        :rtype: pd.DataFrame
+        """
+        cleaned_df = df.copy()
         # Strip whitespace
-        for col, series in whole_df.select_dtypes(include='object').items():
-            whole_df[col] = series.str.strip()
+        for col, series in df.select_dtypes(include='object').items():
+            cleaned_df[col] = series.str.strip()
 
         # Replace values case-insensitively and convert types
         replace = {rf'(?i)^{key}$': val for key, val in self.replace.items()}
-        whole_df.replace(regex=replace, inplace=True)
+        cleaned_df.replace(regex=replace, inplace=True)
 
         # Drop rows that are empty by the criteria specified in
         # empty_means_drop
-        whole_df.dropna(subset=self.empty_means_drop, inplace=True, how='any')
+        cleaned_df.dropna(subset=self.empty_means_drop, inplace=True, how='any')
 
         # Convert types
-        whole_df = whole_df.astype(self.type_converters)
+        cleaned_df = cleaned_df.astype(self.type_converters)
+        return cleaned_df
 
+    def _split_combine_df(self, df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+        """_summary_
+
+        :param df: _description_
+        :type df: pd.DataFrame
+        :param cols_to_targets: _description_
+        :type cols_to_targets: Collection[dict[str, str  |  Collection[str]  |  dict[str, str]]]
+        :return: _description_
+        :rtype: dict[str, pd.DataFrame]
+        """
         # Divide the dataframe into db tables
         db_tables = {
             target.split(OBJECT_SEP_CHAR)[0]
@@ -133,7 +156,7 @@ class TrackingSheet:
                 tablename = target.split(OBJECT_SEP_CHAR)[0]
                 df = dfs[tablename]
 
-                cleaned_data_column = whole_df[column].replace(mapper)
+                cleaned_data_column = df[column].replace(mapper)
 
                 if target in df.columns:
                     df[f'{target}_1'] = cleaned_data_column.copy()
@@ -169,8 +192,18 @@ class TrackingSheet:
                 ignore_index=True,
             )
 
-        # TODO: some additional validation is needed to make sure the following keys actually exist
-        # This can probably be dynamically done
+        return dfs
+
+    def _assign_first_last_names(
+        self, dfs: dict[str, pd.DataFrame]
+    ) -> dict[str, pd.DataFrame]:
+        """_summary_
+
+        :param dfs: _description_
+        :type dfs: dict[str, pd.DataFrame]
+        :return: _description_
+        :rtype: dict[str, pd.DataFrame]
+        """
         person_columns = ['person', 'lab.pi', 'data_set.submitter', 'project.people']
         for col in person_columns:
             tablename = col.split(OBJECT_SEP_CHAR)[0]
@@ -191,3 +224,15 @@ class TrackingSheet:
                 )
 
         return dfs
+
+    def to_dfs(self) -> dict[str, pd.DataFrame]:
+        # Get the data out of the sheet, assigning header_row and data
+        values = self.worksheet.get_values(
+            combine_merged_cells=True,  # value_render_option='UNFORMATTED_VALUE' # TODO: this argument messes up dates
+        )
+        header = values[self.head]
+        data = values[self.head + 1 :]
+
+        whole_df = self._clean_df(pd.DataFrame(data, columns=header))
+        dfs = self._split_combine_df(whole_df)
+        return self._assign_first_last_names(dfs)

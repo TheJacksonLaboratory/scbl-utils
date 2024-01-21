@@ -83,24 +83,31 @@ GDRIVE_SPEC_SCHEMA = {
             'type': 'string',
             'pattern': r'^https://docs.google.com/spreadsheets/d/.*$',
         },
+        'main_sheet_id': {'type': 'string', 'pattern': r'^\d+$'},
         'worksheets': {
-            'type': 'array',
-            'items': {
-                'type': 'object',
-                'properties': {
-                    'id': {'type': 'string'},
-                    'db_table': {
-                        'type': 'string'
-                    },  # TODO: add enum to limit to database tables
-                    'colunns': {
-                        'type': 'object'
-                    },  # TODO: add regex that enforces values in this object are table.column notation, but specifically for the tables that exist in our db
+            'type': 'object',
+            'properties': {
+                'replace': {'type': 'object'},
+                'index_col': {'type': 'string'},
+                'empty_means_drop': {'type': 'array', 'items': {'type': 'string'}},
+                'cols_to_targets': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'from': {'type': 'string'},
+                            'to': {'type': 'array', 'items': {'type': 'string'}},
+                            'mapper': {'type': 'object'},
+                        },
+                    },
+                    'type_converters': {'type': 'object'},
+                    'head': {'type': 'integer'},
                 },
             },
+            'required': ['index_col', 'empty_means_drop', 'head'],
+            'additionalProperties': ['replace', 'cols_to_targets', 'type_converters'],
         },
     },
-    'required': ['folder_id', 'service_account_file'],
-    'additionalProperties': False,
 }
 
 # JSON schemas for CSV files

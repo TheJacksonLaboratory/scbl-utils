@@ -124,7 +124,9 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
         submitter=person,
     )
     sample = Sample(name='sample', data_set=data_set, tag=tag)
-    library = Library(id='SC9900000', data_set=data_set, library_type=library_type)
+    library = Library(
+        id='SC9900000', data_set=data_set, library_type=library_type, status='status'
+    )
     sequencing_run = SequencingRun(id='99-scbct-000', libraries=[library])
 
     return {
