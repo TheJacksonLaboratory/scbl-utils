@@ -56,7 +56,7 @@ def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Sess
 
 
 # TODO: this function is good but needs some simplification. Come back to it
-def add_dependent_rows(
+def data_rows_to_db(
     session: Session, data: pd.DataFrame | list[dict[str, Any]], data_source: str
 ):
     """ """

@@ -14,8 +14,9 @@ Classes:
     that will be used in the samplesheet passed as input to the `nf-tenx`
     pipeline
 """
+from collections.abc import Hashable
 from re import sub
-from typing import Annotated
+from typing import Annotated, Any
 
 from rich import print as rprint
 from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass, mapped_column

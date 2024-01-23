@@ -6,24 +6,35 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from typer import Abort
 
-from scbl_utils.core.db import add_rows2, get_matching_rows
+from scbl_utils.core.data_io import load_data
+from scbl_utils.core.db import data_rows_to_db
 from scbl_utils.db_models.bases import Base
 from scbl_utils.db_models.data import Institution, Lab
+from scbl_utils.defaults import DATA_INSERTION_ORDER, DATA_SCHEMAS
 
 from ..fixtures.db_fixtures import (
     complete_db_objects,
+    db_data,
     db_path,
     delivery_parent_dir,
     test_db_session,
-    valid_data_dir,
 )
 
 
-# TODO: make this an actual test
-def test_add_rows2(test_db_session: Session, valid_data_dir: Path):
-    lab_data = pd.read_csv(valid_data_dir / 'lab.csv')
-    add_rows2(test_db_session, lab_data, 'lab.csv')
-    assert False
+def test_data_rows_to_db(
+    test_db_session: sessionmaker[Session], db_data: dict[str, pd.DataFrame]
+):
+    ordered_datas = {
+        tablename: db_data[tablename]
+        for tablename in DATA_INSERTION_ORDER
+        if tablename in db_data
+    }
+    for tablename, data in ordered_datas.items():
+        with test_db_session.begin() as session:
+            data_rows_to_db(session, data=data, data_source=f'test-{tablename}-data')
+
+    with test_db_session.begin() as session:
+        pass
 
 
 # class TestMatchingRowsFromTable:

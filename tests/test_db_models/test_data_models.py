@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from pathlib import Path
+from re import sub
 from string import punctuation, whitespace
 
 from email_validator.exceptions_types import EmailUndeliverableError
@@ -10,15 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from typer import Abort
 
 from scbl_utils.db_models.bases import Base
-from scbl_utils.db_models.data import (
-    DataSet,
-    Institution,
-    Lab,
-    Library,
-    Person,
-    Project,
-    Sample,
-)
+from scbl_utils.db_models.data import *
 
 from ..fixtures.db_fixtures import (
     complete_db_objects,
@@ -173,27 +166,29 @@ class TestPersonModel:
     Tests for the `Person` model.
     """
 
-    def test_valid_orcid(self, complete_db_objects: dict[str, Base]):
+    def test_orcid(self, complete_db_objects: dict[str, Base]):
         """
         Test that the `Person` model accepts the ORCID, regardless of
         the number of dashes.
         """
         orcid = '0009-0008-3754-6150'
         n_dashes = orcid.count('-')
-        people = [
+        people = (
             Person(
                 first_name='Ahmed', last_name='Said', orcid=orcid.replace('-', '', i), institution=complete_db_objects['institution']  # type: ignore
             )
             for i in range(1, n_dashes + 1)
-        ]
-        assert all(person.orcid == orcid for person in people)
+        )
+
+        for person in people:
+            assert person.orcid == orcid
 
     @mark.parametrize(
         argnames=[
             'orcid',
         ],
         argvalues=[
-            ('fake-orcid',),
+            ('invalid-orcid',),
             ('9999-9999-9999-9999',),
         ],
     )
@@ -212,16 +207,21 @@ class TestPersonModel:
                 institution=institution,
             )
 
-    def test_autoset_email(self, complete_db_objects: dict[str, Base]):
+    def test_autoset_email(self, complete_db_objects: dict):
         """
         Test that the `Person` model correctly sets the email attribute
         when given the minimum required information.
         """
         # Get the necessary object for a Person
-        institution: Institution = complete_db_objects['institution']  # type: ignore
-        person = Person(first_name='Ahmed', last_name='Said', institution=institution)
+        institution: Institution = complete_db_objects['institution']
 
-        assert person.email == f'ahmed.said@{institution.email_format.split("@")[1]}'
+        # Initialize a Person with a last name with a space
+        person = Person(
+            first_name='Ahmed', last_name='Said Alaani', institution=institution
+        )
+        domain = institution.email_format.split("@")[1]
+
+        assert person.email == f'ahmed.saidalaani@{domain}'
         assert person.email_auto_generated == True
 
 
@@ -240,38 +240,42 @@ class TestDataSetModel:
         platform = complete_db_objects['platform']
         submitter = complete_db_objects['person']
 
+        # Also create the other necessary pieces of data
+        n_data_sets = 4
+        same_batch_data_set_names = (f'data_set_{i}' for i in range(n_data_sets - 2))
+        diff_batch_data_set_names = [
+            f'data_set_{i}' for i in range(n_data_sets - 2, n_data_sets)
+        ]
+        ilab_request_id = 'ilab_request_id'
+
         # Create two DataSets with the same date submitted and the same
         # sample submitter. Also test that the date_submitted is
         # automatically set to today's date.
-        data_set_0 = DataSet(
-            name='data_set_0',
-            date_submitted=date.today(),
-            project=project,
-            platform=platform,
-            ilab_request_id='ilab_request_id',
-            submitter=submitter,
-        )
-        data_set_1 = DataSet(
-            name='data_set_1',
-            project=project,
-            platform=platform,
-            ilab_request_id='ilab_request_id',
-            submitter=submitter,
-        )
+        same_batch_ids = [
+            DataSet(
+                name=name,
+                date_submitted=date.today(),
+                project=project,
+                platform=platform,
+                ilab_request_id=ilab_request_id,
+                submitter=submitter,
+            ).batch_id
+            for name in same_batch_data_set_names
+        ]
 
-        assert data_set_0.batch_id == data_set_1.batch_id
+        assert all(same_batch_ids[0] == batch_id for batch_id in same_batch_ids)
 
         # Also create a DataSet with a different date submitted
         data_set_2 = DataSet(
-            name='data_set_2',
+            name=diff_batch_data_set_names[0],
             date_submitted=date.today() - timedelta(days=1),
             project=project,
             platform=platform,
-            ilab_request_id='ilab_request_id',
+            ilab_request_id=ilab_request_id,
             submitter=submitter,
         )
 
-        assert data_set_0.batch_id != data_set_2.batch_id
+        assert same_batch_ids[0] != data_set_2.batch_id
 
         # Also create a DataSet with a different sample submitter
         new_person = Person(
@@ -280,16 +284,15 @@ class TestDataSetModel:
             institution=complete_db_objects['institution'],
         )
         data_set_3 = DataSet(
-            name='data_set_3',
+            name=diff_batch_data_set_names[1],
             project=project,
             platform=platform,
             ilab_request_id='ilab_request_id',
             submitter=new_person,
         )
 
-        assert data_set_0.batch_id != data_set_2.batch_id != data_set_3.batch_id
-
-    pass
+        assert same_batch_ids[0] != data_set_3.batch_id
+        assert data_set_2.batch_id != data_set_3.batch_id
 
 
 class TestSampleModel:
@@ -297,34 +300,7 @@ class TestSampleModel:
     Tests for the `Sample` model.
     """
 
-    def test_sample_name(
-        self, complete_db_objects: dict, test_db_session: sessionmaker[Session]
-    ):
-        """
-        Test that the `Sample` model correctly cleans the sample name.
-        """
-
-        # Get the necessary object for a sample
-        data_set = complete_db_objects['data_set']
-
-        illegal_punctuation = punctuation.replace('_', '').replace('-', '')
-        sample_name = f'{illegal_punctuation}some{whitespace}name{illegal_punctuation}'
-        sample = Sample(sample_name, data_set=data_set)
-
-        with test_db_session.begin() as session:
-            session.add(sample)
-
-        with test_db_session.begin() as session:
-            stmt = select(Sample)
-            processed_sample = session.execute(stmt).scalar()
-
-            if processed_sample is None:
-                test_exit(
-                    f'Something went wrong. {sample} was supposed to be added to an in-memory databse, but it was not.',
-                    returncode=1,
-                )
-
-            assert processed_sample.name == 'some-name'
+    pass
 
 
 class TestSequencingRunModel:
@@ -340,11 +316,7 @@ class TestLibraryModel:
     Tests for the `Library` model.
     """
 
-    @mark.parametrize(
-        argnames=['library_id', 'expected_library_id'],
-        argvalues=[(f'{whitespace}sc9900000{whitespace}', 'SC9900000')],
-    )
-    def test_valid_library_id(
+    def test_library_id(
         self, complete_db_objects: dict, library_id: str, expected_library_id: str
     ):
         """

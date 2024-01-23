@@ -77,8 +77,8 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
     """
     Create valid, interlinked objects for each table in the database.
     Useful for testing models that depend on other models, so you have
-    the necessary models made without having to make them in the test
-    itself. Note that these models are not added to a database.
+    the necessary parent objects made without having to make them in the
+    test itself. Note that these models are not added to a database.
     """
     # Definition models
     platform = Platform(name='platform')
@@ -145,37 +145,30 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
 
 
 @fixture
-def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
+def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
     """
-    Create valid CSVs that can be passed to init-db for database
-    initialization. Also returns a dict mapping the relationship of labs
-    to institutions and PIs, since this is the key feature of init-db.
+    Create dummy data for insertion into the database.
     """
-    data_dir = tmp_path / 'data'
-    data_dir.mkdir()
-
-    # Create the data. Note missing values, which will be handled by
-    # init-db
     dfs: dict[str, pd.DataFrame] = {}
 
     institutions = {
-        'ror_id': ['02der9h97', '021sy4w91', None],
-        'name': [
+        'institution.ror_id': ['02der9h97', '021sy4w91', None],
+        'institution.name': [
             None,
             'Jackson Laboratory for Mammalian Genetics',
             'Jackson Laboratory for Genomic Medicine',
         ],
-        'short_name': [None, 'JAX-MG', 'JAX-GM'],
-        'country': [None, None, None],
-        'state': [None, None, 'CT'],
-        'city': [None, None, 'Farmington'],
-        'email_format': [
-            '{first_name}.{last_name}@uconn.edu',
-            '{first_name}.{last_name}@jax.org',
-            '{first_name}.{last_name}@jax.org',
+        'institution.short_name': [None, 'JAX-MG', 'JAX-GM'],
+        'institution.country': [None, None, None],
+        'institution.state': [None, None, 'CT'],
+        'institution.city': [None, None, 'Farmington'],
+        'institution.email_format': [
+            r'{first_name}.{last_name}@uconn.edu',
+            r'{first_name}.{last_name}@jax.org',
+            r'{first_name}.{last_name}@jax.org',
         ],
     }
-    dfs['institution.csv'] = pd.DataFrame(institutions)
+    dfs['institution'] = pd.DataFrame(institutions)
 
     labs = {
         'lab.pi.first_name': ['Ahmed', 'John', 'Jane'],
@@ -192,7 +185,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
     }
     for directory in ('ahmed_said', 'service_lab', 'jane_foe'):
         (delivery_parent_dir / directory).mkdir()
-    dfs['lab.csv'] = pd.DataFrame(labs)
+    dfs['lab'] = pd.DataFrame(labs)
 
     library_types = [
         'Antibody Capture',
@@ -204,7 +197,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'Multiplexing Capture',
         'Spatial Gene Expression',
     ]
-    dfs['library_type.csv'] = pd.DataFrame({'name': library_types})
+    dfs['library_type'] = pd.DataFrame({'library_type.name': library_types})
 
     people = {
         'person.first_name': ['Ahmed', 'John', 'Jane'],
@@ -217,7 +210,7 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
             'Jackson Laboratory for Genomic Medicine',
         ],
     }
-    dfs['person.csv'] = pd.DataFrame(people)
+    dfs['person'] = pd.DataFrame(people)
 
     # TODO: can we use the canonical 10x names for these platforms?
     platforms = [
@@ -240,36 +233,51 @@ def valid_data_dir(tmp_path: Path, delivery_parent_dir: Path) -> Path:
         'Visium FFPE',
         'Visium CytAssist FFPE',
     ]
-    dfs['platform.csv'] = pd.DataFrame({'name': platforms})
+    dfs['platform'] = pd.DataFrame({'platform.name': platforms})
 
-    # TODO: get this from 10X themselves for more recent?
-    dfs['tag.csv'] = pd.read_csv(
+    # TODO: get this from 10X themselves for more recent information?
+    dfs['tag'] = pd.read_csv(
         'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/tags.csv'
     ).rename(
         columns={
-            'tag_id': 'id',
-            'tag_name': 'name',
-            'tag_sequence': 'sequence',
-            '5p_offset': 'five_prime_offset',
+            'tag_id': 'tag.id',
+            'tag_name': 'tag.name',
+            'tag_sequence': 'tag.sequence',
+            '5p_offset': 'tag.five_prime_offset',
         }
     )
 
-    for filename, df in dfs.items():
-        df.to_csv(data_dir / filename, index=False)
+    projects = {
+        'project.id': ['SCP99-000', 'SCP99-001'],
+        'lab.pi.name': ['Ahmed Said', 'John Doe'],
+    }
+
+    return dfs
+
+
+def data_dir(db_data: dict[str, pd.DataFrame], tmp_path: Path):
+    """
+    Create a data directory with all the data necessary to initialize
+    and fill a database.
+    """
+    data_dir = tmp_path / 'data'
+    data_dir.mkdir()
+
+    for tablename, df in db_data.items():
+        df.to_csv(data_dir / f'{tablename}.csv', index=False)
 
     return data_dir
 
 
 @fixture
-def table_relationships(valid_data_dir: Path):
+def table_relationships(db_data: dict[str, pd.DataFrame]):
     """
     Return the relationships between labs, institutions, and PIs for
     testing. Can be easily extended for more relationships
     """
     # Read the tables and rename the 'person' table to 'pi' because a
     # Lab has a PI, not a Person
-    tables = ('institution', 'lab', 'person')
-    dfs = {table: pd.read_csv(valid_data_dir / f'{table}.csv') for table in tables}
+    dfs = db_data.copy()
     dfs['pi'] = dfs['person'].copy()
 
     # Add 1-indexed IDs to the tables that will match the IDs in the
@@ -282,8 +290,8 @@ def table_relationships(valid_data_dir: Path):
     # the lab table is the same as the 'name' column in the institution
     # table.
     table_relations = {
-        ('person', 'institution'): (['person.institution.name', 'name']),
-        ('lab', 'institution'): (['lab.institution.name'], ['name']),
+        ('person', 'institution'): (['person.institution.name', 'institution.name']),
+        ('lab', 'institution'): (['lab.institution.name'], ['institution.name']),
         ('lab', 'pi'): (
             ['lab.pi.first_name', 'lab.pi.last_name', 'lab.pi.email', 'lab.pi.orcid'],
             ['person.first_name', 'person.last_name', 'person.email', 'person.orcid'],
@@ -301,7 +309,7 @@ def table_relationships(valid_data_dir: Path):
 
 
 @fixture
-def n_rows_per_table(valid_data_dir: Path):
+def n_rows_per_table(db_data: Path):
     """ """
-    dfs = {path.stem: pd.read_csv(path) for path in valid_data_dir.iterdir()}
+    dfs = {path.stem: pd.read_csv(path) for path in db_data.iterdir()}
     return {table: df.shape[0] for table, df in dfs.items()}

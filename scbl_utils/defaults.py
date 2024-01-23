@@ -20,7 +20,6 @@ SEP_CHARS = r'\s_-'
 SEP_PATTERN = rf'[{SEP_CHARS}]'
 SAMPLENAME_BLACKLIST_PATTERN = rf'[^{ascii_letters + digits + SEP_CHARS}]'
 
-# TODO: write a test to make sure that these are all the tables and that the email_format_variable_chars are just two chars
 DATA_INSERTION_ORDER = (
     'institution',
     'person',
@@ -59,22 +58,22 @@ DB_INIT_FILES = [
 OBJECT_SEP_CHAR = '.'
 OBJECT_SEP_PATTERN = r'\.'
 
-# JSON schema for db configuration file
+# Handy variables for JSON schema
 _schema_draft_version = 'https://json-schema.org/draft/2020-12/schema'
-_db_drivers = ['sqlite']
+_string_or_null = ['string', 'null']
+
 DB_SPEC_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'object',
     'properties': {
-        'database': {'type': ['string', 'null']},
-        'drivername': {'type': 'string', 'enum': _db_drivers},
+        'database': {'type': _string_or_null},
+        'drivername': {'type': 'string', 'enum': ['sqlite']},
     },
     'required': ['database', 'drivername'],
     'additionalProperties': False,
 }
 
 # JSON schema for Google Drive configuration file
-# TODO: fix this
 GDRIVE_SPEC_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'object',
@@ -110,146 +109,78 @@ GDRIVE_SPEC_SCHEMA = {
     },
 }
 
-# JSON schemas for CSV files
-_string_or_null = ['string', 'null']
-INSTITUION_SCHEMA = {
-    '$schema': _schema_draft_version,
-    'type': 'array',
-    'items': {
-        'type': 'object',
-        'properties': {
-            'name': {'type': _string_or_null},
-            'short_name': {'type': _string_or_null},
-            'email_format': {'type': 'string'},
-            'country': {'type': _string_or_null, 'minLength': 2, 'maxLength': 2},
-            'state': {'type': _string_or_null, 'minLength': 2, 'maxLength': 2},
-            'city': {'type': _string_or_null},
-            'ror_id': {'type': _string_or_null},
-        },
-        'required': [
-            'name',
-            'short_name',
-            'email_format',
-            'country',
-            'state',
-            'city',
-            'ror_id',
-        ],
-        'additionalProperties': False,
+# All CSVs follow same skeleton of a schema, so just define the
+# properties
+_institution_properties = {
+    'institution.name': {'type': _string_or_null},
+    'institution.short_name': {'type': _string_or_null},
+    'institution.email_format': {'type': 'string'},
+    'institution.country': {
+        'type': _string_or_null,
+        'minLength': 2,
+        'maxLength': 2,
     },
+    'institution.state': {
+        'type': _string_or_null,
+        'minLength': 2,
+        'maxLength': 2,
+    },
+    'institution.city': {'type': _string_or_null},
+    'institution.ror_id': {'type': _string_or_null},
 }
 
 ORCID_PATTERN = r'^(\d{4})-?(\d{4})-?(\d{4})-?(\d{4}|\d{3}X)$'
-LAB_SCHEMA = {
-    '$schema': _schema_draft_version,
-    'type': 'array',
-    'items': {
-        'type': 'object',
-        'properties': {
-            'lab.institution.name': {'type': 'string'},
-            'lab.pi.email': {'type': _string_or_null, 'format': 'email'},
-            'lab.pi.first_name': {'type': 'string'},
-            'lab.pi.last_name': {'type': 'string'},
-            'lab.pi.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
-            'lab.delivery_dir': {'type': _string_or_null},
-            'lab.name': {'type': _string_or_null},
-        },
-        'required': [
-            'lab.pi.email',
-            'lab.pi.first_name',
-            'lab.pi.last_name',
-            'lab.pi.orcid',
-            'lab.institution.name',
-            'lab.delivery_dir',
-            'lab.name',
-        ],
-        'additionalProperties': False,
-    },
+_lab_properties = {
+    'lab.institution.name': {'type': 'string'},
+    'lab.pi.email': {'type': _string_or_null, 'format': 'email'},
+    'lab.pi.first_name': {'type': 'string'},
+    'lab.pi.last_name': {'type': 'string'},
+    'lab.pi.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+    'lab.delivery_dir': {'type': _string_or_null},
+    'lab.name': {'type': _string_or_null},
 }
 
-PERSON_SCHEMA = {
-    '$schema': _schema_draft_version,
-    'type': 'array',
-    'items': {
-        'type': 'object',
-        'properties': {
-            'person.first_name': {'type': 'string'},
-            'person.last_name': {'type': 'string'},
-            'person.email': {'type': _string_or_null, 'format': 'email'},
-            'person.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
-            'person.institution.name': {'type': 'string'},
-        },
-        'required': [
-            'person.first_name',
-            'person.last_name',
-            'person.email',
-            'person.orcid',
-        ],
-        'additionalProperties': False,
-    },
+_person_properties = {
+    'person.first_name': {'type': 'string'},
+    'person.last_name': {'type': 'string'},
+    'person.email': {'type': _string_or_null, 'format': 'email'},
+    'person.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+    'person.institution.name': {'type': 'string'},
 }
 
-# TODO: eventually update this
-PLATFORM_SCHEMA = {
-    '$schema': _schema_draft_version,
-    'type': 'array',
-    'items': {
-        'type': 'object',
-        'properties': {
-            'name': {'type': 'string'},
-        },
-        'required': ['name'],
-        'additionalProperties': False,
-    },
+_platform_properties = {'platform.name': {'type': 'string'}}
+
+_library_type_properties = {'library_type.name': {'type': 'string'}}
+
+_tag_properties = {
+    'tag.id': {'type': 'string'},
+    'tag.name': {'type': _string_or_null},
+    'tag.five_prime_offset': {'type': 'integer'},
+    'tag.tag_type': {'type': 'string'},
+    'tag.read': {'type': 'string', 'pattern': r'^R\d$'},
+    'tag.sequence': {'type': 'string', 'pattern': r'^[ACGTN]*$'},
+    'tag.pattern': {'type': 'string', 'pattern': r'^[35]P[ACTGN]*\(BC\)$'},
 }
 
-# TODO eventually update this
-LIBRARY_TYPE_SCHEMA = {
-    '$schema': _schema_draft_version,
-    'type': 'array',
-    'items': {
-        'type': 'object',
-        'properties': {
-            'name': {'type': 'string'},
-        },
-        'required': ['name'],
-        'additionalProperties': False,
-    },
+# Construct the full schema from the properties
+_properties: dict[str, dict] = {
+    'institution': _institution_properties,
+    'lab': _lab_properties,
+    'person': _person_properties,
+    'platform': _platform_properties,
+    'library_type': _library_type_properties,
+    'tag': _tag_properties,
 }
-
-# TODO: eventually update this
-TAG_SCHEMA = {
-    '$schema': _schema_draft_version,
-    'type': 'array',
-    'items': {
-        'type': 'object',
-        'properties': {
-            'id': {'type': 'string'},  # TODO: add a pattern to this?
-            'name': {'type': ['string', 'null']},
-            'five_prime_offset': {'type': 'integer'},
-            'tag_type': {'type': 'string'},
-            'read': {'type': 'string', 'pattern': r'^R\d$'},
-            'sequence': {'type': 'string', 'pattern': r'^[ACGTN]*$'},
-            'pattern': {'type': 'string', 'pattern': r'^[35]P[ACTGN]*\(BC\)$'},
-        },
-        'required': [
-            'id',
-            'name',
-            'five_prime_offset',
-            'tag_type',
-            'read',
-            'sequence',
-            'pattern',
-        ],
-        'additionalProperties': False,
-    },
-}
-
 DATA_SCHEMAS = {
-    'institution': INSTITUION_SCHEMA,
-    'lab': LAB_SCHEMA,
-    'person': PERSON_SCHEMA,
-    'platform': PLATFORM_SCHEMA,
-    'library_type': LIBRARY_TYPE_SCHEMA,
-    'tag': TAG_SCHEMA,
+    model: {
+        '$schema': _schema_draft_version,
+        'type': 'array',
+        'items': {
+            'type': 'object',
+            'properties': model_properties,
+            'required': model_properties.keys(),
+            'additionalProperties': False,
+        },
+    }
+    for model, model_properties in _properties.items()
 }

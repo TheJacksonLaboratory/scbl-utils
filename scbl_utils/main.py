@@ -15,7 +15,7 @@ import gspread as gs
 import typer
 
 from .core.data_io import load_data
-from .core.db import add_dependent_rows, db_session
+from .core.db import data_rows_to_db, db_session
 from .core.gdrive import TrackingSheet
 from .core.validation import validate_dir
 from .db_models.bases import Base
@@ -90,28 +90,17 @@ def init_db(
     spec: dict = load_data(config_files['db-spec.yml'], schema=DB_SPEC_SCHEMA)
 
     data_files = validate_dir(data_dir, required_files=DB_INIT_FILES)
-    data = {
+    datas = {
         path.stem: load_data(path, schema=DATA_SCHEMAS[path.stem])
         for path in data_files.values()
     }
 
-    child_data = ('person', 'lab')
-    parent_data = [
-        Base.get_model(tablename)(**row)
-        for tablename, dataset in data.items()
-        for row in dataset
-        if tablename not in child_data
-    ]
+    ordered_tables = (table for table in DATA_INSERTION_ORDER if table in datas)
 
     Session = db_session(base_class=Base, **spec)
-    with Session.begin() as session:
-        session.add_all(parent_data)
-
-    for tablename in child_data:
+    for tablename in ordered_tables:
         with Session.begin() as session:
-            add_dependent_rows(
-                session, data=data[tablename], data_source=f'{tablename}.csv'
-            )
+            data_rows_to_db(session, datas[tablename], data_source=f'{tablename}.csv')
 
 
 @app.command()
@@ -145,4 +134,4 @@ def sync_db_with_gdrive():
     ordered_tables = (table for table in DATA_INSERTION_ORDER if table in main_datas)
     for tablename in ordered_tables:
         with Session.begin() as session:
-            add_dependent_rows(session, main_datas[tablename], data_source=data_source)
+            data_rows_to_db(session, main_datas[tablename], data_source=data_source)

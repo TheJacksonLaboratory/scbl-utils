@@ -11,12 +11,12 @@ from scbl_utils.main import app
 
 from .fixtures.db_fixtures import (
     config_dir,
+    db_data,
     db_path,
     delivery_parent_dir,
     n_rows_per_table,
     table_relationships,
     test_db_session,
-    valid_data_dir,
 )
 
 
@@ -25,7 +25,7 @@ def test_init_db(
     monkeypatch: MonkeyPatch,
     n_rows_per_table: dict[str, int],
     test_db_session: sessionmaker[Session],
-    valid_data_dir: Path,
+    db_data: Path,
     table_relationships: dict[tuple[str, str], pd.DataFrame],
 ):
     """
@@ -35,7 +35,7 @@ def test_init_db(
     # Run the command
     runner = CliRunner()
 
-    args = ['--config-dir', str(config_dir), 'init-db', str(valid_data_dir)]
+    args = ['--config-dir', str(config_dir), 'init-db', str(db_data)]
     monkeypatch.setattr('rich.prompt.Prompt.ask', lambda *args, **kwargs: None)
 
     result = runner.invoke(app, args=args, input='\n', color=True)
