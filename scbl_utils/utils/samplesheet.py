@@ -8,7 +8,7 @@ from rich import print as rprint
 from typer import Abort
 from yaml import Dumper, SequenceNode, add_representer, dump
 
-from .defaults import (ANTIBODY_LIB_TYPES, LIBRARY_GLOB_PATTERN,
+from .defaults import (ANTIBODY_LIB_TYPES, CONTAINER_REGISTRY, LIBRARY_GLOB_PATTERN,
                        PLATFORMS_TO_PROBESET, SAMPLENAME_BLACKLIST_PATTERN,
                        SAMPLESHEET_GROUP_KEY, SAMPLESHEET_KEYS,
                        SAMPLESHEET_SORT_KEYS, SEP_PATTERN, SIBLING_REPOSITORY,
@@ -54,10 +54,10 @@ def map_libs_to_fastqdirs(
 
 
 def get_latest_version(
-    tool: str, repository_link: str = SIBLING_REPOSITORY
+    tool: str, registry_url: str = CONTAINER_REGISTRY
 ) -> (
     str
-):  # TODO: eventually, create a more easily parsable file in the github repo that has this information.
+):
     """Get latest version of a given tool
 
     :param tool: The name of the tool
@@ -68,30 +68,37 @@ def get_latest_version(
     :rtype: `str`
     """
     # Read the table from the README, rename columns, and format tool
-    df = pd.read_html(repository_link)[0]
-    df.rename(columns={col: col.lower() for col in df.columns}, inplace=True)
-    df['tool'] = df['tool'].str.replace(' ', '-').str.lower()
+    df = pd.read_html(registry_url)[0]
+    latest_definition_file: str = df[df['Recipe'].str.match(tool), 'Recipe'].max()
+    tool = latest_definition_file.removesuffix('.def')
+    tool_version = tool.split('-')[-1]
+    
+    return tool_version
+    # return latest_definition_file.split('')
 
-    # Get the index of each row that actually has a tool name because
-    # some rows are blank
-    tool_idxs = df.dropna(subset='tool').index
+    # df.rename(columns={col: col.lower() for col in df.columns}, inplace=True)
+    # df['tool'] = df['tool'].str.replace(' ', '-').str.lower()
 
-    # Append the index of the last row, as well as 1 + that index. This
-    # is relevant for the next step
-    tool_idxs = tool_idxs.append(pd.Index([df.index[-1], df.index[-1] + 1]))
+    # # Get the index of each row that actually has a tool name because
+    # # some rows are blank
+    # tool_idxs = df.dropna(subset='tool').index
 
-    # Pair each tool index with the index of the next row containing a tool name
-    idx_pairings = zip(tool_idxs, tool_idxs[1:])
+    # # Append the index of the last row, as well as 1 + that index. This
+    # # is relevant for the next step
+    # tool_idxs = tool_idxs.append(pd.Index([df.index[-1], df.index[-1] + 1]))
 
-    # Fill the table so that there are no blank rows
-    for first_row_with_tool, last_row_with_tool in idx_pairings:
-        df.loc[range(first_row_with_tool, last_row_with_tool), 'tool'] = df.loc[first_row_with_tool, 'tool']  # type: ignore
+    # # Pair each tool index with the index of the next row containing a tool name
+    # idx_pairings = zip(tool_idxs, tool_idxs[1:])
 
-    # Group by tool, get latest version for each tool, and format
-    grouped = df.groupby('tool')
-    latest_versions = grouped['version'].max()
+    # # Fill the table so that there are no blank rows
+    # for first_row_with_tool, last_row_with_tool in idx_pairings:
+    #     df.loc[range(first_row_with_tool, last_row_with_tool), 'tool'] = df.loc[first_row_with_tool, 'tool']  # type: ignore
 
-    return latest_versions[tool]
+    # # Group by tool, get latest version for each tool, and format
+    # grouped = df.groupby('tool')
+    # latest_versions = grouped['version'].max()
+
+    # return latest_versions[tool]
 
 
 def genomes_from_user(

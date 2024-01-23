@@ -131,6 +131,7 @@ REQUIRED_TRACKINGSHEET_SPEC_COLUMNS = {
     'description',
 }
 SIBLING_REPOSITORY = 'https://github.com/TheJacksonLaboratory/nf-tenx'
+CONTAINER_REGISTRY = 'https://jaxreg.jax.org/collections/3'
 
 
 def n_cells_agg(n_cells_series: Series):
