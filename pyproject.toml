@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "scbl-utils"
-version = "1.0.5"
+version = "1.0.6"
 description = "A set of command-line utilities that facilitate data processing at the Single Cell Biology Lab at the Jackson Laboratory."
 authors = ["Ahmed Said <ahmed.said@jax.org>"]
 license = "MIT"
