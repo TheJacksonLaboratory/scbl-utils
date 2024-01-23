@@ -69,7 +69,7 @@ def get_latest_version(
     """
     # Read the table from the README, rename columns, and format tool
     df = pd.read_html(registry_url)[0]
-    latest_definition_file: str = df[df['Recipe'].str.match(tool), 'Recipe'].max()
+    latest_definition_file: str = df[df['Recipe'].str.match(rf'{tool}-\d\.\d\.\d'), 'Recipe'].max()
     tool = latest_definition_file.removesuffix('.def')
     tool_version = tool.split('-')[-1]
     
