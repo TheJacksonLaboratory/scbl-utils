@@ -248,9 +248,198 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
     )
 
     projects = {
-        'project.id': ['SCP99-000', 'SCP99-001'],
-        'lab.pi.name': ['Ahmed Said', 'John Doe'],
+        'project.id': ['SCP99-000', 'SCP99-001', 'SCP99-002'],
+        'project.lab.pi.name': ['Ahmed Said', 'John Doe', 'Jane Foe'],
+        'project.lab.pi.email': [
+            'ahmed.said@jax.org',
+            'john.doe@jax.org',
+            'jane.foe@jax.org',
+        ],
+        'project.lab.pi.orcid': ['0009-0008-3754-6150', None, None],
     }
+    dfs['project'] = pd.DataFrame(projects)
+
+    data_sets = {
+        'data_set.name': ['data_set_0', 'data_set_1', 'data_set_2', 'data_set_3'],
+        'data_set.project.id': ['SCP99-000', 'SCP99-000', 'SCP99-001', 'SCP99-002'],
+        'data_set.platform.name': ['3\' RNA', 'Multiome', 'Flex', 'CellPlex'],
+        'data_set.ilab_request_id': [
+            'ilab_request_id_0',
+            'ilab_request_id_0',
+            'ilab_request_id_1',
+            'ilab_request_id_2',
+        ],
+        'data_set.submitter.name': [None, 'Ahmed Said', 'Dohn Joe', 'Jane Foe'],
+        'data_set.submitter.email': [
+            'ahmed.said@jax.org',
+            None,
+            'dohn.joe@jax.org',
+            'jane.foe@jax.org',
+        ],
+        'data_set.date_submitted': [
+            '1999-01-01',
+            '1999-02-01',
+            '1999-02-01',
+            '1999-02-01',
+        ],
+    }
+    dfs['data_set'] = pd.DataFrame(data_sets)
+
+    samples = {
+        'sample.name': [
+            'sample_0',
+            'sample_1',
+            'sample_2',
+            'sample_3',
+            'sample_4',
+            'sample_5',
+            'sample_6',
+        ],
+        'sample.data_set.name': [
+            'data_set_0',
+            'data_set_1',
+            'data_set_2',
+            'data_set_2',
+            'data_set_3',
+            'data_set_3',
+            'data_set_3',
+        ],
+        'sample.data_set.ilab_request_id': [
+            'ilab_request_id_0',
+            'ilab_request_id_0',
+            'ilab_request_id_1',
+            'ilab_request_id_1',
+            'ilab_request_id_2',
+            'ilab_request_id_2',
+            'ilab_request_id_2',
+        ],
+        'sample.data_set.date_submitted': [
+            '1999-01-01',
+            '1999-01-01',
+            '1999-02-01',
+            '1999-02-01',
+            '1999-02-01',
+            '1999-02-01',
+            '1999-02-01',
+        ],
+        'sample.data_set.project.id': [
+            'SCP99-000',
+            'SCP99-000',
+            'SCP99-001',
+            'SCP99-001',
+            'SCP99-002',
+            'SCP99-002',
+            'SCP99-002',
+        ],
+        'sample.data_set.submitter.name': [
+            None,
+            'Ahmed Said',
+            'Dohn Joe',
+            'Dohn Joe',
+            'Jane Foe',
+            'Jane Foe',
+            'Jane Foe',
+        ],
+    }  # TODO: you are here, verify github copilot's suggestions here
+    dfs['sample'] = pd.DataFrame(samples)
+
+    # TODO: the mapping between sequencing run and library is probably
+    # not realistic due to biotechnological considerations. The
+    # perfectionist in me wants to make this more realistic
+    sequencing_runs = ['99-scbct-000', '99-scbct-001']
+    dfs['sequencing_run'] = pd.DataFrame({'sequencing_run.id': sequencing_runs})
+
+    libraries = {
+        'library.id': [
+            'SC9900000',
+            'SC9900001',
+            'SC9900002',
+            'SC9900003',
+            'SC9900004',
+            'SC9900005',
+        ],
+        'library.data_set.name': [
+            'data_set_0',
+            'data_set_1',
+            'data_set_1',
+            'data_set_2',
+            'data_set_3',
+            'data_set_3',
+        ],
+        'library.data_set.ilab_request_id': [
+            'ilab_request_id_0',
+            'ilab_request_id_0',
+            'ilab_request_id_0',
+            'ilab_request_id_1',
+            'ilab_request_id_2',
+            'ilab_request_id_2',
+        ],
+        'library.data_set.date_submitted': [
+            '1999-01-01',
+            '1999-01-01',
+            '1999-01-01',
+            '1999-02-01',
+            '1999-02-01',
+            '1999-02-01',
+        ],
+        'library.data_set.project.id': [
+            'SCP99-000',
+            'SCP99-000',
+            'SCP99-000',
+            'SCP99-001',
+            'SCP99-002',
+            'SCP99-002',
+        ],
+        'library.data_set.submitter.name': [
+            None,
+            'Ahmed Said',
+            'Ahmed Said',
+            'Dohn Joe',
+            'Jane Foe',
+            'Jane Foe',
+        ],
+        'library.data_set.submitter.email': [
+            'ahmed.said@jax.org',
+            None,
+            None,
+            'dohn.joe@jax.org',
+            'jane.foe@jax.org',
+            'jane.foe@jax.org',
+        ],
+        'library.data_set.platform.name': [
+            '3\' RNA',
+            'Multiome',
+            'Multiome',
+            'Flex',
+            'CellPlex',
+            'CellPlex',
+        ],
+        'library.library_type.name': [
+            'Gene Expression',
+            'Gene Expression',
+            'Chromatin Accessibility',
+            'Gene Expression',
+            'Gene Expression',
+            'Multiplexing Capture',
+        ],
+        'library.status': [
+            'completed',
+            'sequencing',
+            'sequencing',
+            'library complete',
+            'cDNA',
+            'cDNA',
+        ],
+        'library.sequencing_run.id': [
+            '99-scbct-000',
+            '99-scbct-001',
+            '99-scbct-001',
+            None,
+            None,
+            None,
+        ],
+    }
+    dfs['library'] = pd.DataFrame(libraries)
 
     return dfs
 
@@ -275,10 +464,7 @@ def table_relationships(db_data: dict[str, pd.DataFrame]):
     Return the relationships between labs, institutions, and PIs for
     testing. Can be easily extended for more relationships
     """
-    # Read the tables and rename the 'person' table to 'pi' because a
-    # Lab has a PI, not a Person
     dfs = db_data.copy()
-    dfs['pi'] = dfs['person'].copy()
 
     # Add 1-indexed IDs to the tables that will match the IDs in the
     # database
@@ -286,15 +472,33 @@ def table_relationships(db_data: dict[str, pd.DataFrame]):
         df[f'{table}_id'] = dfs[table].index + 1
 
     # This maps a combination of tables to the columns used to join
-    # those two tables. For example, the 'institution_name' column in
-    # the lab table is the same as the 'name' column in the institution
-    # table.
+    # those two tables. For example, the 'lab.institution_name' column
+    # in the `lab`` table is the same as the 'institution.name' column
+    # in the `institution` table.
     table_relations = {
         ('person', 'institution'): (['person.institution.name', 'institution.name']),
         ('lab', 'institution'): (['lab.institution.name'], ['institution.name']),
-        ('lab', 'pi'): (
+        ('lab', 'person'): (
             ['lab.pi.first_name', 'lab.pi.last_name', 'lab.pi.email', 'lab.pi.orcid'],
             ['person.first_name', 'person.last_name', 'person.email', 'person.orcid'],
+        ),
+        ('project', 'lab'): (
+            ['project.lab.pi.name', 'project.lab.pi.email', 'project.lab.pi.orcid'],
+            ['lab.pi.name', 'lab.pi.email', 'lab.pi.orcid'],
+        ),
+        ('data_set', 'project'): (['data_set.project.id'], ['project.id']),
+        ('data_set', 'person'): (
+            ['data_set.submitter.name', 'data_set.submitter.email'],
+            ['person.name', 'person.email'],
+        ),
+        ('data_set', 'platform'): (['data_set.platform.name'], ['platform.name']),
+        ('sample', 'data_set'): (
+            [
+                'sample.data_set.name',
+                'sample.data_set.ilab_request_id',
+                'sample.data_set.date_submitted',
+            ],
+            ['data_set.name', 'data_set.ilab_request_id', 'data_set.date_submitted'],
         ),
     }
 

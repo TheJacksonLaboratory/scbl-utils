@@ -17,13 +17,15 @@ from typing import Any
 import pandas as pd
 from numpy import nan
 from rich import print as rprint
+from rich.console import Console
 from rich.prompt import Prompt
+from rich.table import Table
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 from yaml import Dumper, SequenceNode
 
-from scbl_utils.db_models.bases import Base
-from scbl_utils.defaults import OBJECT_SEP_CHAR
+from ..db_models.bases import Base
+from ..defaults import OBJECT_SEP_CHAR
 
 
 def _load_csv(f: TextIOWrapper) -> list[dict[Hashable, Any]]:
@@ -70,9 +72,10 @@ def _get_format_string_vars(string: str) -> set[str]:
     return variables
 
 
+# TODO: probably move this into db module
 def _get_matching_obj(
     data: pd.Series, session: Session, model: type[Base]
-) -> Base | None:
+) -> Base | None | bool:
     where_conditions = []
 
     excessively_nested_cols = {
@@ -117,6 +120,32 @@ def _get_matching_obj(
 
     # TODO: this assumes that there is only one unique match in the table
     stmt = select(model).where(*where_conditions)
-    match = session.execute(stmt).scalar()
+    matches = session.execute(stmt).scalars().all()
 
-    return match
+    if len(matches) == 0:
+        return None
+    elif len(matches) > 1:
+        return False
+
+    return matches[0]
+
+
+def _print_table(
+    data: pd.DataFrame, console: Console, header: list[str] = [], message: str = ''
+) -> None:
+    """_summary_
+
+    :param data: _description_
+    :type data: pd.DataFrame
+    :param header: _description_, defaults to []
+    :type header: list[str], optional
+    :param message: _description_, defaults to ''
+    :type message: str, optional
+    """
+    table = Table(*header)
+
+    for idx, row in data.iterrows():
+        table.add_row(str(idx), *(str(v) for v in row.values))
+
+    if table.row_count > 0:
+        console.print(message, table, sep='\n')

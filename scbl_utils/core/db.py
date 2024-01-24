@@ -30,10 +30,9 @@ from sqlalchemy.orm import (
 )
 from typer import Abort
 
-from scbl_utils.core.utils import _get_matching_obj
-
 from ..db_models.bases import Base
 from ..defaults import DOCUMENTATION, OBJECT_SEP_CHAR, OBJECT_SEP_PATTERN
+from .utils import _get_matching_obj, _print_table
 
 
 def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Session]:
@@ -119,26 +118,28 @@ def data_rows_to_db(
         unique_parent_data[parent_name] = renamed_unique_parent_data.agg(
             _get_matching_obj, axis=1, session=session, model=parent_model
         )
+
         no_matches = unique_parent_data[parent_name].isna()
+        too_many_matches = ~unique_parent_data[parent_name]
 
         error_table_header = ['index'] + parent_cols
-        error_table = Table(*error_table_header)
+        console = Console()
 
-        for idx, parent_row in unique_parent_data.loc[no_matches].iterrows():
-            # Filter and str() for type-checking
-            error_table.add_row(str(idx), *(str(v) for v in parent_row.values))
+        _print_table(
+            unique_parent_data.loc[no_matches],
+            console=console,
+            header=error_table_header,
+            message=f'The following rows from [orange1]{data_source}[/] could be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added.',
+        )
+        _print_table(
+            unique_parent_data.loc[too_many_matches],
+            console=console,
+            header=error_table_header,
+            message=f'The following rows from [orange1]{data_source}[/] could be matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added. Please specify or add more columns in [orange1]{data_source}[/] that uniquely identify the [green]{parent_name}[/] for a [green]{table}[/].',
+        )
 
-        if error_table.row_count > 0:
-            console = Console()
-            console.print(
-                f'The following rows from [orange1]{data_source}[/] could be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added.',
-                error_table,
-                sep='\n',
-            )
-
-        data_to_add = data_to_add.merge(
-            unique_parent_data, how='left', on=parent_cols
-        ).dropna(subset=parent_name)
+        data_to_add = data_to_add[~no_matches & ~too_many_matches]
+        data_to_add = data_to_add.merge(unique_parent_data, how='left', on=parent_cols)
 
     model_attributes = data_to_add.columns[
         data_to_add.columns.isin(model.__match_args__)
