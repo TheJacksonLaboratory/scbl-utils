@@ -79,7 +79,7 @@ def valid_str(
     return string
 
 
-def valid_db_target(target: str) -> bool:
+def valid_db_target(target: str, object_sep_char: str = OBJECT_SEP_CHAR) -> bool:
     """_summary_
 
     :param target: _description_
@@ -87,7 +87,9 @@ def valid_db_target(target: str) -> bool:
     :return: _description_
     :rtype: bool
     """
-    if not 1 <= target.count(OBJECT_SEP_CHAR) <= 3:
+    min_seps = 1
+    max_seps = 3
+    if not min_seps <= target.count(OBJECT_SEP_CHAR) <= max_seps:
         return False
 
     table, column = target.split(OBJECT_SEP_CHAR, maxsplit=1)
