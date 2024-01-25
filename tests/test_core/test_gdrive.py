@@ -3,11 +3,11 @@
 # testing whether the columns are appropriately renamed
 from gspread import Spreadsheet
 
-from scbl_utils.core.gdrive import Sheet
+from scbl_utils.core.gdrive import TrackingSheet
 from scbl_utils.db_models.bases import Base
 
 
-class TestSheet:
+class TestTrackingSheet:
     """
     Tests for the gdrive.Sheet class
     """

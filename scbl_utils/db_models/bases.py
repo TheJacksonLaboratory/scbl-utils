@@ -69,7 +69,9 @@ class SamplesheetString(TypeDecorator):
             return string
 
         # Remove illegal characters
-        string = sub(pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=string)
+        string = sub(
+            pattern=SAMPLENAME_BLACKLIST_PATTERN, repl='', string=string.strip()
+        )
 
         # Replace separator characters with hyphens
         string = sub(pattern=SEP_PATTERN, repl='-', string=string)

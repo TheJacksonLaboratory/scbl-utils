@@ -10,7 +10,7 @@ def test_subsets_of_db_tables():
     all the tables in the database.
     """
     all_tables = {model.__tablename__ for model in Base.__subclasses__()}
-    db_init_tables = {path.name for path in DB_INIT_FILES}
+    db_init_tables = {path.stem for path in DB_INIT_FILES}
 
     assert DATA_SCHEMAS.keys() == db_init_tables
     assert db_init_tables <= all_tables

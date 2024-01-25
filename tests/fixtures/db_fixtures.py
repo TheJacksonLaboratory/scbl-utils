@@ -1,8 +1,11 @@
+from datetime import date
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from pytest import MonkeyPatch, fixture
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import dump as dump_yml
 
@@ -19,6 +22,7 @@ from scbl_utils.db_models.data import (
     SequencingRun,
 )
 from scbl_utils.db_models.definitions import LibraryType, Platform, Tag
+from scbl_utils.defaults import DATA_SCHEMAS
 
 
 @fixture
@@ -144,6 +148,8 @@ def complete_db_objects(delivery_parent_dir: Path) -> dict[str, Base]:
     }
 
 
+# TODO: all of the above assume that a '.' is the OBJECT_SEP_CHAR. This
+# should be changed so updating the code is easier
 @fixture
 def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
     """
@@ -152,17 +158,17 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
     dfs: dict[str, pd.DataFrame] = {}
 
     institutions = {
-        'institution.ror_id': ['02der9h97', '021sy4w91', None],
-        'institution.name': [
+        'ror_id': ['02der9h97', '021sy4w91', None],
+        'name': [
             None,
             'Jackson Laboratory for Mammalian Genetics',
             'Jackson Laboratory for Genomic Medicine',
         ],
-        'institution.short_name': [None, 'JAX-MG', 'JAX-GM'],
-        'institution.country': [None, None, None],
-        'institution.state': [None, None, 'CT'],
-        'institution.city': [None, None, 'Farmington'],
-        'institution.email_format': [
+        'short_name': [None, 'JAX-MG', 'JAX-GM'],
+        'country': [None, None, None],
+        'state': [None, None, 'CT'],
+        'city': [None, None, 'Farmington'],
+        'email_format': [
             r'{first_name}.{last_name}@uconn.edu',
             r'{first_name}.{last_name}@jax.org',
             r'{first_name}.{last_name}@jax.org',
@@ -171,17 +177,17 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
     dfs['institution'] = pd.DataFrame(institutions)
 
     labs = {
-        'lab.pi.first_name': ['Ahmed', 'John', 'Jane'],
-        'lab.pi.last_name': ['Said', 'Doe', 'Foe'],
-        'lab.pi.email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
-        'lab.pi.orcid': ['0009-0008-3754-6150', None, None],
-        'lab.institution.name': [
+        'pi.first_name': ['Ahmed', 'John', 'Jane'],
+        'pi.last_name': ['Said', 'Doe', 'Foe'],
+        'pi.email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
+        'pi.orcid': ['0009-0008-3754-6150', None, None],
+        'institution.name': [
             'Jackson Laboratory for Genomic Medicine',
             'Jackson Laboratory for Mammalian Genetics',
             'Jackson Laboratory for Genomic Medicine',
         ],
-        'lab.name': [None, 'Service Lab', None],
-        'lab.delivery_dir': [None, 'service_lab', None],
+        'name': [None, 'Service Lab', None],
+        'delivery_dir': [None, 'service_lab', None],
     }
     for directory in ('ahmed_said', 'service_lab', 'jane_foe'):
         (delivery_parent_dir / directory).mkdir()
@@ -197,16 +203,22 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
         'Multiplexing Capture',
         'Spatial Gene Expression',
     ]
-    dfs['library_type'] = pd.DataFrame({'library_type.name': library_types})
+    dfs['library_type'] = pd.DataFrame({'name': library_types})
 
     people = {
-        'person.first_name': ['Ahmed', 'John', 'Jane'],
-        'person.last_name': ['Said', 'Doe', 'Foe'],
-        'person.email': ['ahmed.said@jax.org', 'john.doe@jax.org', 'jane.foe@jax.org'],
-        'person.orcid': ['0009-0008-3754-6150', None, None],
-        'person.institution.name': [
+        'first_name': ['Ahmed', 'John', 'Jane', 'Dohn'],
+        'last_name': ['Said', 'Doe', 'Foe', 'Joe'],
+        'email': [
+            'ahmed.said@jax.org',
+            'john.doe@jax.org',
+            'jane.foe@jax.org',
+            'dohn.joe@jax.org',
+        ],
+        'orcid': ['0009-0008-3754-6150', None, None, None],
+        'institution.name': [
             'Jackson Laboratory for Genomic Medicine',
             'Jackson Laboratory for Mammalian Genetics',
+            'Jackson Laboratory for Genomic Medicine',
             'Jackson Laboratory for Genomic Medicine',
         ],
     }
@@ -233,60 +245,68 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
         'Visium FFPE',
         'Visium CytAssist FFPE',
     ]
-    dfs['platform'] = pd.DataFrame({'platform.name': platforms})
+    dfs['platform'] = pd.DataFrame({'name': platforms})
 
     # TODO: get this from 10X themselves for more recent information?
-    dfs['tag'] = pd.read_csv(
-        'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/tags.csv'
-    ).rename(
-        columns={
-            'tag_id': 'tag.id',
-            'tag_name': 'tag.name',
-            'tag_sequence': 'tag.sequence',
-            '5p_offset': 'tag.five_prime_offset',
-        }
+    dfs['tag'] = (
+        pd.read_csv(
+            'https://raw.githubusercontent.com/TheJacksonLaboratory/nf-tenx/main/assets/tags.csv'
+        )
+        .rename(
+            columns={
+                'tag_id': 'id',
+                'tag_name': 'name',
+                'tag_sequence': 'sequence',
+                '5p_offset': 'five_prime_offset',
+            }
+        )
+        .replace(np.nan, None)
     )
 
     projects = {
-        'project.id': ['SCP99-000', 'SCP99-001', 'SCP99-002'],
-        'project.lab.pi.name': ['Ahmed Said', 'John Doe', 'Jane Foe'],
-        'project.lab.pi.email': [
+        'id': ['SCP99-000', 'SCP99-001', 'SCP99-002'],
+        'lab.pi.first_name': ['Ahmed', 'John', 'Jane'],
+        'lab.pi.last_name': ['Said', 'Doe', 'Foe'],
+        'lab.pi.email': [
             'ahmed.said@jax.org',
             'john.doe@jax.org',
             'jane.foe@jax.org',
         ],
-        'project.lab.pi.orcid': ['0009-0008-3754-6150', None, None],
+        'lab.pi.orcid': ['0009-0008-3754-6150', None, None],
     }
     dfs['project'] = pd.DataFrame(projects)
 
+    # TODO: eventually, try removing certain cells to see how it's handled
     data_sets = {
-        'data_set.name': ['data_set_0', 'data_set_1', 'data_set_2', 'data_set_3'],
-        'data_set.project.id': ['SCP99-000', 'SCP99-000', 'SCP99-001', 'SCP99-002'],
-        'data_set.platform.name': ['3\' RNA', 'Multiome', 'Flex', 'CellPlex'],
-        'data_set.ilab_request_id': [
+        'name': ['data_set_0', 'data_set_1', 'data_set_2', 'data_set_3'],
+        'project.id': ['SCP99-000', 'SCP99-000', 'SCP99-001', 'SCP99-002'],
+        'platform.name': ['3\' RNA', 'Multiome', 'Flex', 'CellPlex'],
+        'ilab_request_id': [
             'ilab_request_id_0',
             'ilab_request_id_0',
             'ilab_request_id_1',
             'ilab_request_id_2',
         ],
-        'data_set.submitter.name': [None, 'Ahmed Said', 'Dohn Joe', 'Jane Foe'],
-        'data_set.submitter.email': [
+        'submitter.first_name': ['Ahmed', 'Ahmed', 'Dohn', 'Jane'],
+        'submitter.last_name': ['Said', 'Said', 'Joe', 'Foe'],
+        'submitter.email': [
             'ahmed.said@jax.org',
-            None,
+            'ahmed.said@jax.org',
             'dohn.joe@jax.org',
             'jane.foe@jax.org',
         ],
-        'data_set.date_submitted': [
-            '1999-01-01',
-            '1999-02-01',
-            '1999-02-01',
-            '1999-02-01',
+        'submitter.orcid': ['0009-0008-3754-6150', '0009-0008-3754-6150', None, None],
+        'date_submitted': [
+            date.fromisoformat('1999-01-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
         ],
     }
     dfs['data_set'] = pd.DataFrame(data_sets)
 
     samples = {
-        'sample.name': [
+        'name': [
             'sample_0',
             'sample_1',
             'sample_2',
@@ -295,7 +315,7 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'sample_5',
             'sample_6',
         ],
-        'sample.data_set.name': [
+        'data_set.name': [
             'data_set_0',
             'data_set_1',
             'data_set_2',
@@ -304,7 +324,7 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'data_set_3',
             'data_set_3',
         ],
-        'sample.data_set.ilab_request_id': [
+        'data_set.ilab_request_id': [
             'ilab_request_id_0',
             'ilab_request_id_0',
             'ilab_request_id_1',
@@ -313,16 +333,16 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'ilab_request_id_2',
             'ilab_request_id_2',
         ],
-        'sample.data_set.date_submitted': [
-            '1999-01-01',
-            '1999-01-01',
-            '1999-02-01',
-            '1999-02-01',
-            '1999-02-01',
-            '1999-02-01',
-            '1999-02-01',
+        'data_set.date_submitted': [
+            date.fromisoformat('1999-01-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
         ],
-        'sample.data_set.project.id': [
+        'data_set.project.id': [
             'SCP99-000',
             'SCP99-000',
             'SCP99-001',
@@ -331,26 +351,53 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'SCP99-002',
             'SCP99-002',
         ],
-        'sample.data_set.submitter.name': [
-            None,
-            'Ahmed Said',
-            'Dohn Joe',
-            'Dohn Joe',
-            'Jane Foe',
-            'Jane Foe',
-            'Jane Foe',
+        'data_set.submitter.first_name': [
+            'Ahmed',
+            'Ahmed',
+            'Dohn',
+            'Dohn',
+            'Jane',
+            'Jane',
+            'Jane',
         ],
-    }  # TODO: you are here, verify github copilot's suggestions here
+        'data_set.submitter.last_name': [
+            'Said',
+            'Said',
+            'Joe',
+            'Joe',
+            'Foe',
+            'Foe',
+            'Foe',
+        ],
+        'data_set.submitter.email': [
+            'ahmed.said@jax.org',
+            'ahmed.said@jax.org',
+            'dohn.joe@jax.org',
+            'dohn.joe@jax.org',
+            'jane.foe@jax.org',
+            'jane.foe@jax.org',
+            'jane.foe@jax.org',
+        ],
+        'data_set.platform.name': [
+            '3\' RNA',
+            'Multiome',
+            'Flex',
+            'Flex',
+            'CellPlex',
+            'CellPlex',
+            'CellPlex',
+        ],
+    }
     dfs['sample'] = pd.DataFrame(samples)
 
     # TODO: the mapping between sequencing run and library is probably
     # not realistic due to biotechnological considerations. The
     # perfectionist in me wants to make this more realistic
     sequencing_runs = ['99-scbct-000', '99-scbct-001']
-    dfs['sequencing_run'] = pd.DataFrame({'sequencing_run.id': sequencing_runs})
+    dfs['sequencing_run'] = pd.DataFrame({'id': sequencing_runs})
 
     libraries = {
-        'library.id': [
+        'id': [
             'SC9900000',
             'SC9900001',
             'SC9900002',
@@ -358,7 +405,7 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'SC9900004',
             'SC9900005',
         ],
-        'library.data_set.name': [
+        'data_set.name': [
             'data_set_0',
             'data_set_1',
             'data_set_1',
@@ -366,7 +413,7 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'data_set_3',
             'data_set_3',
         ],
-        'library.data_set.ilab_request_id': [
+        'data_set.ilab_request_id': [
             'ilab_request_id_0',
             'ilab_request_id_0',
             'ilab_request_id_0',
@@ -374,15 +421,15 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'ilab_request_id_2',
             'ilab_request_id_2',
         ],
-        'library.data_set.date_submitted': [
-            '1999-01-01',
-            '1999-01-01',
-            '1999-01-01',
-            '1999-02-01',
-            '1999-02-01',
-            '1999-02-01',
+        'data_set.date_submitted': [
+            date.fromisoformat('1999-01-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
+            date.fromisoformat('1999-02-01'),
         ],
-        'library.data_set.project.id': [
+        'data_set.project.id': [
             'SCP99-000',
             'SCP99-000',
             'SCP99-000',
@@ -390,23 +437,24 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'SCP99-002',
             'SCP99-002',
         ],
-        'library.data_set.submitter.name': [
-            None,
-            'Ahmed Said',
-            'Ahmed Said',
-            'Dohn Joe',
-            'Jane Foe',
-            'Jane Foe',
+        'data_set.submitter.first_name': [
+            'Ahmed',
+            'Ahmed',
+            'Ahmed',
+            'Dohn',
+            'Jane',
+            'Jane',
         ],
-        'library.data_set.submitter.email': [
+        'data_set.submitter.last_name': ['Said', 'Said', 'Said', 'Joe', 'Foe', 'Foe'],
+        'data_set.submitter.email': [
             'ahmed.said@jax.org',
-            None,
-            None,
+            'ahmed.said@jax.org',
+            'ahmed.said@jax.org',
             'dohn.joe@jax.org',
             'jane.foe@jax.org',
             'jane.foe@jax.org',
         ],
-        'library.data_set.platform.name': [
+        'data_set.platform.name': [
             '3\' RNA',
             'Multiome',
             'Multiome',
@@ -414,7 +462,7 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'CellPlex',
             'CellPlex',
         ],
-        'library.library_type.name': [
+        'library_type.name': [
             'Gene Expression',
             'Gene Expression',
             'Chromatin Accessibility',
@@ -422,7 +470,7 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'Gene Expression',
             'Multiplexing Capture',
         ],
-        'library.status': [
+        'status': [
             'completed',
             'sequencing',
             'sequencing',
@@ -430,7 +478,7 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
             'cDNA',
             'cDNA',
         ],
-        'library.sequencing_run.id': [
+        'sequencing_run.id': [
             '99-scbct-000',
             '99-scbct-001',
             '99-scbct-001',
@@ -441,9 +489,18 @@ def db_data(delivery_parent_dir: Path) -> dict[str, pd.DataFrame]:
     }
     dfs['library'] = pd.DataFrame(libraries)
 
+    for tablename, df in dfs.items():
+        if 'id' not in df.columns:
+            df['id'] = df.index + 1
+
+        dfs[tablename] = df.rename(
+            columns={col: f'{tablename}.{col}' for col in df.columns}
+        )
+
     return dfs
 
 
+@fixture
 def data_dir(db_data: dict[str, pd.DataFrame], tmp_path: Path):
     """
     Create a data directory with all the data necessary to initialize
@@ -453,67 +510,93 @@ def data_dir(db_data: dict[str, pd.DataFrame], tmp_path: Path):
     data_dir.mkdir()
 
     for tablename, df in db_data.items():
-        df.to_csv(data_dir / f'{tablename}.csv', index=False)
+        if not tablename in DATA_SCHEMAS:
+            continue
+
+        id_column = f'{tablename}.id'
+        if id_column in DATA_SCHEMAS[tablename]['items']['properties']:
+            df.to_csv(data_dir / f'{tablename}.csv', index=False)
+
+        else:
+            columns_to_write = [col for col in df.columns if col != f'{tablename}.id']
+            df.to_csv(
+                data_dir / f'{tablename}.csv', index=False, columns=columns_to_write
+            )
 
     return data_dir
 
 
 @fixture
-def table_relationships(db_data: dict[str, pd.DataFrame]):
-    """
-    Return the relationships between labs, institutions, and PIs for
-    testing. Can be easily extended for more relationships
-    """
-    dfs = db_data.copy()
-
-    # Add 1-indexed IDs to the tables that will match the IDs in the
-    # database
-    for table, df in dfs.items():
-        df[f'{table}_id'] = dfs[table].index + 1
-
-    # This maps a combination of tables to the columns used to join
-    # those two tables. For example, the 'lab.institution_name' column
-    # in the `lab`` table is the same as the 'institution.name' column
-    # in the `institution` table.
-    table_relations = {
-        ('person', 'institution'): (['person.institution.name', 'institution.name']),
-        ('lab', 'institution'): (['lab.institution.name'], ['institution.name']),
-        ('lab', 'person'): (
-            ['lab.pi.first_name', 'lab.pi.last_name', 'lab.pi.email', 'lab.pi.orcid'],
-            ['person.first_name', 'person.last_name', 'person.email', 'person.orcid'],
-        ),
-        ('project', 'lab'): (
-            ['project.lab.pi.name', 'project.lab.pi.email', 'project.lab.pi.orcid'],
-            ['lab.pi.name', 'lab.pi.email', 'lab.pi.orcid'],
-        ),
-        ('data_set', 'project'): (['data_set.project.id'], ['project.id']),
-        ('data_set', 'person'): (
-            ['data_set.submitter.name', 'data_set.submitter.email'],
-            ['person.name', 'person.email'],
-        ),
-        ('data_set', 'platform'): (['data_set.platform.name'], ['platform.name']),
-        ('sample', 'data_set'): (
-            [
-                'sample.data_set.name',
-                'sample.data_set.ilab_request_id',
-                'sample.data_set.date_submitted',
-            ],
-            ['data_set.name', 'data_set.ilab_request_id', 'data_set.date_submitted'],
-        ),
-    }
-
-    # Merge the tables
-    mappings = {}
-    for (left_table, right_table), (left_cols, right_cols) in table_relations.items():
-        mappings[(left_table, right_table)] = dfs[left_table].merge(
-            dfs[right_table], how='left', left_on=left_cols, right_on=right_cols
-        )
-
-    return mappings
+def other_parent_names() -> dict[str, str]:
+    """ """
+    return {'data_set.submitter': 'person', 'lab.pi': 'person'}
 
 
 @fixture
-def n_rows_per_table(db_data: Path):
-    """ """
-    dfs = {path.stem: pd.read_csv(path) for path in db_data.iterdir()}
-    return {table: df.shape[0] for table, df in dfs.items()}
+def table_relationships(
+    db_data: dict[str, pd.DataFrame], other_parent_names: dict[str, str]
+):
+    """
+    Return the relationships between children and parents in the data.
+    """
+    # TODO: there is clear repetition below
+    table_relations = {}
+    for parent_tablename in db_data:
+        child_dfs = {
+            other_tablename: other_df
+            for other_tablename, other_df in db_data.items()
+            if other_tablename != parent_tablename
+            and other_df.columns.str.contains(
+                f'{other_tablename}.{parent_tablename}.'
+            ).any()
+        }
+
+        for child_tablename, child_df in child_dfs.items():
+            child_reference_columns = [
+                col for col in child_df.columns if parent_tablename in col
+            ]
+            parent_columns = [
+                col.removeprefix(f'{child_tablename}.')
+                for col in child_reference_columns
+            ]
+
+            table_relations[(child_tablename, parent_tablename)] = (
+                child_reference_columns,
+                parent_columns,
+            )
+
+    # Not everything will be caught by the above for-loop because
+    # children may reference parents by a different name than the name
+    # of the parent table
+    for parent_name, actual_parent_type in other_parent_names.items():
+        child_tablename, parent = parent_name.split('.')
+
+        child_reference_columns = [
+            col for col in db_data[child_tablename].columns if parent_name in col
+        ]
+        parent_columns = [
+            col.replace(parent, actual_parent_type).removeprefix(f'{child_tablename}.')
+            for col in child_reference_columns
+        ]
+
+        table_relations[(child_tablename, parent)] = (
+            child_reference_columns,
+            parent_columns,
+        )
+
+    # Merge the tables
+    mappings = {}
+    for (child_table, parent_table), (
+        child_columns,
+        parent_columns,
+    ) in table_relations.items():
+        mappings[(child_table, parent_table)] = db_data[child_table].merge(
+            db_data[
+                other_parent_names.get(f'{child_table}.{parent_table}', parent_table)
+            ],
+            how='left',
+            left_on=child_columns,
+            right_on=parent_columns,
+        )
+
+    return mappings

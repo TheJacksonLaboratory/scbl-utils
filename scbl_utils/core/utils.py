@@ -16,16 +16,11 @@ from typing import Any
 
 import pandas as pd
 from numpy import nan
-from rich import print as rprint
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
-from sqlalchemy import inspect, select
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import InstrumentedAttribute
 from yaml import Dumper, SequenceNode
-
-from ..db_models.bases import Base
-from ..defaults import OBJECT_SEP_CHAR
 
 
 def _load_csv(f: TextIOWrapper) -> list[dict[Hashable, Any]]:
@@ -73,63 +68,6 @@ def _get_format_string_vars(string: str) -> set[str]:
 
 
 # TODO: probably move this into db module
-def _get_matching_obj(
-    data: pd.Series, session: Session, model: type[Base]
-) -> Base | None | bool:
-    where_conditions = []
-
-    excessively_nested_cols = {
-        col for col in data.keys() if col.count(OBJECT_SEP_CHAR) > 1
-    }
-    if excessively_nested_cols:
-        rprint(
-            f'While trying to retrieve a [green]{model.__tablename__}[/] that matches the data row shown below, the columns [orange]{excessively_nested_cols}[/] will be excluded from the query because they require matching an attribute of a parent of a parent of a [green]{model.__tablename__}[/], which is currently not supported.',
-            f'[orange]{data.to_dict()}[/]',
-            sep='\n\n',
-        )
-
-    # TODO: could this be sped up with a neat vectorized function
-    cleaned_data = {
-        col: val for col, val in data.items() if col not in excessively_nested_cols
-    }
-    for col, val in cleaned_data.items():
-        if not isinstance(col, str) or val is None:
-            continue
-
-        inspector = inspect(model)
-        if OBJECT_SEP_CHAR in col:
-            parent_name, parent_att_name = col.split(OBJECT_SEP_CHAR)
-            parent_model: type[Base] = (
-                inspect(model).relationships[parent_name].mapper.class_
-            )
-
-            parent = inspector.attrs[parent_name].class_attribute
-            parent_inspector = inspect(parent_model)
-            parent_att = parent_inspector.attrs[parent_att_name].class_attribute
-
-            where = (
-                parent.has(parent_att.ilike(val))
-                if isinstance(val, str)
-                else parent.has(parent_att == val)
-            )
-        else:
-            att = inspector.attrs[col].class_attribute
-            where = att.ilike(val) if isinstance(val, str) else att == val
-
-        where_conditions.append(where)
-
-    # TODO: this assumes that there is only one unique match in the table
-    stmt = select(model).where(*where_conditions)
-    matches = session.execute(stmt).scalars().all()
-
-    if len(matches) == 0:
-        return None
-    elif len(matches) > 1:
-        return False
-
-    return matches[0]
-
-
 def _print_table(
     data: pd.DataFrame, console: Console, header: list[str] = [], message: str = ''
 ) -> None:

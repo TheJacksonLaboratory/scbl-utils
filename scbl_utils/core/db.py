@@ -19,7 +19,7 @@ from rich import print as rprint
 from rich.console import Console, RenderableType
 from rich.prompt import Prompt
 from rich.table import Table
-from sqlalchemy import URL, create_engine, inspect
+from sqlalchemy import URL, create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -30,9 +30,11 @@ from sqlalchemy.orm import (
 )
 from typer import Abort
 
+from scbl_utils.defaults import OBJECT_SEP_CHAR
+
 from ..db_models.bases import Base
 from ..defaults import DOCUMENTATION, OBJECT_SEP_CHAR, OBJECT_SEP_PATTERN
-from .utils import _get_matching_obj, _print_table
+from .utils import _print_table
 
 
 def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Session]:
@@ -52,6 +54,65 @@ def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Sess
     base_class.metadata.create_all(engine)
 
     return Session
+
+
+def _get_matching_obj(
+    data: pd.Series, session: Session, model: type[Base]
+) -> Base | None | bool:
+    where_conditions = []
+
+    excessively_nested_cols = {
+        col for col in data.keys() if col.count(OBJECT_SEP_CHAR) > 1
+    }
+    if excessively_nested_cols:
+        rprint(
+            f'While trying to retrieve a [green]{model.__tablename__}[/] that matches the data row shown below, the columns [orange]{excessively_nested_cols}[/] will be excluded from the query because they require matching an attribute of a parent of a parent of a [green]{model.__tablename__}[/], which is currently not supported.',
+            f'[orange]{data.to_dict()}[/]',
+            sep='\n\n',
+        )
+
+    # TODO: could this be sped up with a neat vectorized function
+    cleaned_data = {
+        col: val for col, val in data.items() if col not in excessively_nested_cols
+    }
+    for col, val in cleaned_data.items():
+        if not isinstance(col, str) or val is None:
+            continue
+
+        inspector = inspect(model)
+        if OBJECT_SEP_CHAR in col:
+            parent_name, parent_att_name = col.split(OBJECT_SEP_CHAR)
+            parent_model: type[Base] = (
+                inspect(model).relationships[parent_name].mapper.class_
+            )
+
+            parent = inspector.attrs[parent_name].class_attribute
+            parent_inspector = inspect(parent_model)
+            parent_att = parent_inspector.attrs[parent_att_name].class_attribute
+
+            where = (
+                parent.has(parent_att.ilike(val))
+                if isinstance(val, str)
+                else parent.has(parent_att == val)
+            )
+        else:
+            att = inspector.attrs[col].class_attribute
+            where = att.ilike(val) if isinstance(val, str) else att == val
+
+        where_conditions.append(where)
+
+    if not where_conditions:
+        return None
+
+    stmt = select(model).where(*where_conditions)
+    matches = session.execute(stmt).scalars().all()
+
+    if len(matches) == 0:
+        return None
+    elif len(matches) > 1:
+        return False
+
+    return matches[0]
 
 
 # TODO: this function is good but needs some simplification. Come back to it
@@ -119,27 +180,39 @@ def data_rows_to_db(
             _get_matching_obj, axis=1, session=session, model=parent_model
         )
 
-        no_matches = unique_parent_data[parent_name].isna()
-        too_many_matches = ~unique_parent_data[parent_name]
+        parent_id_col = f'{parent_name}_id'
+        if not inspector.columns[parent_id_col].nullable:
+            no_matches = unique_parent_data[parent_name].isna()
+            too_many_matches = unique_parent_data[parent_name] == False
 
-        error_table_header = ['index'] + parent_cols
-        console = Console()
+            error_table_header = ['index'] + parent_cols
+            console = Console()
 
-        _print_table(
-            unique_parent_data.loc[no_matches],
-            console=console,
-            header=error_table_header,
-            message=f'The following rows from [orange1]{data_source}[/] could be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added.',
-        )
-        _print_table(
-            unique_parent_data.loc[too_many_matches],
-            console=console,
-            header=error_table_header,
-            message=f'The following rows from [orange1]{data_source}[/] could be matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added. Please specify or add more columns in [orange1]{data_source}[/] that uniquely identify the [green]{parent_name}[/] for a [green]{table}[/].',
-        )
+            _print_table(
+                unique_parent_data.loc[no_matches],
+                console=console,
+                header=error_table_header,
+                message=f'The following rows from [orange1]{data_source}[/] could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added.',
+            )
+            _print_table(
+                unique_parent_data.loc[too_many_matches],
+                console=console,
+                header=error_table_header,
+                message=f'The following rows from [orange1]{data_source}[/] could be matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added. Please specify or add more columns in [orange1]{data_source}[/] that uniquely identify the [green]{parent_name}[/] for a [green]{table}[/].',
+            )
 
-        data_to_add = data_to_add[~no_matches & ~too_many_matches]
-        data_to_add = data_to_add.merge(unique_parent_data, how='left', on=parent_cols)
+            unique_parent_data = unique_parent_data[~no_matches & ~too_many_matches]
+            data_to_add = data_to_add.merge(
+                unique_parent_data, how='left', on=parent_cols
+            ).dropna(subset=parent_name)
+
+        else:
+            unique_parent_data[parent_name] = unique_parent_data[parent_name].replace(
+                False, None
+            )
+            data_to_add = data_to_add.merge(
+                unique_parent_data, how='left', on=parent_cols
+            )
 
     model_attributes = data_to_add.columns[
         data_to_add.columns.isin(model.__match_args__)
@@ -155,13 +228,12 @@ def data_rows_to_db(
             att: 'first' if collection_class[att] is None else collection_class[att]
             for att in model_attributes
         }
-        records_to_add = (
-            data_to_add[model_attributes]
-            .groupby(
-                'id', dropna=False
-            )  # TODO: this means that anything with a missing ID will be grouped together. Test this
-            .agg(func=agg_funcs)
-            .to_dict(orient='records')
+
+        grouped_records_to_add = data_to_add.groupby('id', dropna=False).agg(
+            func=agg_funcs
+        )
+        records_to_add = grouped_records_to_add[model_attributes].to_dict(
+            orient='records'
         )
     else:
         records_to_add = data_to_add[model_attributes].to_dict(orient='records')

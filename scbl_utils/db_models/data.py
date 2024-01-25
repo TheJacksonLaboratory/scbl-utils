@@ -54,6 +54,7 @@ from ..defaults import (
 )
 from .bases import (
     Base,
+    SamplesheetString,
     StrippedString,
     int_pk,
     samplesheet_str,
@@ -91,6 +92,13 @@ class Institution(Base):
         email_format = email_format.strip().lower()
 
         variables = _get_format_string_vars(email_format)
+
+        if not variables:
+            rprint(
+                f'The email format [orange1]{email_format}[/] is invalid, as it contains no variables enclosed in curly braces'
+                r'({})'
+            )
+            raise Abort()
 
         person_columns = set(inspect(Person).columns.keys())
         non_existent_person_columns = variables - person_columns
@@ -200,8 +208,12 @@ class Lab(Base):
         if delivery_dir is None:
             pi = self.pi
 
-            first_name = pi.first_name.lower()
-            last_name = pi.last_name.lower()
+            first_name = SamplesheetString().process_bind_param(
+                pi.first_name.lower(), dialect=''
+            )
+            last_name = SamplesheetString().process_bind_param(
+                pi.last_name.lower(), dialect=''
+            )
 
             delivery_path = Path(f'{first_name}_{last_name}')
             error_prefix = (
@@ -282,10 +294,10 @@ class Person(Base):
     institution: Mapped[Institution] = relationship(repr=False, compare=False)
 
     name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
-    email: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
     email_auto_generated: Mapped[bool] = mapped_column(
         init=False, default=False, repr=False
     )
+    email: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
     orcid: Mapped[unique_stripped_str | None] = mapped_column(
         default=None, insert_default=null(), repr=False
     )

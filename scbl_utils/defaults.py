@@ -178,7 +178,7 @@ DATA_SCHEMAS = {
         'items': {
             'type': 'object',
             'properties': model_properties,
-            'required': model_properties.keys(),
+            'required': list(model_properties.keys()),
             'additionalProperties': False,
         },
     }

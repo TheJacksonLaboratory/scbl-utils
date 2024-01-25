@@ -4,7 +4,6 @@ from re import sub
 from string import punctuation, whitespace
 
 from email_validator.exceptions_types import EmailUndeliverableError
-from pytest import exit as test_exit
 from pytest import mark, raises
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -27,10 +26,11 @@ class TestInstitutionModel:
     """
 
     ror_id = '02der9h97'
-    manual_name = 'A manually assigned name'
+    manual_name = 'Manual Name'
+    email_format = r'{first_name}.{last_name}@uconn.edu'
     correct_dataset = [
         (
-            {'ror_id': whitespace + ror_id + whitespace},
+            {'ror_id': whitespace + ror_id + whitespace, 'email_format': email_format},
             {
                 'ror_id': ror_id,
                 'name': 'University of Connecticut',
@@ -38,6 +38,7 @@ class TestInstitutionModel:
                 'country': 'US',
                 'state': 'CT',
                 'city': 'Storrs',
+                'email_format': email_format,
             },
         ),
         (
@@ -45,9 +46,10 @@ class TestInstitutionModel:
                 'ror_id': whitespace + ror_id + whitespace,
                 'name': whitespace + manual_name + whitespace,
                 'short_name': whitespace + manual_name + whitespace,
-                'country': 'wrong_country',
-                'state': 'wrong_state',
-                'city': 'wrong_city',
+                'country': 'country',
+                'state': 'state',
+                'city': 'city',
+                'email_format': email_format,
             },
             {
                 'ror_id': ror_id,
@@ -56,6 +58,7 @@ class TestInstitutionModel:
                 'country': 'US',
                 'state': 'CT',
                 'city': 'Storrs',
+                'email_format': email_format,
             },
         ),
     ]
@@ -98,7 +101,7 @@ class TestInstitutionModel:
                 email_format=r'{first_name}.{last_name}@jax.org',
             )
 
-    def test_invalid_email_format(self):
+    def test_email_format_invalid_attribute(self):
         """
         Test that given an incorrect email format, the `Institution`
         model throws an error.
@@ -108,9 +111,11 @@ class TestInstitutionModel:
                 ror_id=self.ror_id, email_format=r'{non_existent_attribute}@jax.org'
             )
 
+    def test_email_format_no_variables(self):
         with raises(Abort):
             Institution(ror_id=self.ror_id, email_format=r'contant_email@jax.org')
 
+    def test_email_format_invalid_domain(self):
         with raises(EmailUndeliverableError):
             Institution(
                 ror_id=self.ror_id, email_format=r'{first_name}.{last_name}@jax.abc'
@@ -139,7 +144,7 @@ class TestLabModel:
                 delivery_parent_dir / f'{pi.first_name.lower()}_{pi.last_name.lower()}'
             ),
             'group': 'test_group',
-            'name': 'Said Lab',
+            'name': 'Ahmed Said Lab',
             'projects': [],
         }
         lab = Lab(institution=institution, pi=pi)
@@ -222,7 +227,7 @@ class TestPersonModel:
         domain = institution.email_format.split("@")[1]
 
         assert person.email == f'ahmed.saidalaani@{domain}'
-        assert person.email_auto_generated == True
+        assert person.email_auto_generated
 
 
 class TestDataSetModel:
@@ -316,18 +321,19 @@ class TestLibraryModel:
     Tests for the `Library` model.
     """
 
-    def test_library_id(
-        self, complete_db_objects: dict, library_id: str, expected_library_id: str
-    ):
+    def test_library_id(self, complete_db_objects: dict):
         """
         Test that the `Library` model cleans the library ID.
         """
         data_set = complete_db_objects['data_set']
         library_type = complete_db_objects['library_type']
         library = Library(
-            id=library_id, data_set=data_set, library_type=library_type, status='status'
+            id=f'{whitespace}sc9900000{whitespace}',
+            data_set=data_set,
+            library_type=library_type,
+            status='status',
         )
-        assert library.id == expected_library_id
+        assert library.id == 'SC9900000'
 
     def test_invalid_library_id(self, complete_db_objects: dict):
         """
