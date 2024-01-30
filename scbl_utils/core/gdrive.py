@@ -18,14 +18,15 @@ from rich import print as rprint
 from sqlalchemy import inspect
 from typer import Abort
 
-from ..db_models import data, definitions
-from ..db_models.bases import Base
+from ..db_models import definitions, disassociative
+from ..db_models.base import Base
 from ..defaults import OBJECT_SEP_CHAR
 from .validation import valid_db_target
 
 sheet_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+# TODO: probably don't actually need an index column
 @dataclass(config=sheet_config)
 class TrackingSheet:
     worksheet: gs.Worksheet
@@ -152,42 +153,59 @@ class TrackingSheet:
             target_list = col_conversion['to']
             mapper = col_conversion.get('mapper', {})
 
+            column_with_numeric_suffix_pattern = r'^(?:\w+\.)+_(\d+)$'
+            # This could be factored out into a separate function
             for target in target_list:
                 tablename = target.split(OBJECT_SEP_CHAR)[0]
                 df = dfs[tablename]
 
                 cleaned_data_column = df[column].replace(mapper)
 
-                if target in df.columns:
-                    df[f'{target}_1'] = cleaned_data_column.copy()
-                else:
+                duplicate_target_columns = df.columns[
+                    df.columns.str.match(rf'^{target}')
+                ]
+                latest_duplicate = duplicate_target_columns.max()
+
+                if pd.isna(latest_duplicate):
                     df[target] = cleaned_data_column.copy()
+                    continue
+
+                latest_duplicate: str
+
+                if match_obj := match(
+                    pattern=column_with_numeric_suffix_pattern, string=latest_duplicate
+                ):
+                    next_duplicate_number = int(match_obj.group(1)) + 1
+                    df[f'{target}_{next_duplicate_number}'] = cleaned_data_column.copy()
+                else:
+                    df[f'{target}_1'] = cleaned_data_column.copy()
 
         # TODO: variable names here are bad and this isn't really clean
+        # also might be able to take this into a separate function
         for tablename, df in dfs.items():
-            col_contains_suffix = df.columns.str.fullmatch(r'.+_\d+')
+            column_contains_suffix = df.columns.str.fullmatch(r'.+_\d+')
 
-            if not col_contains_suffix.any():
+            if not column_contains_suffix.any():
                 continue
 
-            cols_to_append = df.columns[col_contains_suffix]
-            renamed_cols_to_append = cols_to_append.str.replace(
-                pat=r'_\d+', repl=r'', regex=True
+            columns_to_append = df.columns[column_contains_suffix]
+            renamed_cols_to_append = columns_to_append.str.replace(
+                pat=r'_\d+$', repl=r'', regex=True
             )
 
-            cols_to_fill = df.columns[
-                (~df.columns.isin(renamed_cols_to_append)) & (~col_contains_suffix)
+            columns_to_fill = df.columns[
+                (~df.columns.isin(renamed_cols_to_append)) & (~column_contains_suffix)
             ]
 
-            dummy_data = {col: [None] * len(df) for col in cols_to_fill}
+            dummy_data = {col: [None] * len(df) for col in columns_to_fill}
             dummy_df = pd.DataFrame(dummy_data)
 
             rows_to_append = pd.DataFrame()
-            rows_to_append[renamed_cols_to_append] = df[cols_to_append].copy()
-            rows_to_append[cols_to_fill] = dummy_df.copy()
+            rows_to_append[renamed_cols_to_append] = df[columns_to_append].copy()
+            rows_to_append[columns_to_fill] = dummy_df.copy()
 
             dfs[tablename] = pd.concat(
-                [df[df.columns[~col_contains_suffix]], rows_to_append],
+                [df[df.columns[~column_contains_suffix]], rows_to_append],
                 axis=0,
                 ignore_index=True,
             )

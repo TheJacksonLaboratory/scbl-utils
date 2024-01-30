@@ -15,7 +15,7 @@ from rich import print as rprint
 from sqlalchemy import inspect
 from typer import Abort
 
-from ..db_models.bases import Base
+from ..db_models.base import Base
 from ..defaults import OBJECT_SEP_CHAR, SEE_MORE
 
 
@@ -89,15 +89,15 @@ def valid_db_target(target: str, object_sep_char: str = OBJECT_SEP_CHAR) -> bool
     """
     min_seps = 1
     max_seps = 3
-    if not min_seps <= target.count(OBJECT_SEP_CHAR) <= max_seps:
+    if not min_seps <= target.count(object_sep_char) <= max_seps:
         return False
 
-    table, column = target.split(OBJECT_SEP_CHAR, maxsplit=1)
+    table, column = target.split(object_sep_char, maxsplit=1)
 
     if table not in Base.metadata.tables.keys():
         return False
 
-    if column.count(OBJECT_SEP_CHAR) != 0:
+    if column.count(object_sep_char) != 0:
         return valid_db_target(column)
 
     return column in Base.metadata.tables[table].columns

@@ -18,20 +18,10 @@ from .core.data_io import load_data
 from .core.db import data_rows_to_db, db_session
 from .core.gdrive import TrackingSheet
 from .core.validation import validate_dir
-from .db_models.bases import Base
-from .db_models.data import (
-    DataSet,
-    Institution,
-    Lab,
-    Library,
-    LibraryType,
-    Person,
-    Platform,
-    Project,
-    Sample,
-    SequencingRun,
-    Tag,
-)
+from .db_models.base import Base
+from .db_models.data_metadata import DataSet, Project
+from .db_models.disassociative import Library, LibraryType, Sample, SequencingRun, Tag
+from .db_models.researcher_metadata import Institution, Lab, Person
 from .defaults import (
     CONFIG_DIR,
     DATA_INSERTION_ORDER,

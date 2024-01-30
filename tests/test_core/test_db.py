@@ -9,8 +9,8 @@ from typer import Abort
 
 from scbl_utils.core.data_io import load_data
 from scbl_utils.core.db import data_rows_to_db
-from scbl_utils.db_models.bases import Base
-from scbl_utils.db_models.data import Institution, Lab, Person
+from scbl_utils.db_models.base import Base
+from scbl_utils.db_models.researcher_metadata import Institution, Lab, Person
 from scbl_utils.defaults import DATA_INSERTION_ORDER, DATA_SCHEMAS
 
 from ..fixtures.db_fixtures import (

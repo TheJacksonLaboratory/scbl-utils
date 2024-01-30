@@ -1,39 +1,6 @@
-"""
-This module contains SQLAlchemy models for the `scbl-utils` package.
-These models represent actual data stored in the database, as opposed to
-the definition of the data, which is stored in `definitions.py`.
-For example, an `Experment` is really an instance of a `Platform`.
-
-Classes:
-    - `Institution`: Research institution, such as a university or
-    organization
-    
-    - `Lab`: Lab at an `Institution`. Can be a PI's lab, or a
-    consortium/project headed by a PI.
-    
-    - `Project`: SCBL project, used to group `data_set`s. Not to be
-    confused with a consortium/project headed by a PI.
-    
-    - `Person`: A person, who can be on multiple `Project`s.
-    
-    - `DataSet`: data_set in a `Project`. This table essentially
-    handles the complex mappings between `Sample`s, `Library`s, and
-    `Project`s.
-    
-    - `Sample`: Biological sample in an `data_set`. Can be associated
-    with multiple `Library`s, or multiple `Library`s can be associated
-    with it.
-    
-    - `SequencingRun`: A sequencing run, which can be associated with
-    one or more `Library`s.
-    
-    - `Library`: A cDNA library, the ultimate item that is sequenced.
-"""
-# TODO: make sure that compare operations are correct
-from datetime import date
 from os import getenv
 from pathlib import Path
-from re import findall, match, search, sub
+from re import match
 
 from email_validator import validate_email
 from requests import get
@@ -43,27 +10,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
 from ..core.utils import _get_format_string_vars
-from ..core.validation import valid_str, validate_dir
-from ..defaults import (
-    EMAIL_FORMAT_VARIABLE_PATTERN,
-    LEFT_FORMAT_CHAR,
-    LIBRARY_ID_PATTERN,
-    ORCID_PATTERN,
-    PROJECT_ID_PATTERN,
-    RIGHT_FORMAT_CHAR,
-)
-from .bases import (
-    Base,
+from ..core.validation import validate_dir
+from ..defaults import ORCID_PATTERN
+from .base import Base
+from .data_metadata import Project
+from .type_shortcuts import (
     SamplesheetString,
     StrippedString,
     int_pk,
-    samplesheet_str,
-    samplesheet_str_pk,
     stripped_str,
-    stripped_str_pk,
     unique_stripped_str,
 )
-from .definitions import LibraryType, Platform, Tag
 
 
 class Institution(Base):
@@ -249,38 +206,6 @@ project_person_mapping = Table(
 )
 
 
-class Project(Base):
-    __tablename__ = 'project'
-
-    id: Mapped[stripped_str_pk]
-
-    lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False, repr=False)
-
-    lab: Mapped[Lab] = relationship(back_populates='projects')
-    data_sets: Mapped[list['DataSet']] = relationship(
-        back_populates='project', default_factory=list, repr=False
-    )
-    people: Mapped[list['Person']] = relationship(
-        back_populates='projects',
-        default_factory=list,
-        secondary=project_person_mapping,
-        repr=False,
-    )
-
-    description: Mapped[stripped_str | None] = mapped_column(
-        default=None, insert_default=null(), index=True
-    )
-
-    @validates('id')
-    def check_id(self, key: str, id: str) -> str | None:
-        if valid_str(
-            string=id.upper().strip(),
-            pattern=PROJECT_ID_PATTERN,
-            string_name='project ID',
-        ):
-            return id
-
-
 class Person(Base):
     __tablename__ = 'person'
 
@@ -380,125 +305,3 @@ class Person(Base):
 
         email_info = validate_email(email, check_deliverability=True)
         return email_info.normalized
-
-
-class DataSet(Base):
-    __tablename__ = 'data_set'
-
-    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
-    name: Mapped[samplesheet_str] = mapped_column(index=True)
-    ilab_request_id: Mapped[stripped_str] = mapped_column(
-        index=True
-    )  # TODO: ilab validation
-
-    project_id: Mapped[str] = mapped_column(
-        ForeignKey('project.id'), init=False, repr=False
-    )
-    platform_id: Mapped[int] = mapped_column(
-        ForeignKey('platform.id'), init=False, repr=False
-    )
-    submitter_id: Mapped[int] = mapped_column(
-        ForeignKey('person.id'), init=False, repr=False
-    )
-
-    platform: Mapped[Platform] = relationship()
-    project: Mapped[Project] = relationship(back_populates='data_sets')
-    submitter: Mapped[Person] = relationship()
-
-    # TODO should there be another column for the date that work was
-    # begun on the dataset? this will help generate a batch_id
-    date_submitted: Mapped[date] = mapped_column(default_factory=date.today)
-    batch_id: Mapped[int] = mapped_column(init=False, default=None, repr=False)
-
-    samples: Mapped[list['Sample']] = relationship(
-        back_populates='data_set', default_factory=list, repr=False
-    )
-    libraries: Mapped[list['Library']] = relationship(
-        back_populates='data_set', default_factory=list, repr=False
-    )
-
-    @validates('batch_id')
-    def set_batch_id(self, key: str, batch_id: None) -> int:
-        # If it's decided that more things constitute a batch, this will
-        # be easy to update.
-
-        # Note that submitter email, institution, name, and ORCID have
-        # been picked instead of the person ID because a person is not
-        # assigned an ID until they enter the database.
-
-        # There is a small likelihood that two people with the same name
-        # and institution both have an autogenerated email and no ORCID.
-        # If these two people submit on the same day, the batch_id of
-        # the two datasets will be the same.
-        # TODO: this should be fixed somehow
-        to_hash = (
-            self.date_submitted,
-            self.submitter.email,
-            self.submitter.institution_id,
-            self.submitter.name,
-            self.submitter.orcid,
-        )
-        return hash(to_hash)
-
-
-class Sample(Base):
-    __tablename__ = 'sample'
-
-    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
-    name: Mapped[samplesheet_str] = mapped_column(index=True)
-
-    data_set_id: Mapped[int] = mapped_column(
-        ForeignKey('data_set.id'), init=False, repr=False
-    )
-    tag_id: Mapped[str | None] = mapped_column(
-        ForeignKey('tag.id'), init=False, insert_default=null()
-    )
-    # TODO: add actual data
-
-    data_set: Mapped[DataSet] = relationship(back_populates='samples')
-    tag: Mapped[Tag] = relationship(default=None, repr=False)
-
-
-class SequencingRun(Base):
-    __tablename__ = 'sequencing_run'
-
-    # TODO: validate that this matches a pattern
-    id: Mapped[samplesheet_str_pk]
-
-    libraries: Mapped[list['Library']] = relationship(
-        back_populates='sequencing_run', default_factory=list, repr=False
-    )
-
-
-class Library(Base):
-    __tablename__ = 'library'
-
-    id: Mapped[samplesheet_str_pk]
-    data_set_id: Mapped[int] = mapped_column(
-        ForeignKey('data_set.id'), init=False, repr=False
-    )
-    library_type_id: Mapped[int] = mapped_column(
-        ForeignKey('library_type.id'), init=False, repr=False
-    )
-    sequencing_run_id: Mapped[str | None] = mapped_column(
-        ForeignKey('sequencing_run.id'), init=False, insert_default=null()
-    )
-    # TODO: add some validation so that libraries with a particular
-    # status must have a sequencing run
-    status: Mapped[stripped_str]
-
-    data_set: Mapped[DataSet] = relationship(back_populates='libraries')
-    library_type: Mapped[LibraryType] = relationship()
-    sequencing_run: Mapped[SequencingRun] = relationship(
-        back_populates='libraries', default=None, repr=False
-    )
-
-    @validates('id')
-    def check_id(self, key: str, id: str) -> str | None:
-        id = id.upper().strip()
-        if valid_str(
-            string=id,
-            pattern=LIBRARY_ID_PATTERN,
-            string_name='library ID',
-        ):
-            return id

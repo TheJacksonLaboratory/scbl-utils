@@ -32,7 +32,7 @@ from typer import Abort
 
 from scbl_utils.defaults import OBJECT_SEP_CHAR
 
-from ..db_models.bases import Base
+from ..db_models.base import Base
 from ..defaults import DOCUMENTATION, OBJECT_SEP_CHAR, OBJECT_SEP_PATTERN
 from .utils import _print_table
 
@@ -115,17 +115,17 @@ def _get_matching_obj(
     return matches[0]
 
 
-# TODO: this function is good but needs some simplification. Come back to it
+# TODO: this function is good but needs some simplification. It's too
+# long and should be split into smaller functions. Also, the design
+# can be simplified.
 def data_rows_to_db(
     session: Session, data: pd.DataFrame | list[dict[str, Any]], data_source: str
 ):
     """ """
     data = pd.DataFrame.from_records(data) if isinstance(data, list) else data
 
-    inherent_attribute_cols = [
-        col for col in data.columns if col.count(OBJECT_SEP_CHAR) == 1
-    ]
-    tables = {col.split(OBJECT_SEP_CHAR)[0] for col in inherent_attribute_cols}
+    child_columns = [col for col in data.columns if col.count(OBJECT_SEP_CHAR) == 1]
+    tables = {col.split(OBJECT_SEP_CHAR)[0] for col in child_columns}
 
     if len(tables) == 0:
         tables = {col.split(OBJECT_SEP_CHAR)[0] for col in data.columns}
@@ -139,34 +139,30 @@ def data_rows_to_db(
     table = tables.pop()
     model = Base.get_model(table)
 
-    renamed_inherent_attribute_cols = [
-        col.split(OBJECT_SEP_CHAR)[1] for col in inherent_attribute_cols
-    ]
+    renamed_child_columns = [col.split(OBJECT_SEP_CHAR)[1] for col in child_columns]
     renamed_unique_data = data.drop_duplicates().rename(
-        columns=dict(zip(inherent_attribute_cols, renamed_inherent_attribute_cols))
+        columns=dict(zip(child_columns, renamed_child_columns))
     )
-    renamed_unique_inherent_data = renamed_unique_data[
-        renamed_inherent_attribute_cols
-    ].copy()
+    renamed_unique_child_data = renamed_unique_data[renamed_child_columns].copy()
 
-    renamed_unique_inherent_data['match'] = renamed_unique_inherent_data.agg(
+    renamed_unique_child_data['match'] = renamed_unique_child_data.agg(
         _get_matching_obj, axis=1, session=session, model=model
     )
-    data_to_add = renamed_unique_data[renamed_unique_inherent_data['match'].isna()]
+    data_to_add = renamed_unique_data[renamed_unique_child_data['match'].isna()]
 
-    parent_attribute_cols = [
-        col for col in data.columns if col.count(OBJECT_SEP_CHAR) > 1
-    ]
-    parent_names = {col.split(OBJECT_SEP_CHAR)[1] for col in parent_attribute_cols}
+    parent_columns = [col for col in data.columns if col.count(OBJECT_SEP_CHAR) > 1]
+    parent_names = {col.split(OBJECT_SEP_CHAR)[1] for col in parent_columns}
 
     inspector = inspect(model)
     for parent_name in parent_names:  # TODO: model_name might be a bad name
         parent_model: type[Base] = inspector.relationships[parent_name].mapper.class_
 
-        parent_col_pattern = (
+        parent_column_pattern = (
             rf'{table}{OBJECT_SEP_PATTERN}{parent_name}{OBJECT_SEP_PATTERN}.*'
         )
-        parent_cols = data.columns[data.columns.str.match(parent_col_pattern)].to_list()
+        parent_cols = data.columns[
+            data.columns.str.match(parent_column_pattern)
+        ].to_list()
         unique_parent_data = data[parent_cols].drop_duplicates()
 
         renamed_cols = [
@@ -219,6 +215,7 @@ def data_rows_to_db(
     ]
 
     # TODO: Is this robust? What if I miss something with 'first'
+    # Write a test.
     if 'id' in data_to_add.columns:
         collection_class = {
             att: inspector.relationships.get(att, Relationship()).collection_class

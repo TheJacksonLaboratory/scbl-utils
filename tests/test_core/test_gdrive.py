@@ -4,7 +4,7 @@
 from gspread import Spreadsheet
 
 from scbl_utils.core.gdrive import TrackingSheet
-from scbl_utils.db_models.bases import Base
+from scbl_utils.db_models.base import Base
 
 
 class TestTrackingSheet:

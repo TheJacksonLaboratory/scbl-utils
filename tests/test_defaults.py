@@ -1,6 +1,6 @@
-from scbl_utils.db_models.bases import Base
-from scbl_utils.db_models.data import *
+from scbl_utils.db_models.base import Base
 from scbl_utils.db_models.definitions import *
+from scbl_utils.db_models.disassociative import *
 from scbl_utils.defaults import DATA_INSERTION_ORDER, DATA_SCHEMAS, DB_INIT_FILES
 
 

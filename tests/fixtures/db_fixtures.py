@@ -10,18 +10,16 @@ from sqlalchemy.orm import Session, sessionmaker
 from yaml import dump as dump_yml
 
 from scbl_utils.core.db import db_session
-from scbl_utils.db_models.bases import Base
-from scbl_utils.db_models.data import (
-    DataSet,
-    Institution,
-    Lab,
+from scbl_utils.db_models.base import Base
+from scbl_utils.db_models.data_metadata import DataSet, Platform, Project
+from scbl_utils.db_models.disassociative import (
     Library,
-    Person,
-    Project,
+    LibraryType,
     Sample,
     SequencingRun,
+    Tag,
 )
-from scbl_utils.db_models.definitions import LibraryType, Platform, Tag
+from scbl_utils.db_models.researcher_metadata import Institution, Lab, Person
 from scbl_utils.defaults import DATA_SCHEMAS
 
 

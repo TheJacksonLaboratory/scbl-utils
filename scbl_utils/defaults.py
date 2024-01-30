@@ -37,9 +37,20 @@ LEFT_FORMAT_CHAR, RIGHT_FORMAT_CHAR = r'{', r'}'
 EMAIL_FORMAT_VARIABLE_PATTERN = r'{[^{}]+}'
 
 # Configuration files necesary for script
+# TODO: not every file is required for every task
 DB_CONFIG_FILES = [Path(filename) for filename in ('db-spec.yml',)]
+# TODO: this can probably be made dynamic. We can store in the database
+# a list of assay types or tracking sheets, then the script can query
+# that against the configuration directory. Can also enforce a structure
+# of a tracking-sheet directory that lives alongside
+# service-account.json
 GDRIVE_CONFIG_FILES = [
-    Path(filename) for filename in ('gdrive-spec.yml', 'service-account.json')
+    Path(filename)
+    for filename in (
+        'disassociative_tracking-sheet_spec.yml',
+        'xenium_tracking-sheet_spec.yml',
+        'service-account.json',
+    )
 ]
 
 # CSV files necessary for database initialization
