@@ -19,6 +19,7 @@ from ..db_models.base import Base
 from ..defaults import OBJECT_SEP_CHAR, SEE_MORE
 
 
+# TODO: required_files should be renamed to required_paths
 def validate_dir(
     direc: Path,
     required_files: Collection[Path] = [],
@@ -92,12 +93,14 @@ def valid_db_target(target: str, object_sep_char: str = OBJECT_SEP_CHAR) -> bool
     if not min_seps <= target.count(object_sep_char) <= max_seps:
         return False
 
-    table, column = target.split(object_sep_char, maxsplit=1)
+    model_name, column = target.split(object_sep_char, maxsplit=1)
 
-    if table not in Base.metadata.tables.keys():
+    model_names = {model.class_.__name__ for model in Base.registry.mappers}
+    if model_name not in Base.registry.mappers:
         return False
 
-    if column.count(object_sep_char) != 0:
-        return valid_db_target(column)
+    # TODO: figure out some recursive magic here for our new system
+    # if column.count(object_sep_char) != 0:
+    #     return valid_db_target(column)
 
-    return column in Base.metadata.tables[table].columns
+    # return column in Base.metadata.tables[table].columns

@@ -11,15 +11,21 @@ from yaml import dump as dump_yml
 
 from scbl_utils.core.db import db_session
 from scbl_utils.db_models.base import Base
-from scbl_utils.db_models.data_metadata import DataSet, Platform, Project
-from scbl_utils.db_models.disassociative import (
+from scbl_utils.db_models.data_models.chromium import (
     Library,
     LibraryType,
-    Sample,
     SequencingRun,
     Tag,
 )
-from scbl_utils.db_models.researcher_metadata import Institution, Lab, Person
+from scbl_utils.db_models.metadata_models import (
+    DataSet,
+    Institution,
+    Lab,
+    Person,
+    Platform,
+    Project,
+    Sample,
+)
 from scbl_utils.defaults import DATA_SCHEMAS
 
 

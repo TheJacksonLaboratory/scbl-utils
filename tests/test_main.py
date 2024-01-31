@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from typer.testing import CliRunner
 
 from scbl_utils.db_models.base import Base
+from scbl_utils.db_models.data_models.chromium import *
 from scbl_utils.db_models.definitions import *
-from scbl_utils.db_models.disassociative import *
 from scbl_utils.defaults import DB_INIT_FILES
 from scbl_utils.main import app
 

@@ -3,8 +3,8 @@ from string import punctuation, whitespace
 from pytest import raises
 
 from scbl_utils.db_models.base import *
-from scbl_utils.db_models.disassociative import *
-from scbl_utils.db_models.type_shortcuts import SamplesheetString, StrippedString
+from scbl_utils.db_models.column_types import SamplesheetString, StrippedString
+from scbl_utils.db_models.data_models.chromium import *
 
 from ..fixtures.db_fixtures import complete_db_objects, delivery_parent_dir
 

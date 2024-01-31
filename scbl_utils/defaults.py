@@ -21,19 +21,21 @@ SEP_PATTERN = rf'[{SEP_CHARS}]'
 SAMPLENAME_BLACKLIST_PATTERN = rf'[^{ascii_letters + digits + SEP_CHARS}]'
 
 DATA_INSERTION_ORDER = (
-    'institution',
-    'person',
-    'lab',
-    'project',
-    'platform',
-    'library_type',
-    'tag',
-    'sequencing_run',
-    'data_set',
-    'library',
-    'sample',
+    'Institution',
+    'Person',
+    'Lab',
+    'Project',
+    'Platform',
+    'LibraryType',
+    'Tag',
+    'SequencingRun',
+    'ChromiumDataSet',
+    'Library',
+    'ChromiumSample',
+    'XeniumRun',
+    'XeniumDataSet',
+    'XeniumSample',
 )
-LEFT_FORMAT_CHAR, RIGHT_FORMAT_CHAR = r'{', r'}'
 EMAIL_FORMAT_VARIABLE_PATTERN = r'{[^{}]+}'
 
 # Configuration files necesary for script
@@ -45,26 +47,14 @@ DB_CONFIG_FILES = [Path(filename) for filename in ('db-spec.yml',)]
 # of a tracking-sheet directory that lives alongside
 # service-account.json
 GDRIVE_CONFIG_FILES = [
-    Path(filename)
-    for filename in (
-        'disassociative_tracking-sheet_spec.yml',
-        'xenium_tracking-sheet_spec.yml',
-        'service-account.json',
-    )
+    Path(filename) for filename in ('service-account.json', 'platform_specs')
 ]
 
 # CSV files necessary for database initialization
 # This isn't even necessary
 DB_INIT_FILES = [
     Path(f'{table_name}.csv')
-    for table_name in (
-        'institution',
-        'lab',
-        'library_type',
-        'person',
-        'platform',
-        'tag',
-    )
+    for table_name in ('Institution', 'Lab', 'Person', 'Platform', 'LibraryType', 'Tag')
 ]
 OBJECT_SEP_CHAR = '.'
 OBJECT_SEP_PATTERN = r'\.'
@@ -85,7 +75,7 @@ DB_SPEC_SCHEMA = {
 }
 
 # JSON schema for Google Drive configuration file
-GDRIVE_SPEC_SCHEMA = {
+GDRIVE_PLATFORM_SPEC_SCHEMA = {
     '$schema': _schema_draft_version,
     'type': 'object',
     'properties': {
@@ -123,64 +113,65 @@ GDRIVE_SPEC_SCHEMA = {
 # All CSVs follow same skeleton of a schema, so just define the
 # properties
 _institution_properties = {
-    'institution.name': {'type': _string_or_null},
-    'institution.short_name': {'type': _string_or_null},
-    'institution.email_format': {'type': 'string'},
-    'institution.country': {
+    'Institution.name': {'type': _string_or_null},
+    'Institution.short_name': {'type': _string_or_null},
+    'Institution.email_format': {'type': 'string'},
+    'Institution.country': {
         'type': _string_or_null,
         'minLength': 2,
         'maxLength': 2,
     },
-    'institution.state': {
+    'Institution.state': {
         'type': _string_or_null,
         'minLength': 2,
         'maxLength': 2,
     },
-    'institution.city': {'type': _string_or_null},
-    'institution.ror_id': {'type': _string_or_null},
+    'Institution.city': {'type': _string_or_null},
+    'Institution.ror_id': {'type': _string_or_null},
 }
 
 ORCID_PATTERN = r'^(\d{4})-?(\d{4})-?(\d{4})-?(\d{4}|\d{3}X)$'
 _lab_properties = {
-    'lab.institution.name': {'type': 'string'},
-    'lab.pi.email': {'type': _string_or_null, 'format': 'email'},
-    'lab.pi.first_name': {'type': 'string'},
-    'lab.pi.last_name': {'type': 'string'},
-    'lab.pi.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
-    'lab.delivery_dir': {'type': _string_or_null},
-    'lab.name': {'type': _string_or_null},
+    'Lab.institution.name': {'type': 'string'},
+    'Lab.pi.email': {'type': _string_or_null, 'format': 'email'},
+    'Lab.pi.first_name': {'type': 'string'},
+    'Lab.pi.last_name': {'type': 'string'},
+    'Lab.pi.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+    'Lab.delivery_dir': {'type': _string_or_null},
+    'Lab.name': {'type': _string_or_null},
 }
 
 _person_properties = {
-    'person.first_name': {'type': 'string'},
-    'person.last_name': {'type': 'string'},
-    'person.email': {'type': _string_or_null, 'format': 'email'},
-    'person.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
-    'person.institution.name': {'type': 'string'},
+    'Person.first_name': {'type': 'string'},
+    'Person.last_name': {'type': 'string'},
+    'Person.email': {'type': _string_or_null, 'format': 'email'},
+    'Person.orcid': {'type': _string_or_null, 'pattern': ORCID_PATTERN},
+    'Person.institution.name': {'type': 'string'},
 }
 
-_platform_properties = {'platform.name': {'type': 'string'}}
 
-_library_type_properties = {'library_type.name': {'type': 'string'}}
+_platform_properties = {'Platform.name': {'type': 'string'}}
+
+_library_type_properties = {'LibraryType.name': {'type': 'string'}}
 
 _tag_properties = {
-    'tag.id': {'type': 'string'},
-    'tag.name': {'type': _string_or_null},
-    'tag.five_prime_offset': {'type': 'integer'},
-    'tag.tag_type': {'type': 'string'},
-    'tag.read': {'type': 'string', 'pattern': r'^R\d$'},
-    'tag.sequence': {'type': 'string', 'pattern': r'^[ACGTN]*$'},
-    'tag.pattern': {'type': 'string', 'pattern': r'^[35]P[ACTGN]*\(BC\)$'},
+    'Tag.id': {'type': 'string'},
+    'Tag.name': {'type': _string_or_null},
+    'Tag.five_prime_offset': {'type': 'integer'},
+    'Tag.type': {'type': 'string'},
+    'Tag.read': {'type': 'string', 'pattern': r'^R\d$'},
+    'Tag.sequence': {'type': 'string', 'pattern': r'^[ACGTN]*$'},
+    'Tag.pattern': {'type': 'string', 'pattern': r'^[35]P[ACTGN]*\(BC\)$'},
 }
 
 # Construct the full schema from the properties
 _properties: dict[str, dict] = {
-    'institution': _institution_properties,
-    'lab': _lab_properties,
-    'person': _person_properties,
-    'platform': _platform_properties,
-    'library_type': _library_type_properties,
-    'tag': _tag_properties,
+    'Institution': _institution_properties,
+    'Lab': _lab_properties,
+    'Person': _person_properties,
+    'Platform': _platform_properties,
+    'LibraryType': _library_type_properties,
+    'Tag': _tag_properties,
 }
 DATA_SCHEMAS = {
     model: {

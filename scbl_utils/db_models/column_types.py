@@ -58,5 +58,6 @@ stripped_str = Annotated[str, mapped_column(StrippedString)]
 samplesheet_str = Annotated[str, mapped_column(SamplesheetString)]
 
 # Commonly used unique string types
+unique_int = Annotated[int, mapped_column(unique=True)]
 unique_stripped_str = Annotated[str, mapped_column(StrippedString, unique=True)]
 unique_samplesheet_str = Annotated[str, mapped_column(SamplesheetString, unique=True)]

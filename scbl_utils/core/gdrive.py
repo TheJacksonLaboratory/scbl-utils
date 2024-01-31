@@ -18,8 +18,6 @@ from rich import print as rprint
 from sqlalchemy import inspect
 from typer import Abort
 
-from ..db_models import definitions, disassociative
-from ..db_models.base import Base
 from ..defaults import OBJECT_SEP_CHAR
 from .validation import valid_db_target
 

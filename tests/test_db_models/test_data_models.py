@@ -10,9 +10,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from typer import Abort
 
 from scbl_utils.db_models.base import Base
-from scbl_utils.db_models.data_metadata import DataSet, Project
-from scbl_utils.db_models.disassociative import *
-from scbl_utils.db_models.researcher_metadata import Institution, Lab, Person
+from scbl_utils.db_models.data_models.chromium import *
+from scbl_utils.db_models.metadata_models import (
+    DataSet,
+    Institution,
+    Lab,
+    Person,
+    Project,
+)
 
 from ..fixtures.db_fixtures import (
     complete_db_objects,

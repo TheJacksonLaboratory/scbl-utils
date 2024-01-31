@@ -35,17 +35,12 @@ from re import findall, search, sub
 from sqlalchemy import ForeignKey, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from scbl_utils.db_models.data_metadata import DataSet
+from scbl_utils.db_models.metadata_models import DataSet, Sample
 
-from ..core.validation import valid_str
-from ..defaults import (
-    EMAIL_FORMAT_VARIABLE_PATTERN,
-    LEFT_FORMAT_CHAR,
-    LIBRARY_ID_PATTERN,
-    RIGHT_FORMAT_CHAR,
-)
-from .base import Base
-from .type_shortcuts import (
+from ...core.validation import valid_str
+from ...defaults import LIBRARY_ID_PATTERN
+from ..base import Base
+from ..column_types import (
     int_pk,
     samplesheet_str,
     samplesheet_str_pk,
@@ -54,17 +49,16 @@ from .type_shortcuts import (
 )
 
 
-# TODO: add validation for platform
-class DissociativeDataSet(DataSet):
-    samples: Mapped[list['Sample']] = relationship(
-        back_populates='data_set', default_factory=list, repr=False
-    )
+class ChromiumDataSet(DataSet):
+    # ChromiumDataSet attributes
+    assay: Mapped[samplesheet_str | None] = mapped_column(index=True)
+
     libraries: Mapped[list['Library']] = relationship(
         back_populates='data_set', default_factory=list, repr=False
     )
 
     __mapper_args__ = {
-        'polymorphic_identity': 'dissociative_data_set',
+        'polymorphic_identity': 'chromium',
     }
 
 
@@ -72,55 +66,59 @@ class Tag(Base):
     __tablename__ = 'tag'
 
     # TODO: add validation
+    # Tag attributes
     id: Mapped[samplesheet_str_pk]
     name: Mapped[samplesheet_str | None]
-    tag_type: Mapped[stripped_str]
+    type: Mapped[stripped_str]
     read: Mapped[stripped_str]
     sequence: Mapped[stripped_str]
     pattern: Mapped[stripped_str]
     five_prime_offset: Mapped[int]
 
 
-class Sample(Base):
-    __tablename__ = 'sample'
-
-    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
-    name: Mapped[samplesheet_str] = mapped_column(index=True)
-
-    data_set_id: Mapped[int] = mapped_column(
-        ForeignKey('data_set.id'), init=False, repr=False
-    )
+class ChromiumSample(Sample):
+    # Parent foreign keys
     tag_id: Mapped[str | None] = mapped_column(
-        ForeignKey('tag.id'), init=False, insert_default=null()
+        ForeignKey('tag.id'), init=False, repr=False
     )
-    # TODO: add actual data
 
-    data_set: Mapped[DissociativeDataSet] = relationship(back_populates='samples')
+    # Parent models
     tag: Mapped[Tag] = relationship(default=None, repr=False)
 
+    __mapper_args__ = {'polymorphic_identity': 'chromium'}
 
-class SequencingRun(Base):
+
+class SequencingRun(Base, kw_only=True):
     __tablename__ = 'sequencing_run'
 
+    # SequencingRun attributes
     # TODO: validate that this matches a pattern
     id: Mapped[samplesheet_str_pk]
 
+    # Child models
     libraries: Mapped[list['Library']] = relationship(
         back_populates='sequencing_run', default_factory=list, repr=False
     )
 
 
-class LibraryType(Base):
+class LibraryType(Base, kw_only=True):
     __tablename__ = 'library_type'
 
+    # LibraryType attributes
     id: Mapped[int_pk] = mapped_column(init=False, repr=False)
     name: Mapped[unique_samplesheet_str] = mapped_column(index=True)
 
 
-class Library(Base):
+class Library(Base, kw_only=True):
     __tablename__ = 'library'
 
+    # Library attributes
     id: Mapped[samplesheet_str_pk]
+    # TODO: add some validation so that libraries with a particular
+    # status must have a sequencing run
+    status: Mapped[stripped_str]
+
+    # Parent foreign keys
     data_set_id: Mapped[int] = mapped_column(
         ForeignKey('data_set.id'), init=False, repr=False
     )
@@ -130,11 +128,9 @@ class Library(Base):
     sequencing_run_id: Mapped[str | None] = mapped_column(
         ForeignKey('sequencing_run.id'), init=False, insert_default=null()
     )
-    # TODO: add some validation so that libraries with a particular
-    # status must have a sequencing run
-    status: Mapped[stripped_str]
 
-    data_set: Mapped[DissociativeDataSet] = relationship(back_populates='libraries')
+    # Parent models
+    data_set: Mapped[ChromiumDataSet] = relationship(back_populates='libraries')
     library_type: Mapped[LibraryType] = relationship()
     sequencing_run: Mapped[SequencingRun] = relationship(
         back_populates='libraries', default=None, repr=False

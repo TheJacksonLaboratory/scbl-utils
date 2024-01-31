@@ -125,19 +125,19 @@ def data_rows_to_db(
     data = pd.DataFrame.from_records(data) if isinstance(data, list) else data
 
     child_columns = [col for col in data.columns if col.count(OBJECT_SEP_CHAR) == 1]
-    tables = {col.split(OBJECT_SEP_CHAR)[0] for col in child_columns}
+    model_names = {col.split(OBJECT_SEP_CHAR)[0] for col in child_columns}
 
-    if len(tables) == 0:
-        tables = {col.split(OBJECT_SEP_CHAR)[0] for col in data.columns}
+    if len(model_names) == 0:
+        model_names = {col.split(OBJECT_SEP_CHAR)[0] for col in data.columns}
 
-    if len(tables) != 1:
+    if len(model_names) != 1:
         rprint(
-            f'The data must represent only one table in the database, but [orange1]{tables}[/] were found.'
+            f'The data must represent only one table in the database, but [orange1]{model_names}[/] were found.'
         )
         raise Abort()
 
-    table = tables.pop()
-    model = Base.get_model(table)
+    model_name = model_names.pop()
+    model = Base.get_model(model_name)
 
     renamed_child_columns = [col.split(OBJECT_SEP_CHAR)[1] for col in child_columns]
     renamed_unique_data = data.drop_duplicates().rename(
@@ -158,7 +158,7 @@ def data_rows_to_db(
         parent_model: type[Base] = inspector.relationships[parent_name].mapper.class_
 
         parent_column_pattern = (
-            rf'{table}{OBJECT_SEP_PATTERN}{parent_name}{OBJECT_SEP_PATTERN}.*'
+            rf'{model_name}{OBJECT_SEP_PATTERN}{parent_name}{OBJECT_SEP_PATTERN}.*'
         )
         parent_cols = data.columns[
             data.columns.str.match(parent_column_pattern)
@@ -188,13 +188,13 @@ def data_rows_to_db(
                 unique_parent_data.loc[no_matches],
                 console=console,
                 header=error_table_header,
-                message=f'The following rows from [orange1]{data_source}[/] could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added.',
+                message=f'The following rows from [orange1]{data_source}[/] could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added.',
             )
             _print_table(
                 unique_parent_data.loc[too_many_matches],
                 console=console,
                 header=error_table_header,
-                message=f'The following rows from [orange1]{data_source}[/] could be matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{table}[/]. These rows will not be added. Please specify or add more columns in [orange1]{data_source}[/] that uniquely identify the [green]{parent_name}[/] for a [green]{table}[/].',
+                message=f'The following rows from [orange1]{data_source}[/] could be matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added. Please specify or add more columns in [orange1]{data_source}[/] that uniquely identify the [green]{parent_name}[/] for a [green]{model_name}[/].',
             )
 
             unique_parent_data = unique_parent_data[~no_matches & ~too_many_matches]

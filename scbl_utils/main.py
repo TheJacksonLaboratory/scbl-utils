@@ -13,15 +13,24 @@ from typing import Annotated
 
 import gspread as gs
 import typer
+from rich import print as rprint
+from sqlalchemy import select
 
 from .core.data_io import load_data
 from .core.db import data_rows_to_db, db_session
 from .core.gdrive import TrackingSheet
 from .core.validation import validate_dir
 from .db_models.base import Base
-from .db_models.data_metadata import DataSet, Project
-from .db_models.disassociative import Library, LibraryType, Sample, SequencingRun, Tag
-from .db_models.researcher_metadata import Institution, Lab, Person
+from .db_models.data_models.chromium import Library, LibraryType, SequencingRun, Tag
+from .db_models.metadata_models import (
+    DataSet,
+    Institution,
+    Lab,
+    Person,
+    Platform,
+    Project,
+    Sample,
+)
 from .defaults import (
     CONFIG_DIR,
     DATA_INSERTION_ORDER,
@@ -30,7 +39,7 @@ from .defaults import (
     DB_INIT_FILES,
     DB_SPEC_SCHEMA,
     GDRIVE_CONFIG_FILES,
-    GDRIVE_SPEC_SCHEMA,
+    GDRIVE_PLATFORM_SPEC_SCHEMA,
     SIBLING_REPOSITORY,
 )
 
@@ -85,12 +94,14 @@ def init_db(
         for path in data_files.values()
     }
 
-    ordered_tables = (table for table in DATA_INSERTION_ORDER if table in datas)
+    ordered_model_names = (
+        model_name for model_name in DATA_INSERTION_ORDER if model_name in datas
+    )
 
     Session = db_session(base_class=Base, **spec)
-    for tablename in ordered_tables:
+    for model_name in ordered_model_names:
         with Session.begin() as session:
-            data_rows_to_db(session, datas[tablename], data_source=f'{tablename}.csv')
+            data_rows_to_db(session, datas[model_name], data_source=f'{model_name}.csv')
 
 
 @app.command()
@@ -104,24 +115,42 @@ def sync_db_with_gdrive():
     gdrive_config_files = validate_dir(
         gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES
     )
-    gdrive_spec: dict = load_data(
-        gdrive_config_files['gdrive-spec.yml'], schema=GDRIVE_SPEC_SCHEMA
-    )
 
     gclient = gs.service_account(filename=gdrive_config_files['service-account.json'])
-    tracking_spreadsheet = gclient.open_by_url(gdrive_spec['spreadsheet_url'])
-
-    main_sheet_id = gdrive_spec['main_sheet_id']
-    main_sheet = tracking_spreadsheet.get_worksheet_by_id(main_sheet_id)
-    main_sheet_spec = gdrive_spec['worksheets'][main_sheet_id]
-
-    main_datas = TrackingSheet(worksheet=main_sheet, **main_sheet_spec).to_dfs()
-    data_source = (
-        f'{tracking_spreadsheet.title} - {main_sheet.title} ({main_sheet.url})'
-    )
 
     Session = db_session(base_class=Base, **db_spec)
-    ordered_tables = (table for table in DATA_INSERTION_ORDER if table in main_datas)
-    for tablename in ordered_tables:
-        with Session.begin() as session:
-            data_rows_to_db(session, main_datas[tablename], data_source=data_source)
+    with Session.begin() as session:
+        stmt = select(Platform)
+        platforms = session.execute(stmt).scalars().all()
+
+    platform_spec_dir = gdrive_config_files['gdrive_platform_specs']
+    for platform in platforms:
+        platform_spec_path = platform_spec_dir / f'{platform.name}_spec.yml'
+
+        if not platform_spec_path.exists():
+            rprint(
+                f'[green]{platform_spec_path.name}[/] not found in [orange1]{platform_spec_dir}[/]. Skipping ingestion of [green]{platform.name}[/] data from Google Drive.'
+            )
+            continue
+
+        gdrive_spec: dict = load_data(
+            platform_spec_path, schema=GDRIVE_PLATFORM_SPEC_SCHEMA
+        )
+
+        tracking_spreadsheet = gclient.open_by_url(gdrive_spec['spreadsheet_url'])
+
+        main_sheet_id = gdrive_spec['main_sheet_id']
+        main_sheet = tracking_spreadsheet.get_worksheet_by_id(main_sheet_id)
+        main_sheet_spec = gdrive_spec['worksheets'][main_sheet_id]
+
+        main_datas = TrackingSheet(worksheet=main_sheet, **main_sheet_spec).to_dfs()
+        data_source = (
+            f'{tracking_spreadsheet.title} - {main_sheet.title} ({main_sheet.url})'
+        )
+
+        ordered_tables = (
+            table for table in DATA_INSERTION_ORDER if table in main_datas
+        )
+        for tablename in ordered_tables:
+            with Session.begin() as session:
+                data_rows_to_db(session, main_datas[tablename], data_source=data_source)
