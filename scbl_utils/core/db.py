@@ -10,6 +10,7 @@ Functions:
     certain criteria
 """
 from collections.abc import Container, Hashable, Sequence
+from dataclasses import fields
 from itertools import zip_longest
 from typing import Any
 
@@ -32,7 +33,9 @@ from typer import Abort
 
 from scbl_utils.defaults import OBJECT_SEP_CHAR
 
+from ..db_models import metadata_models
 from ..db_models.base import Base
+from ..db_models.data_models import chromium, xenium
 from ..defaults import DOCUMENTATION, OBJECT_SEP_CHAR, OBJECT_SEP_PATTERN
 from .utils import _print_table
 
@@ -210,30 +213,32 @@ def data_rows_to_db(
                 unique_parent_data, how='left', on=parent_cols
             )
 
-    model_attributes = data_to_add.columns[
-        data_to_add.columns.isin(model.__match_args__)
+    model_init_attributes = [
+        field.name
+        for field in fields(model)
+        if field.init and field.name in data_to_add.columns
     ]
 
     # TODO: Is this robust? What if I miss something with 'first'
     # Write a test.
     if 'id' in data_to_add.columns:
-        collection_class = {
-            att: inspector.relationships.get(att, Relationship()).collection_class
-            for att in model_attributes
-        }
+        collection_classes = [
+            (att, inspector.relationships.get(att, Relationship()).collection_class)
+            for att in model_init_attributes
+        ]
         agg_funcs = {
-            att: 'first' if collection_class[att] is None else collection_class[att]
-            for att in model_attributes
+            att: 'first' if collection_class is None else collection_class
+            for att, collection_class in collection_classes
         }
 
         grouped_records_to_add = data_to_add.groupby('id', dropna=False).agg(
             func=agg_funcs
         )
-        records_to_add = grouped_records_to_add[model_attributes].to_dict(
+        records_to_add = grouped_records_to_add[model_init_attributes].to_dict(
             orient='records'
         )
     else:
-        records_to_add = data_to_add[model_attributes].to_dict(orient='records')
+        records_to_add = data_to_add[model_init_attributes].to_dict(orient='records')
 
     models_to_add = (model(**rec) for rec in records_to_add)  # type: ignore
     unique_models_to_add = []

@@ -118,18 +118,19 @@ def sync_db_with_gdrive():
 
     gclient = gs.service_account(filename=gdrive_config_files['service-account.json'])
 
+    platform_spec_dir = gdrive_config_files['platform_tracking-sheet_specs']
     Session = db_session(base_class=Base, **db_spec)
     with Session.begin() as session:
         stmt = select(Platform)
         platforms = session.execute(stmt).scalars().all()
+        platform_names = [platform.name for platform in platforms]
 
-    platform_spec_dir = gdrive_config_files['gdrive_platform_specs']
-    for platform in platforms:
-        platform_spec_path = platform_spec_dir / f'{platform.name}_spec.yml'
+    for platform_name in platform_names:
+        platform_spec_path = platform_spec_dir / f'{platform_name}.yml'
 
         if not platform_spec_path.exists():
             rprint(
-                f'[green]{platform_spec_path.name}[/] not found in [orange1]{platform_spec_dir}[/]. Skipping ingestion of [green]{platform.name}[/] data from Google Drive.'
+                f'[green]{platform_spec_path.name}[/] not found in [orange1]{platform_spec_dir}[/]. Skipping ingestion of [green]{platform_name}[/] data from Google Drive.'
             )
             continue
 

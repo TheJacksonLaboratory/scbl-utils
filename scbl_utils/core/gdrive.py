@@ -4,20 +4,20 @@ This module contains functions related to Google Drive that are used in
 
 Functions:
 """
-from collections.abc import Collection, Hashable
-from pathlib import Path
+from collections.abc import Collection
 from re import match
-from typing import Any, Literal
+from typing import Any
 
 import gspread as gs
 import pandas as pd
-from numpy import nan
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
 from rich import print as rprint
 from sqlalchemy import inspect
 from typer import Abort
 
+from ..db_models.base import Base
+from ..db_models.metadata_models import Person
 from ..defaults import OBJECT_SEP_CHAR
 from .validation import valid_db_target
 
@@ -220,7 +220,38 @@ class TrackingSheet:
         :return: _description_
         :rtype: dict[str, pd.DataFrame]
         """
-        person_columns = ['person', 'lab.pi', 'data_set.submitter', 'project.people']
+        for model_name, df in dfs.items():
+            if model_name == 'Person':
+                df[['Person.first_name', 'Person.last_name']] = df[
+                    'Person.name'
+                ].str.split(n=1, expand=True)
+                if 'Person.email' in df.columns:
+                    df['Person.email'] = df[['Person.last_name', 'Person.email']].agg(
+                        func=lambda row: row['Person.email']
+                        if row['Person.last_name'] in str(row['Person.email'])
+                        else None,
+                        axis=1,
+                    )
+            else:
+                model = Base.get_model(model_name)
+                inspector = inspect(model)
+                for col in df.columns:
+                    attr = col.split(OBJECT_SEP_CHAR)[1]
+
+                    relation = inspector.relationships.get(attr)
+                    if relation is None:
+                        continue
+
+                    if relation.mapper.class_ == Person:
+                        ...  # TODO: figure this out
+
+        person_columns = [
+            'Person',
+            'Lab.pi',
+            'ChromiumDataSet.submitter',
+            'XeniumDataSet.submitter',
+            'Project.people',
+        ]
         for col in person_columns:
             tablename = col.split(OBJECT_SEP_CHAR)[0]
             df = dfs[tablename]

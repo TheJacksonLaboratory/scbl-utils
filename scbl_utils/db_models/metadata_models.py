@@ -42,10 +42,6 @@ class Institution(Base, kw_only=True):
         default=None, insert_default=null(), repr=False
     )
 
-    labs: Mapped[list['Lab']] = relationship(
-        back_populates='institution', default_factory=list, repr=False
-    )
-
     # TODO needs more validation to check that the email format is correct
     @validates('email_format')
     def check_email_format(self, key: str, email_format: str) -> str:
@@ -141,7 +137,7 @@ class Person(Base, kw_only=True):
     )
     institution: Mapped[Institution] = relationship(repr=False, compare=False)
 
-    # name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
+    name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
     email_auto_generated: Mapped[bool] = mapped_column(
         init=False, default=False, repr=False
     )
@@ -163,9 +159,9 @@ class Person(Base, kw_only=True):
         noramlized_inner_whitespace = ' '.join(formatted_split)
         return noramlized_inner_whitespace
 
-    # @validates('name')
-    # def set_name(self, key: str, name: None) -> str:
-    #     return f'{self.first_name} {self.last_name}'
+    @validates('name')
+    def set_name(self, key: str, name: None) -> str:
+        return f'{self.first_name} {self.last_name}'
 
     @validates('orcid')
     def check_orcid(self, key: str, orcid: str | None) -> str | None:
@@ -240,7 +236,7 @@ class Lab(Base, kw_only=True):
     )
     pi_id: Mapped[int] = mapped_column(ForeignKey('person.id'), init=False, repr=False)
 
-    institution: Mapped[Institution] = relationship(back_populates='labs')
+    institution: Mapped[Institution] = relationship()
     pi: Mapped[Person] = relationship()
     projects: Mapped[list['Project']] = relationship(
         back_populates='lab', default_factory=list, repr=False

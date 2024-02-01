@@ -95,9 +95,12 @@ def valid_db_target(target: str, object_sep_char: str = OBJECT_SEP_CHAR) -> bool
 
     model_name, column = target.split(object_sep_char, maxsplit=1)
 
-    model_names = {model.class_.__name__ for model in Base.registry.mappers}
-    if model_name not in Base.registry.mappers:
+    model_names = [model.class_.__name__ for model in Base.registry.mappers]
+    if model_name not in model_names:
+        print(Base.registry.mappers)
         return False
+
+    return True
 
     # TODO: figure out some recursive magic here for our new system
     # if column.count(object_sep_char) != 0:

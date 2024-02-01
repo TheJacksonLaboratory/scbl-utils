@@ -47,14 +47,15 @@ DB_CONFIG_FILES = [Path(filename) for filename in ('db-spec.yml',)]
 # of a tracking-sheet directory that lives alongside
 # service-account.json
 GDRIVE_CONFIG_FILES = [
-    Path(filename) for filename in ('service-account.json', 'platform_specs')
+    Path(filename)
+    for filename in ('service-account.json', 'platform_tracking-sheet_specs')
 ]
 
 # CSV files necessary for database initialization
 # This isn't even necessary
 DB_INIT_FILES = [
-    Path(f'{table_name}.csv')
-    for table_name in ('Institution', 'Lab', 'Person', 'Platform', 'LibraryType', 'Tag')
+    Path(f'{model_name}.csv')
+    for model_name in ('Institution', 'Lab', 'Person', 'Platform', 'LibraryType', 'Tag')
 ]
 OBJECT_SEP_CHAR = '.'
 OBJECT_SEP_PATTERN = r'\.'
@@ -86,26 +87,44 @@ GDRIVE_PLATFORM_SPEC_SCHEMA = {
         'main_sheet_id': {'type': 'string', 'pattern': r'^\d+$'},
         'worksheets': {
             'type': 'object',
-            'properties': {
-                'replace': {'type': 'object'},
-                'index_col': {'type': 'string'},
-                'empty_means_drop': {'type': 'array', 'items': {'type': 'string'}},
-                'cols_to_targets': {
-                    'type': 'array',
-                    'items': {
-                        'type': 'object',
-                        'properties': {
-                            'from': {'type': 'string'},
-                            'to': {'type': 'array', 'items': {'type': 'string'}},
-                            'mapper': {'type': 'object'},
+            'patternProperties': {
+                r'^\d+$': {
+                    'type': 'object',
+                    'properties': {
+                        'replace': {'type': 'object'},
+                        'head': {'type': 'integer'},
+                        'type_converters': {'type': 'object'},
+                        'index_col': {'type': 'string'},
+                        'empty_means_drop': {
+                            'type': 'array',
+                            'items': {'type': 'string'},
+                        },
+                        'cols_to_targets': {
+                            'type': 'array',
+                            'items': {
+                                'type': 'object',
+                                'properties': {
+                                    'from': {'type': 'string'},
+                                    'to': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'},
+                                    },
+                                    'mapper': {'type': 'object'},
+                                },
+                            },
                         },
                     },
-                    'type_converters': {'type': 'object'},
-                    'head': {'type': 'integer'},
+                    'required': [
+                        'index_col',
+                        'empty_means_drop',
+                        'replace',
+                        'cols_to_targets',
+                        'head',
+                        'type_converters',
+                    ],
+                    'additionalProperties': False,
                 },
             },
-            'required': ['index_col', 'empty_means_drop', 'head'],
-            'additionalProperties': ['replace', 'cols_to_targets', 'type_converters'],
         },
     },
 }

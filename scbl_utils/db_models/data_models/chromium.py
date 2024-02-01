@@ -58,7 +58,7 @@ class ChromiumDataSet(DataSet):
     )
 
     __mapper_args__ = {
-        'polymorphic_identity': 'chromium',
+        'polymorphic_identity': 'Chromium',
     }
 
 
@@ -85,7 +85,7 @@ class ChromiumSample(Sample):
     # Parent models
     tag: Mapped[Tag] = relationship(default=None, repr=False)
 
-    __mapper_args__ = {'polymorphic_identity': 'chromium'}
+    __mapper_args__ = {'polymorphic_identity': 'Chromium'}
 
 
 class SequencingRun(Base, kw_only=True):

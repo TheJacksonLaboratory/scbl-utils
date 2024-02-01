@@ -2,7 +2,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from ..base import Base
-from ..column_types import int_pk, samplesheet_str, unique_int
+from ..column_types import int_pk, samplesheet_str, samplesheet_str_pk, unique_int
 from ..metadata_models import DataSet, Sample
 
 
@@ -32,7 +32,7 @@ class XeniumDataSet(DataSet):
     # Parent models
     xenium_run: Mapped[XeniumRun] = relationship(back_populates='data_sets')
 
-    __mapper_args__ = {'polymorphic_identity': 'xenium'}
+    __mapper_args__ = {'polymorphic_identity': 'Xenium'}
 
     # TODO: implement this to check against 10x's database?
     @validates('id')
@@ -41,4 +41,6 @@ class XeniumDataSet(DataSet):
 
 
 class XeniumSample(Sample):
-    __mapper_args__ = {'polymorphic_identity': 'xenium'}
+    # XeniumSample attributes
+    xenium_id: Mapped[samplesheet_str | None]  # TODO: this should be changed
+    __mapper_args__ = {'polymorphic_identity': 'Xenium'}
