@@ -21,7 +21,15 @@ from .core.db import data_rows_to_db, db_session
 from .core.gdrive import TrackingSheet
 from .core.validation import validate_dir
 from .db_models.base import Base
-from .db_models.data_models.chromium import Library, LibraryType, SequencingRun, Tag
+from .db_models.data_models.chromium import (
+    ChromiumDataSet,
+    ChromiumSample,
+    Library,
+    LibraryType,
+    SequencingRun,
+    Tag,
+)
+from .db_models.data_models.xenium import XeniumDataSet, XeniumRun, XeniumSample
 from .db_models.metadata_models import (
     DataSet,
     Institution,

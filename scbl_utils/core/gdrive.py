@@ -10,6 +10,7 @@ from typing import Any
 
 import gspread as gs
 import pandas as pd
+from numpy import nan
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
 from rich import print as rprint
@@ -126,7 +127,7 @@ class TrackingSheet:
         cleaned_df = cleaned_df.astype(self.type_converters)
         return cleaned_df
 
-    def _split_combine_df(self, df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    def _split_combine_df(self, whole_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         """_summary_
 
         :param df: _description_
@@ -142,7 +143,7 @@ class TrackingSheet:
             for col_conversion in self.cols_to_targets
             for target in col_conversion['to']
         }
-        dfs = {tablename: pd.DataFrame() for tablename in db_tables}
+        dfs = {tablename: pd.DataFrame(columns=[]) for tablename in db_tables}
 
         # Add the columns to the appropriate table and replace values
         # as specified
@@ -155,17 +156,23 @@ class TrackingSheet:
             # This could be factored out into a separate function
             for target in target_list:
                 tablename = target.split(OBJECT_SEP_CHAR)[0]
-                df = dfs[tablename]
+                target_df = dfs[tablename]
 
-                cleaned_data_column = df[column].replace(mapper)
+                try:
+                    cleaned_data_column = whole_df[column].replace(mapper)
+                except Exception as e:
+                    print(column)
+                    print(whole_df.columns)
+                    print(e)
+                    quit()
 
-                duplicate_target_columns = df.columns[
-                    df.columns.str.match(rf'^{target}')
+                duplicate_target_columns = target_df.columns[
+                    target_df.columns.str.match(rf'^{target}')
                 ]
                 latest_duplicate = duplicate_target_columns.max()
 
                 if pd.isna(latest_duplicate):
-                    df[target] = cleaned_data_column.copy()
+                    target_df[target] = cleaned_data_column.copy()
                     continue
 
                 latest_duplicate: str
@@ -174,9 +181,11 @@ class TrackingSheet:
                     pattern=column_with_numeric_suffix_pattern, string=latest_duplicate
                 ):
                     next_duplicate_number = int(match_obj.group(1)) + 1
-                    df[f'{target}_{next_duplicate_number}'] = cleaned_data_column.copy()
+                    target_df[
+                        f'{target}_{next_duplicate_number}'
+                    ] = cleaned_data_column.copy()
                 else:
-                    df[f'{target}_1'] = cleaned_data_column.copy()
+                    target_df[f'{target}_1'] = cleaned_data_column.copy()
 
         # TODO: variable names here are bad and this isn't really clean
         # also might be able to take this into a separate function
@@ -206,71 +215,71 @@ class TrackingSheet:
                 [df[df.columns[~column_contains_suffix]], rows_to_append],
                 axis=0,
                 ignore_index=True,
-            )
+            ).replace({nan: None})
 
         return dfs
 
-    def _assign_first_last_names(
-        self, dfs: dict[str, pd.DataFrame]
-    ) -> dict[str, pd.DataFrame]:
-        """_summary_
+    # def _assign_first_last_names(
+    #     self, dfs: dict[str, pd.DataFrame]
+    # ) -> dict[str, pd.DataFrame]:
+    #     """_summary_
 
-        :param dfs: _description_
-        :type dfs: dict[str, pd.DataFrame]
-        :return: _description_
-        :rtype: dict[str, pd.DataFrame]
-        """
-        for model_name, df in dfs.items():
-            if model_name == 'Person':
-                df[['Person.first_name', 'Person.last_name']] = df[
-                    'Person.name'
-                ].str.split(n=1, expand=True)
-                if 'Person.email' in df.columns:
-                    df['Person.email'] = df[['Person.last_name', 'Person.email']].agg(
-                        func=lambda row: row['Person.email']
-                        if row['Person.last_name'] in str(row['Person.email'])
-                        else None,
-                        axis=1,
-                    )
-            else:
-                model = Base.get_model(model_name)
-                inspector = inspect(model)
-                for col in df.columns:
-                    attr = col.split(OBJECT_SEP_CHAR)[1]
+    #     :param dfs: _description_
+    #     :type dfs: dict[str, pd.DataFrame]
+    #     :return: _description_
+    #     :rtype: dict[str, pd.DataFrame]
+    #     """
+    #     for model_name, df in dfs.items():
+    #         if model_name == 'Person':
+    #             df[['Person.first_name', 'Person.last_name']] = df[
+    #                 'Person.name'
+    #             ].str.split(n=1, expand=True)
+    #             if 'Person.email' in df.columns:
+    #                 df['Person.email'] = df[['Person.last_name', 'Person.email']].agg(
+    #                     func=lambda row: row['Person.email']
+    #                     if row['Person.last_name'] in str(row['Person.email'])
+    #                     else None,
+    #                     axis=1,
+    #                 )
+    #         else:
+    #             model = Base.get_model(model_name)
+    #             inspector = inspect(model)
+    #             for col in df.columns:
+    #                 attr = col.split(OBJECT_SEP_CHAR)[1]
 
-                    relation = inspector.relationships.get(attr)
-                    if relation is None:
-                        continue
+    #                 relation = inspector.relationships.get(attr)
+    #                 if relation is None:
+    #                     continue
 
-                    if relation.mapper.class_ == Person:
-                        ...  # TODO: figure this out
+    #                 if relation.mapper.class_ == Person:
+    #                     ...  # TODO: figure this out
 
-        person_columns = [
-            'Person',
-            'Lab.pi',
-            'ChromiumDataSet.submitter',
-            'XeniumDataSet.submitter',
-            'Project.people',
-        ]
-        for col in person_columns:
-            tablename = col.split(OBJECT_SEP_CHAR)[0]
-            df = dfs[tablename]
-            first_name_col, last_name_col, email_col = (
-                f'{col}.{suffix}' for suffix in ('first_name', 'last_name', 'email')
-            )
-            df[[first_name_col, last_name_col]] = df[f'{col}.name'].str.split(
-                n=1, expand=True
-            )
+    #     person_columns = [
+    #         'Person',
+    #         'Lab.pi',
+    #         'ChromiumDataSet.submitter',
+    #         'XeniumDataSet.submitter',
+    #         'Project.people',
+    #     ]
+    #     for col in person_columns:
+    #         tablename = col.split(OBJECT_SEP_CHAR)[0]
+    #         df = dfs[tablename]
+    #         first_name_col, last_name_col, email_col = (
+    #             f'{col}.{suffix}' for suffix in ('first_name', 'last_name', 'email')
+    #         )
+    #         df[[first_name_col, last_name_col]] = df[f'{col}.name'].str.split(
+    #             n=1, expand=True
+    #         )
 
-            if email_col in df.columns:
-                df[email_col] = df[[last_name_col, email_col]].agg(
-                    func=lambda row: row[email_col]
-                    if row[last_name_col] in str(row[email_col])
-                    else None,
-                    axis=1,
-                )
+    #         if email_col in df.columns:
+    #             df[email_col] = df[[last_name_col, email_col]].agg(
+    #                 func=lambda row: row[email_col]
+    #                 if row[last_name_col] in str(row[email_col])
+    #                 else None,
+    #                 axis=1,
+    #             )
 
-        return dfs
+    #     return dfs
 
     def to_dfs(self) -> dict[str, pd.DataFrame]:
         # Get the data out of the sheet, assigning header_row and data
@@ -281,5 +290,4 @@ class TrackingSheet:
         data = values[self.head + 1 :]
 
         whole_df = self._clean_df(pd.DataFrame(data, columns=header))
-        dfs = self._split_combine_df(whole_df)
-        return self._assign_first_last_names(dfs)
+        return self._split_combine_df(whole_df)

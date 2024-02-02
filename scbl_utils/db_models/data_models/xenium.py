@@ -9,13 +9,14 @@ from ..metadata_models import DataSet, Sample
 class XeniumRun(Base):
     __tablename__ = 'xenium_run'
 
+    # XeniumRun attributes
     id: Mapped[int_pk] = mapped_column(init=False, repr=False)
     # TODO: eventually, we can get rid of this?
     name: Mapped[samplesheet_str] = mapped_column(index=True, unique=True)
 
     # Child models
     data_sets: Mapped[list['XeniumDataSet']] = relationship(
-        back_populates='xenium_run', default_factory=list
+        back_populates='xenium_run', default_factory=list, repr=False
     )
 
 
@@ -32,6 +33,11 @@ class XeniumDataSet(DataSet):
     # Parent models
     xenium_run: Mapped[XeniumRun] = relationship(back_populates='data_sets')
 
+    # Child models
+    samples: Mapped[list['XeniumSample']] = relationship(
+        back_populates='data_set', default_factory=list, repr=False
+    )
+
     __mapper_args__ = {'polymorphic_identity': 'Xenium'}
 
     # TODO: implement this to check against 10x's database?
@@ -43,4 +49,12 @@ class XeniumDataSet(DataSet):
 class XeniumSample(Sample):
     # XeniumSample attributes
     xenium_id: Mapped[samplesheet_str | None]  # TODO: this should be changed
+
+    # Parent foreign keys
+    # xenium_data_set_id: Mapped[int | None] = mapped_column(
+    #     ForeignKey('data_set.id'), init=False, repr=False
+    # )
+
+    # Parent models
+    data_set: Mapped[XeniumDataSet] = relationship(back_populates='samples')
     __mapper_args__ = {'polymorphic_identity': 'Xenium'}

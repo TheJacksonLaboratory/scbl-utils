@@ -16,6 +16,7 @@ Classes:
 """
 from sqlalchemy import inspect
 from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass
+from sqlalchemy.orm.decl_api import DCTransformDeclarative
 
 
 class Base(MappedAsDataclass, DeclarativeBase, kw_only=True):

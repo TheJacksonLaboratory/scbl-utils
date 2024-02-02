@@ -6,7 +6,7 @@ from re import match
 from email_validator import validate_email
 from requests import get
 from rich import print as rprint
-from sqlalchemy import ForeignKey, inspect, null
+from sqlalchemy import ForeignKey, UniqueConstraint, inspect, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from typer import Abort
 
@@ -23,26 +23,28 @@ from .column_types import (
     stripped_str_pk,
     unique_stripped_str,
 )
-from .join_tables import project_person_mapping
+
+# from .join_tables import project_person_mapping
 
 
 class Institution(Base, kw_only=True):
     __tablename__ = 'institution'
 
-    id: Mapped[int_pk] = mapped_column(init=False)
-    email_format: Mapped[stripped_str] = mapped_column(repr=False)
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False, compare=False)
+    email_format: Mapped[stripped_str] = mapped_column(repr=False, compare=False)
     name: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
-    short_name: Mapped[stripped_str] = mapped_column(default=None, index=True)
+    short_name: Mapped[stripped_str] = mapped_column(
+        default=None, index=True, compare=False
+    )
     country: Mapped[str] = mapped_column(StrippedString(length=2), default='US')
     state: Mapped[str | None] = mapped_column(
         StrippedString(length=2), default=None, insert_default=null()
     )
     city: Mapped[stripped_str] = mapped_column(default=None)
     ror_id: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null(), repr=False
+        default=None, insert_default=null(), repr=False, compare=False
     )
 
-    # TODO needs more validation to check that the email format is correct
     @validates('email_format')
     def check_email_format(self, key: str, email_format: str) -> str:
         email_format = email_format.strip().lower()
@@ -128,40 +130,40 @@ class Institution(Base, kw_only=True):
 class Person(Base, kw_only=True):
     __tablename__ = 'person'
 
-    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
-    first_name: Mapped[stripped_str] = mapped_column(repr=False)
-    last_name: Mapped[stripped_str] = mapped_column(repr=False)
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False, compare=False)
+    first_name: Mapped[stripped_str]
+    last_name: Mapped[stripped_str]
+    # name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
 
     institution_id: Mapped[int] = mapped_column(
         ForeignKey('institution.id'), repr=False, init=False, compare=False
     )
     institution: Mapped[Institution] = relationship(repr=False, compare=False)
 
-    name: Mapped[stripped_str] = mapped_column(init=False, default=None, index=True)
     email_auto_generated: Mapped[bool] = mapped_column(
-        init=False, default=False, repr=False
+        init=False, default=False, repr=False, compare=False
     )
     email: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
     orcid: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null(), repr=False
+        default=None, insert_default=null(), repr=False, compare=False
     )
 
-    projects: Mapped[list['Project']] = relationship(
-        back_populates='people',
-        default_factory=list,
-        secondary=project_person_mapping,
-        repr=False,
-    )
+    # projects: Mapped[list['Project']] = relationship(
+    #     back_populates='people',
+    #     default_factory=list,
+    #     secondary=project_person_mapping,
+    #     repr=False,
+    # )
 
     @validates('first_name', 'last_name')
-    def capitalize_name(self, key: str, name: str) -> str:
+    def format_name(self, key: str, name: str) -> str:
         formatted_split = name.strip().title().split()
         noramlized_inner_whitespace = ' '.join(formatted_split)
         return noramlized_inner_whitespace
 
-    @validates('name')
-    def set_name(self, key: str, name: None) -> str:
-        return f'{self.first_name} {self.last_name}'
+    # @validates('name')
+    # def set_name(self, key: str, name: None) -> str:
+    #     return f'{self.first_name} {self.last_name}'
 
     @validates('orcid')
     def check_orcid(self, key: str, orcid: str | None) -> str | None:
@@ -229,7 +231,7 @@ class Person(Base, kw_only=True):
 class Lab(Base, kw_only=True):
     __tablename__ = 'lab'
 
-    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False, compare=False)
 
     institution_id: Mapped[int] = mapped_column(
         ForeignKey('institution.id'), init=False, repr=False
@@ -239,17 +241,23 @@ class Lab(Base, kw_only=True):
     institution: Mapped[Institution] = relationship()
     pi: Mapped[Person] = relationship()
     projects: Mapped[list['Project']] = relationship(
-        back_populates='lab', default_factory=list, repr=False
+        back_populates='lab', default_factory=list, repr=False, compare=False
     )
 
-    name: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
-    delivery_dir: Mapped[unique_stripped_str] = mapped_column(default=None, repr=False)
-    group: Mapped[stripped_str] = mapped_column(init=False, default=None, repr=False)
+    name: Mapped[stripped_str] = mapped_column(default=None, index=True)
+    delivery_dir: Mapped[unique_stripped_str] = mapped_column(
+        default=None, repr=False, compare=False
+    )
+    unix_group: Mapped[stripped_str] = mapped_column(
+        init=False, default=None, repr=False, compare=False
+    )
+
+    __table_args__ = (UniqueConstraint('institution_id', 'pi_id', 'name'),)
 
     @validates('name')
     def set_name(self, key: str, name: str | None) -> str:
-        # This assumes that no two PIs share the same name. Might have
-        # to change in production
+        # This assumes that no two PIs share the same name and
+        # institution. Might have to change in production
         return (
             f'{self.pi.first_name} {self.pi.last_name} Lab'
             if name is None
@@ -280,7 +288,7 @@ class Lab(Base, kw_only=True):
             error_prefix = (
                 '[green]scbl-utils[/] tried to automatically generate a '
                 f'delivery directory for [orange1]{self.name}[/] using '
-                f'the name of the PI [orange1]{self.pi.first_name} {self.pi.last_name}[/].'
+                f'the name of the PI [orange1]{pi.first_name} {pi.last_name}[/].'
             )
         else:
             delivery_path = Path(delivery_dir)
@@ -297,8 +305,8 @@ class Lab(Base, kw_only=True):
 
         return str(abs_delivery_path)
 
-    @validates('group')
-    def set_group(self, key: str, group: None) -> str:  # type: ignore
+    @validates('unix_group')
+    def set_group(self, key: str, unix_group: None) -> str:  # type: ignore
         return Path(self.delivery_dir).group()
 
 
@@ -307,7 +315,9 @@ class Project(Base, kw_only=True):
 
     # Project attributes
     id: Mapped[stripped_str_pk]
-    description: Mapped[stripped_str | None] = mapped_column(default=None, index=True)
+    description: Mapped[stripped_str | None] = mapped_column(
+        default=None, index=True, compare=False
+    )
 
     # Parent foreign keys
     lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False, repr=False)
@@ -317,14 +327,15 @@ class Project(Base, kw_only=True):
 
     # Child models
     data_sets: Mapped[list['DataSet']] = relationship(
-        back_populates='project', default_factory=list, repr=False
+        back_populates='project', default_factory=list, repr=False, compare=False
     )
-    people: Mapped[list['Person']] = relationship(
-        back_populates='projects',
-        default_factory=list,
-        secondary=project_person_mapping,
-        repr=False,
-    )
+    # people: Mapped[list['Person']] = relationship(
+    #     back_populates='projects',
+    #     default_factory=list,
+    #     secondary=project_person_mapping,
+    #     repr=False,
+    #     compare=False
+    # )
 
     @validates('id')
     def check_id(self, key: str, id: str) -> str | None:
@@ -352,7 +363,7 @@ class DataSet(Base, kw_only=True):
     # platform/assay type
 
     # DataSet attributes
-    id: Mapped[int_pk] = mapped_column(repr=False)
+    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
     name: Mapped[samplesheet_str] = mapped_column(index=True)
     ilab_request_id: Mapped[stripped_str] = mapped_column(
         index=True
@@ -369,14 +380,13 @@ class DataSet(Base, kw_only=True):
     )
 
     # Parent models
-    platform: Mapped[Platform] = relationship(repr=False)
     project: Mapped[Project] = relationship(back_populates='data_sets')
     submitter: Mapped[Person] = relationship()
 
     # Child models
-    samples: Mapped[list['Sample']] = relationship(
-        back_populates='data_set', default_factory=list, repr=False
-    )
+    # samples: Mapped[list['Sample']] = relationship(
+    #     back_populates='data_set', default_factory=list, repr=False, compare=False
+    # )
 
     # TODO should there be another column for the date that work was
     # begun on the dataset? this will help generate a batch_id
@@ -428,7 +438,6 @@ class Sample(Base, kw_only=True):
     platform_name: Mapped[str] = mapped_column(ForeignKey('platform.name'), init=False)
 
     # Parent models
-    data_set: Mapped[DataSet] = relationship(back_populates='samples')
-    platform: Mapped[Platform] = relationship(repr=False)
+    # data_set: Mapped[DataSet] = relationship(back_populates='samples')
 
     __mapper_args__ = {'polymorphic_on': 'platform_name'}

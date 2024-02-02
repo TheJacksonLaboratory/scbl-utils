@@ -53,8 +53,12 @@ class ChromiumDataSet(DataSet):
     # ChromiumDataSet attributes
     assay: Mapped[samplesheet_str | None] = mapped_column(index=True)
 
+    # Child models
+    samples: Mapped[list['ChromiumSample']] = relationship(
+        back_populates='data_set', default_factory=list, repr=False, compare=False
+    )
     libraries: Mapped[list['Library']] = relationship(
-        back_populates='data_set', default_factory=list, repr=False
+        back_populates='data_set', default_factory=list, repr=False, compare=False
     )
 
     __mapper_args__ = {
@@ -78,11 +82,14 @@ class Tag(Base):
 
 class ChromiumSample(Sample):
     # Parent foreign keys
+    # chromium_data_set_id: Mapped[int | None] = mapped_column(ForeignKey('data_set.id'), init=False, repr=False)
     tag_id: Mapped[str | None] = mapped_column(
         ForeignKey('tag.id'), init=False, repr=False
     )
 
     # Parent models
+    # chromium_data_set: Mapped[ChromiumDataSet] = relationship(back_populates='chromium_samples')
+    data_set: Mapped[ChromiumDataSet] = relationship(back_populates='samples')
     tag: Mapped[Tag] = relationship(default=None, repr=False)
 
     __mapper_args__ = {'polymorphic_identity': 'Chromium'}
@@ -97,7 +104,7 @@ class SequencingRun(Base, kw_only=True):
 
     # Child models
     libraries: Mapped[list['Library']] = relationship(
-        back_populates='sequencing_run', default_factory=list, repr=False
+        back_populates='sequencing_run', default_factory=list, repr=False, compare=False
     )
 
 
@@ -116,7 +123,7 @@ class Library(Base, kw_only=True):
     id: Mapped[samplesheet_str_pk]
     # TODO: add some validation so that libraries with a particular
     # status must have a sequencing run
-    status: Mapped[stripped_str]
+    status: Mapped[stripped_str] = mapped_column(compare=False)
 
     # Parent foreign keys
     data_set_id: Mapped[int] = mapped_column(
@@ -126,14 +133,17 @@ class Library(Base, kw_only=True):
         ForeignKey('library_type.id'), init=False, repr=False
     )
     sequencing_run_id: Mapped[str | None] = mapped_column(
-        ForeignKey('sequencing_run.id'), init=False, insert_default=null()
+        ForeignKey('sequencing_run.id'),
+        init=False,
+        insert_default=null(),
+        compare=False,
     )
 
     # Parent models
     data_set: Mapped[ChromiumDataSet] = relationship(back_populates='libraries')
     library_type: Mapped[LibraryType] = relationship()
     sequencing_run: Mapped[SequencingRun] = relationship(
-        back_populates='libraries', default=None, repr=False
+        back_populates='libraries', default=None, repr=False, compare=False
     )
 
     @validates('id')
