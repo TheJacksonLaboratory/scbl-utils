@@ -54,7 +54,7 @@ def get_matching_obj(
     where_conditions = []
 
     for col, val in data.items():
-        if not isinstance(col, str):
+        if not isinstance(col, str) or val is None:
             continue
 
         inspector = inspect(model)
@@ -82,9 +82,9 @@ def data_rows_to_db(
     session: Session,
     data: pd.DataFrame | list[dict[str, Any]],
     data_source: str,
-    log: Logger,
+    console: Console,
 ):
-    """ """
+    """"""
     data = pd.DataFrame.from_records(data) if isinstance(data, list) else data
     data = data.drop_duplicates()
 
@@ -113,7 +113,7 @@ def data_rows_to_db(
     missing_fields = ', '.join(required_model_init_fields.keys() - renamed_data_columns)
     if missing_fields:
         raise ValueError(
-            f'The following fields are required to initialize a {model_name}, but are missing from the columns of {data_source}: {missing_fields}'
+            f'The following fields are required to initialize a [green]{model_name}[/], but are missing from the columns of [orange1]{data_source}[/]: [green]{missing_fields}[/]'
         )
 
     column_renamer = {col: col.split('.', maxsplit=1)[1] for col in data.columns}
@@ -157,33 +157,32 @@ def data_rows_to_db(
 
             error_table_header = ['index'] + parent_columns
 
-            console = Console()
             if no_matches.any():
+                console.print(
+                    f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added.'
+                )
                 no_matches_table = rich_table(
                     unique_parent_data.loc[no_matches], header=error_table_header
-                )
-                log.warning(
-                    f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added.'
                 )
                 console.print(no_matches_table)
 
             if too_many_matches.any():
+                console.print(
+                    f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{model_name}[/].'
+                )
                 too_many_matches_table = rich_table(
                     unique_parent_data.loc[too_many_matches], header=error_table_header
-                )
-                log.warning(
-                    f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{model_name}[/].'
                 )
                 console.print(too_many_matches_table)
 
             unique_parent_data = unique_parent_data[~no_matches & ~too_many_matches]
             data_to_add = data_to_add.merge(
                 unique_parent_data, how='left', on=parent_columns
-            ).dropna(subset=parent_name)
+            )
 
         else:
             unique_parent_data[parent_name] = unique_parent_data[parent_name].replace(
-                False, nan
+                False, None
             )
             data_to_add = data_to_add.merge(
                 unique_parent_data, how='left', on=parent_columns
@@ -222,11 +221,8 @@ def data_rows_to_db(
     for rec in records_to_add:
         try:
             models_to_add.append(model(**rec))  # type: ignore
-        except:
-            log.warning(
-                f'The following record from {data_source} will not be added to the database because it is invalid: {rec}',
-                exc_info=True,
-            )
+        except Exception as e:
+            console.print(str(e))
 
     stmt = select(model)
     existing_models = session.execute(stmt).scalars().all()
@@ -238,4 +234,7 @@ def data_rows_to_db(
             and model_to_add not in existing_models
         ):
             unique_new_models.append(model_to_add)
-    session.add_all(unique_new_models)
+            try:
+                session.add(model_to_add)
+            except Exception as e:
+                console.print(str(e))

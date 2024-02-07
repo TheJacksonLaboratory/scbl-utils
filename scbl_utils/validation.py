@@ -22,7 +22,11 @@ def validate_directory(
     ]
 
     if missing_directories:
-        raise NotADirectoryError(missing_directories)
+        raise NotADirectoryError(
+            f'The following directories are missing from {directory}: {missing_directories}'
+        )
 
     if missing_files:
-        raise FileNotFoundError(missing_files)
+        raise FileNotFoundError(
+            f'The following files are missing from {directory}: {missing_files}'
+        )

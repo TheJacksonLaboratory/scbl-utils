@@ -5,12 +5,13 @@ from sys import exit as sys_exit
 
 import fire
 import gspread as gs
+import pandas
+import pydantic
 from jsonschema import validate as validate_data
 from numpy import nan
-from pandas import read_csv
-from pydantic import DirectoryPath, Field, model_validator
 from pydantic.dataclasses import dataclass
-from rich.logging import RichHandler
+from rich.console import Console
+from rich.traceback import install
 from sqlalchemy import select
 from yaml import safe_load
 
@@ -28,32 +29,21 @@ from .json_schemas.config_schemas import (
 from .json_schemas.data_schemas import DATA_SCHEMAS
 from .validation import validate_directory
 
-logging.basicConfig(
-    datefmt='[%X]',
-    format='%(message)s',
-    handlers=[
-        RichHandler(
-            rich_tracebacks=True,
-            tracebacks_suppress=[fire],
-            tracebacks_show_locals=True,
-            markup=True,
-        )
-    ],
-)
-log = logging.getLogger('rich')
+console = Console()
+install(console=console, max_frames=1, suppress=[fire, pandas, pydantic])
+pandas.set_option('future.no_silent_downcasting', True)
 
 
 @dataclass(kw_only=True)
 class SCBLUtils(object):
     """A set of command-line utilities that facilitate data processing at the Single Cell Biology Lab at the Jackson Laboratory."""
 
-    config_dir: str | Path = Field(
+    config_dir: str | Path = pydantic.Field(
         default=Path('/sc/service/etc/.config/scbl-utils'), validate_default=True
     )
-
-    @model_validator(mode='after')
-    def _load_config(self) -> 'SCBLUtils':
-        self._data_insertion_order = [
+    _data_insertion_order: list[str] = pydantic.Field(
+        init=False,
+        default=[
             'Institution',
             'Person',
             'Lab',
@@ -68,10 +58,14 @@ class SCBLUtils(object):
             'XeniumRun',
             'XeniumDataSet',
             'XeniumSample',
-        ]
+        ],
+        validate_default=True,
+    )
 
-        self.config_dir = Path(self.config_dir)
-
+    @pydantic.field_validator('config_dir', mode='after')
+    @classmethod
+    def _validate_config_dir(cls, config_dir: str | Path) -> Path:
+        config_dir = Path(config_dir)
         required_files = {
             'db_spec': 'db/db_spec.yml',
             'gdrive_credentials': 'google-drive/service-account.json',
@@ -80,49 +74,49 @@ class SCBLUtils(object):
         required_directories = {
             'platform_tracking-sheet_specs': 'google-drive/platform_tracking-sheet_specs'
         }
+        validate_directory(
+            config_dir,
+            required_files=required_files.values(),
+            required_directories=required_directories.values(),
+        )
+        return config_dir
 
-        try:
-            validate_directory(
-                self.config_dir,
-                required_files=required_files.values(),
-                required_directories=required_directories.values(),
+    @pydantic.field_validator('_data_insertion_order', mode='after')
+    @classmethod
+    def _validate_data_insertion_order(
+        cls, data_insertion_order: list[str]
+    ) -> list[str]:
+        if missing_models := set(data_insertion_order) - {
+            model.class_.__name__ for model in Base.registry.mappers
+        }:
+            raise ValueError(
+                f'The data insertion order must include all models in the database. The following are missing: {missing_models}'
             )
-        except:
-            log.exception(
-                f'{self.config_dir} does not exist or is missing required files or directories'
-            )
-            sys_exit(1)
 
-        self._platform_tracking_sheet_specs_dir = (
-            self.config_dir / required_directories['platform_tracking-sheet_specs']
+        return data_insertion_order
+
+    @pydantic.model_validator(mode='after')
+    def _load_config(self) -> 'SCBLUtils':
+        self._platform_tracking_sheet_specs_dir = Path(
+            self.config_dir, 'google-drive', 'platform_tracking-sheet_specs'
         )
 
-        db_spec_path = self.config_dir / required_files['db_spec']
-        try:
-            self._db_spec: dict[str, str] = safe_load(db_spec_path.read_text())
-            validate_data(self._db_spec, schema=DB_SPEC_SCHEMA)
-            self._Session = db_session(Base, **self._db_spec)
-        except:
-            log.exception(f'Error reading or validating {db_spec_path}')
-            sys_exit(1)
+        db_spec_path = Path(self.config_dir, 'db', 'db_spec.yml')
+        db_spec: dict[str, str] = safe_load(db_spec_path.read_text())
+        validate_data(db_spec, schema=DB_SPEC_SCHEMA)
+        self._Session = db_session(Base, **db_spec)
+        self._db_spec = db_spec
 
-        gdrive_credential_path = self.config_dir / required_files['gdrive_credentials']
-        try:
-            self._gclient = gs.service_account(filename=gdrive_credential_path)
-        except:
-            log.exception('Error logging into Google Drive.')
-            sys_exit(1)
+        gdrive_credential_path = Path(
+            self.config_dir, 'google-drive', 'service-account.json'
+        )
+        self._gclient = gs.service_account(filename=gdrive_credential_path)
 
-        system_config_path = self.config_dir / required_files['system_config']
-        try:
-            self._system_config: dict[str, str] = safe_load(
-                system_config_path.read_text()
-            )
-            validate_data(self._system_config, schema=SYSTEM_CONFIG_SCHEMA)
-            environ.update(self._system_config)
-        except:
-            log.exception(f'Error reading or validating {system_config_path}')
-            sys_exit(1)
+        system_config_path = Path(self.config_dir, 'system', 'config.yml')
+        system_config: dict[str, str] = safe_load(system_config_path.read_text())
+        validate_data(system_config, schema=SYSTEM_CONFIG_SCHEMA)
+        environ.update(system_config)
+        self._system_config = system_config
 
         return self
 
@@ -138,28 +132,16 @@ class SCBLUtils(object):
                 if not data_path.is_file():
                     continue
 
-                data = read_csv(data_path).replace({nan: None})
+                data = pandas.read_csv(data_path).replace({nan: None})
                 data_as_records = data.to_dict(orient='records')
 
-                try:
-                    validate_data(
-                        data_as_records, schema=DATA_SCHEMAS.get(filename, {})
-                    )
-                    data_rows_to_db(
-                        session, data=data, data_source=str(data_path), log=log
-                    )
-                except:
-                    log.exception(
-                        f'The data in {data_path} could not be added to the database.'
-                    )
-                    sys_exit(1)
-                else:
-                    added_data_sources.append(str(data_path))
+                validate_data(data_as_records, schema=DATA_SCHEMAS.get(filename, {}))
+                data_rows_to_db(
+                    session, data=data, data_source=str(data_path), console=console
+                )
+                added_data_sources.append(str(data_path))
 
         if not sync_with_gdrive:
-            log.info(
-                f'Successfuly added data from {added_data_sources} to the database.'
-            )
             return
 
         self.sync_with_gdrive()
@@ -175,19 +157,13 @@ class SCBLUtils(object):
                 )
 
                 if not platform_spec_path.exists():
-                    log.warning(
-                        f'{platform_spec_path} not found. Skipping ingestion of {platform.name} data from Google Drive.'
+                    console.print(
+                        f'{platform_spec_path} not found. Skipping ingestion of [green]{platform.name}[/] data from Google Drive.'
                     )
                     continue
 
-                try:
-                    platform_spec = safe_load(platform_spec_path.read_text())
-                    validate_data(platform_spec, schema=GDRIVE_PLATFORM_SPEC_SCHEMA)
-                except:
-                    log.exception(
-                        f'Error reading or validating {platform_spec_path}. Skipping ingestion of {platform.name} data from Google Drive.'
-                    )
-                    continue
+                platform_spec = safe_load(platform_spec_path.read_text())
+                validate_data(platform_spec, schema=GDRIVE_PLATFORM_SPEC_SCHEMA)
 
                 spreadsheet = self._gclient.open_by_url(
                     platform_spec['spreadsheet_url']
@@ -200,33 +176,25 @@ class SCBLUtils(object):
                 data_source = (
                     f'{spreadsheet.title} - {main_sheet.title} ({main_sheet.url})'
                 )
-                try:
-                    datas = TrackingSheet(
-                        worksheet=main_sheet, **main_sheet_spec
-                    ).to_dfs()
-                except:
-                    logging.exception(
-                        f'Error reading data from {data_source}. Skipping ingestion of {platform.name} data from Google Drive.'
-                    )
-                    continue
+
+                datas = TrackingSheet(worksheet=main_sheet, **main_sheet_spec).to_dfs()
 
                 for model_name in self._data_insertion_order:
                     if model_name not in datas:
                         continue
+
                     try:
                         data_rows_to_db(
-                            session, datas[model_name], data_source=data_source, log=log
+                            session,
+                            datas[model_name],
+                            data_source=data_source,
+                            console=console,
                         )
-                    except:
-                        log.exception(
-                            f'{model_name} data from {data_source} could not be added to the database.'
-                        )
+                    except Exception as e:
+                        console.print(str(e))
 
-    def delivery_metrics_to_gdrive(self, pipeline_output_dir: DirectoryPath):
-        try:
-            raise NotImplementedError
-        except:
-            log.exception('')
+    def delivery_metrics_to_gdrive(self, pipeline_output_dir: pydantic.DirectoryPath):
+        raise NotImplementedError
 
 
 def main():
