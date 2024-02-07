@@ -1,8 +1,11 @@
 from re import sub
+from string import ascii_letters, digits
 from typing import Annotated
+
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.types import String, TypeDecorator
-from string import ascii_letters, digits
+
+
 class StrippedString(TypeDecorator):
     """
     A string type that strips whitespace from the ends of the string
@@ -14,6 +17,8 @@ class StrippedString(TypeDecorator):
 
     def process_bind_param(self, string: str | None, dialect: str) -> str | None:
         return string.strip() if isinstance(string, str) else None
+
+
 class SamplesheetString(TypeDecorator):
     """
     A string type that removes illegal characters from the string before
@@ -27,10 +32,10 @@ class SamplesheetString(TypeDecorator):
     def process_bind_param(self, string: str, dialect: str) -> str | None:
         if not isinstance(string, str):
             return None
-        
+
         sep_chars = r'\s_-'
         samplesheet_blacklist_pattern = rf'[^{ascii_letters + digits + sep_chars}]'
-        
+
         # Remove illegal characters
         string = sub(
             pattern=samplesheet_blacklist_pattern, repl='', string=string.strip()
@@ -43,6 +48,8 @@ class SamplesheetString(TypeDecorator):
         string = sub(pattern=r'-+', repl='-', string=string)
 
         return string
+
+
 # Commonly used primary key types
 int_pk = Annotated[int, mapped_column(primary_key=True)]
 stripped_str_pk = Annotated[str, mapped_column(StrippedString, primary_key=True)]

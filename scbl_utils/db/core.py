@@ -1,13 +1,17 @@
-from numpy import nan
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session, Mapper, Relationship
-from sqlalchemy import URL, create_engine, inspect, select
-from .orm.base import Base
-from typing import Any
-import pandas as pd
-from dataclasses import fields, MISSING
+from dataclasses import MISSING, fields
 from logging import Logger
-from .helpers import rich_table
+from typing import Any
+
+import pandas as pd
+from numpy import nan
 from rich.console import Console
+from sqlalchemy import URL, create_engine, inspect, select
+from sqlalchemy.orm import DeclarativeBase, Mapper, Relationship, Session, sessionmaker
+
+from .helpers import rich_table
+from .orm.base import Base
+
+
 def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Session]:
     """Create and return a new database session, initializing the
     database if necessary.
@@ -26,6 +30,7 @@ def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Sess
 
     return Session
 
+
 def construct_where_condition(
     attribute_name: str, value: Any, model_inspector: Mapper[Base]
 ):
@@ -33,9 +38,7 @@ def construct_where_condition(
         attribute = model_inspector.attrs[attribute_name].class_attribute
         return attribute.ilike(value) if isinstance(value, str) else attribute == value
 
-    parent_name, parent_attribute_name = attribute_name.split(
-        '.', maxsplit=1
-    )
+    parent_name, parent_attribute_name = attribute_name.split('.', maxsplit=1)
     parent_inspector = model_inspector.relationships[parent_name].mapper
     parent = model_inspector.attrs[parent_name].class_attribute
 
@@ -76,7 +79,10 @@ def get_matching_obj(
 # long and should be split into smaller functions. Also, the design
 # can be simplified.
 def data_rows_to_db(
-    session: Session, data: pd.DataFrame | list[dict[str, Any]], data_source: str, log: Logger
+    session: Session,
+    data: pd.DataFrame | list[dict[str, Any]],
+    data_source: str,
+    log: Logger,
 ):
     """ """
     data = pd.DataFrame.from_records(data) if isinstance(data, list) else data
@@ -85,10 +91,16 @@ def data_rows_to_db(
     model_names = {col.split('.')[0] for col in data.columns}
 
     if len(model_names) != 1:
-        raise ValueError(f'The data must represent only one table in the database, but {model_names} were found')
+        raise ValueError(
+            f'The data must represent only one table in the database, but {model_names} were found'
+        )
 
     model_name = model_names.pop()
-    model: type[Base] = next(mapper.class_ for mapper in Base.registry.mappers if mapper.class_.__name__ == model_name)
+    model: type[Base] = next(
+        mapper.class_
+        for mapper in Base.registry.mappers
+        if mapper.class_.__name__ == model_name
+    )
 
     model_init_fields = {field.name: field for field in fields(model) if field.init}
     required_model_init_fields = {
@@ -100,11 +112,11 @@ def data_rows_to_db(
 
     missing_fields = ', '.join(required_model_init_fields.keys() - renamed_data_columns)
     if missing_fields:
-        raise ValueError(f'The following fields are required to initialize a {model_name}, but are missing from the columns of {data_source}: {missing_fields}')
+        raise ValueError(
+            f'The following fields are required to initialize a {model_name}, but are missing from the columns of {data_source}: {missing_fields}'
+        )
 
-    column_renamer = {
-        col: col.split('.', maxsplit=1)[1] for col in data.columns
-    }
+    column_renamer = {col: col.split('.', maxsplit=1)[1] for col in data.columns}
     renamed_unique_data = data.drop_duplicates().rename(columns=column_renamer)
     renamed_unique_data['match'] = renamed_unique_data.agg(
         get_matching_obj, axis=1, session=session, model=model
@@ -147,13 +159,21 @@ def data_rows_to_db(
 
             console = Console()
             if no_matches.any():
-                no_matches_table = rich_table(unique_parent_data.loc[no_matches], header=error_table_header)
-                log.warning(f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added.')
+                no_matches_table = rich_table(
+                    unique_parent_data.loc[no_matches], header=error_table_header
+                )
+                log.warning(
+                    f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added.'
+                )
                 console.print(no_matches_table)
 
             if too_many_matches.any():
-                too_many_matches_table = rich_table(unique_parent_data.loc[too_many_matches], header=error_table_header)
-                log.warning(f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{model_name}[/].')
+                too_many_matches_table = rich_table(
+                    unique_parent_data.loc[too_many_matches], header=error_table_header
+                )
+                log.warning(
+                    f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{model_name}[/].'
+                )
                 console.print(too_many_matches_table)
 
             unique_parent_data = unique_parent_data[~no_matches & ~too_many_matches]
@@ -201,9 +221,12 @@ def data_rows_to_db(
     models_to_add = []
     for rec in records_to_add:
         try:
-            models_to_add.append(model(**rec)) # type: ignore
+            models_to_add.append(model(**rec))  # type: ignore
         except:
-            log.warning(f'The following record from {data_source} will not be added to the database because it is invalid: {rec}', exc_info=True)
+            log.warning(
+                f'The following record from {data_source} will not be added to the database because it is invalid: {rec}',
+                exc_info=True,
+            )
 
     stmt = select(model)
     existing_models = session.execute(stmt).scalars().all()

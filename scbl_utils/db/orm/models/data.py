@@ -1,9 +1,13 @@
-from ..base import Base
-from ..custom_types import stripped_str, stripped_str_pk, int_pk, samplesheet_str
-from sqlalchemy.orm import Mapped, relationship, mapped_column, validates
-from sqlalchemy import ForeignKey
-from .entities import Lab, Person
 from datetime import date
+
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+
+from ..base import Base
+from ..custom_types import int_pk, samplesheet_str, stripped_str, stripped_str_pk
+from .entities import Lab, Person
+
+
 # TODO: implement some kind of test that makes sure each platform type
 # has a corresponding file in the data_models folder
 class Platform(Base, kw_only=True):
@@ -11,6 +15,7 @@ class Platform(Base, kw_only=True):
 
     # Platform attributes
     name: Mapped[stripped_str_pk]
+
 
 class Project(Base, kw_only=True):
     __tablename__ = 'project'
@@ -28,7 +33,9 @@ class Project(Base, kw_only=True):
     lab: Mapped[Lab] = relationship()
 
     # Child models
-    data_sets: Mapped[list['DataSet']] = relationship(back_populates='project', default_factory=list, repr=False, compare=False)
+    data_sets: Mapped[list['DataSet']] = relationship(
+        back_populates='project', default_factory=list, repr=False, compare=False
+    )
 
     # TODO: add validation for this
     @validates('id')

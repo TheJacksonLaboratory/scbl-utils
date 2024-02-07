@@ -1,15 +1,25 @@
-from sqlalchemy.orm import Mapped, mapped_column, validates, relationship
-from sqlalchemy import ForeignKey, null, UniqueConstraint, inspect
-from ..custom_types import int_pk, stripped_str, unique_stripped_str, StrippedString, SamplesheetString
-from ..base import Base
-from ...helpers import get_format_string_vars
-from email_validator import validate_email
-from requests import get
-from re import match
-from rich import print as rich_print
 from os import environ
 from pathlib import Path
+from re import match
+
+from email_validator import validate_email
+from requests import get
+from rich import print as rich_print
+from sqlalchemy import ForeignKey, UniqueConstraint, inspect, null
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+
 from ....validation import validate_directory
+from ...helpers import get_format_string_vars
+from ..base import Base
+from ..custom_types import (
+    SamplesheetString,
+    StrippedString,
+    int_pk,
+    stripped_str,
+    unique_stripped_str,
+)
+
+
 class Institution(Base, kw_only=True):
     __tablename__ = 'institution'
 
@@ -41,7 +51,9 @@ class Institution(Base, kw_only=True):
         non_existent_person_columns = variables - person_columns
 
         if non_existent_person_columns:
-            raise ValueError(f'The following variables in {email_format} are not members of {person_columns}:\n{non_existent_person_columns}')
+            raise ValueError(
+                f'The following variables in {email_format} are not members of {person_columns}:\n{non_existent_person_columns}'
+            )
 
         example_values = {var: 'string' for var in variables}
         example_email = email_format.format_map(example_values)
@@ -61,7 +73,9 @@ class Institution(Base, kw_only=True):
         response = get(url)
 
         if not response.ok:
-            raise ValueError(f'ROR ID {ror_id} not found in database search of {base_url}')
+            raise ValueError(
+                f'ROR ID {ror_id} not found in database search of {base_url}'
+            )
 
         data = response.json()
 
@@ -88,7 +102,9 @@ class Institution(Base, kw_only=True):
                 state_code = geonames_city_info['geonames_admin1']['code']
                 _, self.state = state_code.split('.')
         else:
-            raise ValueError(f'Could not find city information from ROR for {self.name}. Please enter manually.')
+            raise ValueError(
+                f'Could not find city information from ROR for {self.name}. Please enter manually.'
+            )
 
         return ror_id
 
@@ -140,7 +156,9 @@ class Person(Base, kw_only=True):
         response = get(url, headers=headers)
 
         if not response.ok:
-            raise ValueError(f'{formatted_orcid} not found in database search of {base_url}')
+            raise ValueError(
+                f'{formatted_orcid} not found in database search of {base_url}'
+            )
 
         return formatted_orcid
 
@@ -181,7 +199,9 @@ class Lab(Base, kw_only=True):
     institution_id: Mapped[int] = mapped_column(
         ForeignKey('institution.id'), init=False, repr=False, compare=False
     )
-    pi_id: Mapped[int] = mapped_column(ForeignKey('person.id'), init=False, repr=False, compare=False)
+    pi_id: Mapped[int] = mapped_column(
+        ForeignKey('person.id'), init=False, repr=False, compare=False
+    )
 
     institution: Mapped[Institution] = relationship()
     pi: Mapped[Person] = relationship()

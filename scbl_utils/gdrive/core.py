@@ -1,12 +1,16 @@
 from collections.abc import Collection
 from re import match
 from typing import Any
+
 import gspread as gs
 import pandas as pd
 from numpy import nan
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
+
 sheet_config = ConfigDict(arbitrary_types_allowed=True)
+
+
 @dataclass(config=sheet_config)
 class TrackingSheet:
     worksheet: gs.Worksheet
@@ -25,9 +29,11 @@ class TrackingSheet:
         cols_to_targets: Collection[dict[str, str | Collection[str] | dict[str, str]]],
     ):
         return cols_to_targets
+
     @model_validator(mode='after')
     def check_column_matching(self):
         return self
+
     def clean_df(self, df: pd.DataFrame) -> pd.DataFrame:
         """_summary_
 
@@ -57,6 +63,7 @@ class TrackingSheet:
         # Convert types
         df = df.astype(self.type_converters)
         return df
+
     def split_combine_df(self, whole_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         """_summary_
 
@@ -142,6 +149,7 @@ class TrackingSheet:
             )
 
         return dfs
+
     def to_dfs(self) -> dict[str, pd.DataFrame]:
         # Get the data out of the sheet, assigning header_row and data
         values = self.worksheet.get_values(

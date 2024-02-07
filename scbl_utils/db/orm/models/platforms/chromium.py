@@ -1,8 +1,17 @@
 from sqlalchemy import ForeignKey, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
-from ...custom_types import samplesheet_str, samplesheet_str_pk, int_pk, unique_samplesheet_str, stripped_str
+
 from ...base import Base
+from ...custom_types import (
+    int_pk,
+    samplesheet_str,
+    samplesheet_str_pk,
+    stripped_str,
+    unique_samplesheet_str,
+)
 from ..data import DataSet, Sample
+
+
 class ChromiumDataSet(DataSet):
     # ChromiumDataSet attributes
     assay: Mapped[samplesheet_str | None] = mapped_column(index=True)
@@ -89,7 +98,10 @@ class Library(Base, kw_only=True):
     # Parent models
     data_set: Mapped[ChromiumDataSet] = relationship(back_populates='libraries')
     library_type: Mapped[LibraryType] = relationship()
-    sequencing_run: Mapped[SequencingRun] = relationship(default=None, repr=False, compare=False)
+    sequencing_run: Mapped[SequencingRun] = relationship(
+        default=None, repr=False, compare=False
+    )
+
     # TODO: add validation
     @validates('id')
     def check_id(self, key: str, id: str) -> str | None:

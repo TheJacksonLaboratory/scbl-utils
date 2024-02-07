@@ -68,4 +68,12 @@ GDRIVE_PLATFORM_SPEC_SCHEMA = {
     'additionalProperties': False,
 }
 
-SYSTEM_CONFIG_SCHEMA = {'$schema': _schema_draft_version, 'type': 'object', 'properties': {'delivery_parent_dir': {'type': 'string', 'format': 'uri-reference'}}, 'required': ['delivery_parent_dir'], 'additionalProperties': False}
+SYSTEM_CONFIG_SCHEMA = {
+    '$schema': _schema_draft_version,
+    'type': 'object',
+    'properties': {
+        'delivery_parent_dir': {'type': 'string', 'format': 'uri-reference'}
+    },
+    'required': ['delivery_parent_dir'],
+    'additionalProperties': False,
+}

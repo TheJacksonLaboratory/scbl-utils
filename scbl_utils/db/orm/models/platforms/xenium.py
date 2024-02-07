@@ -1,8 +1,11 @@
-from ...base import Base
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+
+from ...base import Base
 from ...custom_types import int_pk, samplesheet_str, unique_int
 from ..data import DataSet, Sample
+
+
 class XeniumRun(Base):
     __tablename__ = 'xenium_run'
 
