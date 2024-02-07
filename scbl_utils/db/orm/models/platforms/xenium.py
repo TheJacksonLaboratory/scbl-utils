@@ -1,11 +1,8 @@
-from sqlalchemy import ForeignKey
+from ...base import Base
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
-
-from ..base import Base
-from ..column_types import int_pk, samplesheet_str, samplesheet_str_pk, unique_int
-from ..metadata_models import DataSet, Sample
-
-
+from sqlalchemy import ForeignKey
+from ...custom_types import int_pk, samplesheet_str, unique_int
+from ..data import DataSet, Sample
 class XeniumRun(Base):
     __tablename__ = 'xenium_run'
 
@@ -16,7 +13,7 @@ class XeniumRun(Base):
 
     # Child models
     data_sets: Mapped[list['XeniumDataSet']] = relationship(
-        back_populates='xenium_run', default_factory=list, repr=False
+        back_populates='xenium_run', default_factory=list, repr=False, compare=False
     )
 
 
@@ -49,11 +46,6 @@ class XeniumDataSet(DataSet):
 class XeniumSample(Sample):
     # XeniumSample attributes
     xenium_id: Mapped[samplesheet_str | None]  # TODO: this should be changed
-
-    # Parent foreign keys
-    # xenium_data_set_id: Mapped[int | None] = mapped_column(
-    #     ForeignKey('data_set.id'), init=False, repr=False
-    # )
 
     # Parent models
     data_set: Mapped[XeniumDataSet] = relationship(back_populates='samples')

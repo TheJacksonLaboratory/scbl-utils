@@ -11,7 +11,7 @@ from scbl_utils.db_models.base import Base
 from scbl_utils.db_models.data_models.chromium import *
 from scbl_utils.db_models.definitions import *
 from scbl_utils.defaults import DB_INIT_FILES
-from scbl_utils.main import app
+from scbl_utils.old_main import app
 
 from .fixtures.db_fixtures import (
     config_dir,

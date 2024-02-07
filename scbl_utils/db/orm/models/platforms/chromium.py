@@ -1,54 +1,8 @@
-"""
-This module contains SQLAlchemy models for the `scbl-utils` package.
-These models represent actual data stored in the database, as opposed to
-the definition of the data, which is stored in `definitions.py`.
-For example, an `Experment` is really an instance of a `Platform`.
-
-Classes:
-    - `Institution`: Research institution, such as a university or
-    organization
-    
-    - `Lab`: Lab at an `Institution`. Can be a PI's lab, or a
-    consortium/project headed by a PI.
-    
-    - `Project`: SCBL project, used to group `data_set`s. Not to be
-    confused with a consortium/project headed by a PI.
-    
-    - `Person`: A person, who can be on multiple `Project`s.
-    
-    - `DataSet`: data_set in a `Project`. This table essentially
-    handles the complex mappings between `Sample`s, `Library`s, and
-    `Project`s.
-    
-    - `Sample`: Biological sample in an `data_set`. Can be associated
-    with multiple `Library`s, or multiple `Library`s can be associated
-    with it.
-    
-    - `SequencingRun`: A sequencing run, which can be associated with
-    one or more `Library`s.
-    
-    - `Library`: A cDNA library, the ultimate item that is sequenced.
-"""
-# TODO: make sure that compare operations are correct
-from re import findall, search, sub
-
 from sqlalchemy import ForeignKey, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
-
-from scbl_utils.db_models.metadata_models import DataSet, Sample
-
-from ...core.validation import valid_str
-from ...defaults import LIBRARY_ID_PATTERN
-from ..base import Base
-from ..column_types import (
-    int_pk,
-    samplesheet_str,
-    samplesheet_str_pk,
-    stripped_str,
-    unique_samplesheet_str,
-)
-
-
+from ...custom_types import samplesheet_str, samplesheet_str_pk, int_pk, unique_samplesheet_str, stripped_str
+from ...base import Base
+from ..data import DataSet, Sample
 class ChromiumDataSet(DataSet):
     # ChromiumDataSet attributes
     assay: Mapped[samplesheet_str | None] = mapped_column(index=True)
@@ -82,13 +36,11 @@ class Tag(Base):
 
 class ChromiumSample(Sample):
     # Parent foreign keys
-    # chromium_data_set_id: Mapped[int | None] = mapped_column(ForeignKey('data_set.id'), init=False, repr=False)
     tag_id: Mapped[str | None] = mapped_column(
         ForeignKey('tag.id'), init=False, repr=False
     )
 
     # Parent models
-    # chromium_data_set: Mapped[ChromiumDataSet] = relationship(back_populates='chromium_samples')
     data_set: Mapped[ChromiumDataSet] = relationship(back_populates='samples')
     tag: Mapped[Tag] = relationship(default=None, repr=False)
 
@@ -101,11 +53,6 @@ class SequencingRun(Base, kw_only=True):
     # SequencingRun attributes
     # TODO: validate that this matches a pattern
     id: Mapped[samplesheet_str_pk]
-
-    # Child models
-    libraries: Mapped[list['Library']] = relationship(
-        back_populates='sequencing_run', default_factory=list, repr=False, compare=False
-    )
 
 
 class LibraryType(Base, kw_only=True):
@@ -142,16 +89,8 @@ class Library(Base, kw_only=True):
     # Parent models
     data_set: Mapped[ChromiumDataSet] = relationship(back_populates='libraries')
     library_type: Mapped[LibraryType] = relationship()
-    sequencing_run: Mapped[SequencingRun] = relationship(
-        back_populates='libraries', default=None, repr=False, compare=False
-    )
-
+    sequencing_run: Mapped[SequencingRun] = relationship(default=None, repr=False, compare=False)
+    # TODO: add validation
     @validates('id')
     def check_id(self, key: str, id: str) -> str | None:
-        id = id.upper().strip()
-        if valid_str(
-            string=id,
-            pattern=LIBRARY_ID_PATTERN,
-            string_name='library ID',
-        ):
-            return id
+        return id.upper().strip() if isinstance(id, str) else None

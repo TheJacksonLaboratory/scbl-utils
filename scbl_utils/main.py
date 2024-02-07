@@ -1,165 +1,154 @@
-"""
-This module contains the command-line interface for the `scbl-utils`
-package. It allows users to call subcommands and initialize a database,
-containing information about labs and institutions.
-
-Functions:
-    - init_db: Initialize the database with institutions and labs
-"""
-# TODO list in order of priority
-# TODO remove unused imports
+import fire
+from numpy import nan
+from pydantic.dataclasses import dataclass
+from pydantic import DirectoryPath, Field, model_validator
 from pathlib import Path
-from typing import Annotated
-
+from .validation import validate_directory
+import logging
+from rich.logging import RichHandler
+from sys import exit as sys_exit
+from .db.orm.base import Base
+from .db.core import db_session, data_rows_to_db
+from jsonschema import validate as validate_data
+from yaml import safe_load
+from .json_schemas.config_schemas import DB_SPEC_SCHEMA, GDRIVE_PLATFORM_SPEC_SCHEMA, SYSTEM_CONFIG_SCHEMA
+from pandas import read_csv
+from .json_schemas.data_schemas import DATA_SCHEMAS
 import gspread as gs
-import typer
-from rich import print as rprint
+from .gdrive.core import TrackingSheet
+from .db.orm.models.data import Platform
+from .db.orm.models.platforms.chromium import *
+from .db.orm.models.platforms.xenium import *
 from sqlalchemy import select
-
-from .core.data_io import load_data
-from .core.db import data_rows_to_db, db_session
-from .core.gdrive import TrackingSheet
-from .core.validation import validate_dir
-from .db_models.base import Base
-from .db_models.data_models.chromium import (
-    ChromiumDataSet,
-    ChromiumSample,
-    Library,
-    LibraryType,
-    SequencingRun,
-    Tag,
+from os import environ
+logging.basicConfig(
+    datefmt='[%X]',
+    format='%(message)s',
+    handlers=[RichHandler(rich_tracebacks=True, tracebacks_suppress=[fire], tracebacks_show_locals=True, markup=True)]
 )
-from .db_models.data_models.xenium import XeniumDataSet, XeniumRun, XeniumSample
-from .db_models.metadata_models import (
-    DataSet,
-    Institution,
-    Lab,
-    Person,
-    Platform,
-    Project,
-    Sample,
-)
-from .defaults import (
-    CONFIG_DIR,
-    DATA_INSERTION_ORDER,
-    DATA_SCHEMAS,
-    DB_CONFIG_FILES,
-    DB_INIT_FILES,
-    DB_SPEC_SCHEMA,
-    GDRIVE_CONFIG_FILES,
-    GDRIVE_PLATFORM_SPEC_SCHEMA,
-    SIBLING_REPOSITORY,
-)
+log = logging.getLogger('rich')
+@dataclass(kw_only=True)
+class SCBLUtils(object):
+    """A set of command-line utilities that facilitate data processing at the Single Cell Biology Lab at the Jackson Laboratory."""
+    config_dir: str | Path = Field(default=Path('/sc/service/etc/.config/scbl-utils'), validate_default=True)
 
-app = typer.Typer()
+    @model_validator(mode='after')
+    def _load_config(self) -> 'SCBLUtils':
+        self._data_insertion_order = ['Institution', 'Person', 'Lab', 'Platform', 'Project', 'LibraryType', 'Tag', 'SequencingRun', 'ChromiumDataSet', 'Library', 'ChromiumSample', 'XeniumRun', 'XeniumDataSet', 'XeniumSample']
+        
+        self.config_dir = Path(self.config_dir)
+        
+        required_files = {'db_spec': 'db/db_spec.yml', 'gdrive_credentials': 'google-drive/service-account.json', 'system_config': 'system/config.yml'}
+        required_directories = {'platform_tracking-sheet_specs': 'google-drive/platform_tracking-sheet_specs'}
 
+        try:
+            validate_directory(self.config_dir, required_files=required_files.values(), required_directories=required_directories.values())
+        except:
+            log.exception(f'{self.config_dir} does not exist or is missing required files or directories')
+            sys_exit(1)
 
-@app.callback(no_args_is_help=True)
-def callback(
-    config_dir: Annotated[
-        Path,
-        typer.Option(
-            '--config-dir',
-            '-c',
-            help=(
-                'Configuration directory containing files necessary for the '
-                'script to run.'
-            ),
-        ),
-    ] = CONFIG_DIR
-) -> None:
-    """
-    Command-line utilities that facilitate data processing in the
-    Single Cell Biology Lab at the Jackson Laboratory.
-    """
-    global CONFIG_DIR
-    CONFIG_DIR = config_dir
-    validate_dir(config_dir)
+        self._platform_tracking_sheet_specs_dir = self.config_dir / required_directories['platform_tracking-sheet_specs']
+        
+        db_spec_path = self.config_dir / required_files['db_spec']
+        try:
+            self._db_spec: dict[str, str] = safe_load(db_spec_path.read_text())
+            validate_data(self._db_spec, schema=DB_SPEC_SCHEMA)
+            self._Session = db_session(Base, **self._db_spec)
+        except:
+            log.exception(f'Error reading or validating {db_spec_path}')
+            sys_exit(1)
 
+        gdrive_credential_path = self.config_dir / required_files['gdrive_credentials']
+        try:
+            self._gclient = gs.service_account(filename=gdrive_credential_path)
+        except:
+            log.exception('Error logging into Google Drive.')
+            sys_exit(1)
 
-@app.command(no_args_is_help=True)
-def init_db(
-    data_dir: Annotated[
-        Path,
-        typer.Argument(
-            help='Path to a directory containing the data necessary to '
-            'initialize the database. This directory must contain the '
-            'following files: ' + ', '.join(path.name for path in DB_INIT_FILES)
-        ),
-    ],
-):
-    """
-    Initialize the database with the institutions, labs, people,
-    platforms, library types, and tags.
-    """
-    db_config_dir = CONFIG_DIR / 'db'
-    config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
-    spec: dict = load_data(config_files['db-spec.yml'], schema=DB_SPEC_SCHEMA)
+        system_config_path = self.config_dir / required_files['system_config']
+        try:
+            self._system_config: dict[str, str] = safe_load(system_config_path.read_text())
+            validate_data(self._system_config, schema=SYSTEM_CONFIG_SCHEMA)
+            environ.update(self._system_config)
+        except:
+            log.exception(f'Error reading or validating {system_config_path}')
+            sys_exit(1)
 
-    data_files = validate_dir(data_dir, required_files=DB_INIT_FILES)
-    datas = {
-        path.stem: load_data(path, schema=DATA_SCHEMAS[path.stem])
-        for path in data_files.values()
-    }
+        return self
+        
+    def init_db(self, db_init_data_dir: str, sync_with_gdrive: bool = True):
+        data_dir = Path(db_init_data_dir)
 
-    ordered_model_names = (
-        model_name for model_name in DATA_INSERTION_ORDER if model_name in datas
-    )
+        added_data_sources = []
+        filenames = [f'{model_name}.csv' for model_name in self._data_insertion_order]
+        with self._Session.begin() as session:
+            for filename in filenames:
+                data_path = data_dir / filename
+            
+                if not data_path.is_file():
+                    continue
 
-    Session = db_session(base_class=Base, **spec)
-    for model_name in ordered_model_names:
-        with Session.begin() as session:
-            data_rows_to_db(session, datas[model_name], data_source=f'{model_name}.csv')
+                data = read_csv(data_path).replace({nan: None})
+                data_as_records = data.to_dict(orient='records')
+                
+                try:
+                    validate_data(data_as_records, schema=DATA_SCHEMAS.get(filename, {}))
+                    data_rows_to_db(session, data=data, data_source=str(data_path), log=log)
+                except:
+                    log.exception(f'The data in {data_path} could not be added to the database.')
+                    sys_exit(1)
+                else:
+                    added_data_sources.append(str(data_path))
+        
+        if not sync_with_gdrive:
+            log.info(f'Successfuly added data from {added_data_sources} to the database.')
+            return
+        
+        self.sync_with_gdrive()
 
+    def sync_with_gdrive(self):
+        with self._Session.begin() as session:
+            stmt = select(Platform)
+            platforms = session.execute(stmt).scalars().all()
 
-@app.command()
-def sync_db_with_gdrive():
-    """ """
-    db_config_dir = CONFIG_DIR / 'db'
-    db_config_files = validate_dir(db_config_dir, required_files=DB_CONFIG_FILES)
-    db_spec: dict = load_data(db_config_files['db-spec.yml'], schema=DB_SPEC_SCHEMA)
+            for platform in platforms:
+                platform_spec_path = self._platform_tracking_sheet_specs_dir / f'{platform.name}.yml'
+                
+                if not platform_spec_path.exists():
+                    log.warning(f'{platform_spec_path} not found. Skipping ingestion of {platform.name} data from Google Drive.')
+                    continue
+                
+                try:
+                    platform_spec = safe_load(platform_spec_path.read_text())
+                    validate_data(platform_spec, schema=GDRIVE_PLATFORM_SPEC_SCHEMA)
+                except:
+                    log.exception(f'Error reading or validating {platform_spec_path}. Skipping ingestion of {platform.name} data from Google Drive.')
+                    continue
+                
+                spreadsheet = self._gclient.open_by_url(platform_spec['spreadsheet_url'])
+                
+                main_sheet_id = platform_spec['main_sheet_id']
+                main_sheet = spreadsheet.get_worksheet_by_id(main_sheet_id)
+                main_sheet_spec = platform_spec['worksheets'][main_sheet_id]
 
-    gdrive_config_dir = CONFIG_DIR / 'google-drive'
-    gdrive_config_files = validate_dir(
-        gdrive_config_dir, required_files=GDRIVE_CONFIG_FILES
-    )
-
-    gclient = gs.service_account(filename=gdrive_config_files['service-account.json'])
-
-    platform_spec_dir = gdrive_config_files['platform_tracking-sheet_specs']
-    Session = db_session(base_class=Base, **db_spec)
-    with Session.begin() as session:
-        stmt = select(Platform)
-        platforms = session.execute(stmt).scalars().all()
-        platform_names = [platform.name for platform in platforms]
-
-    for platform_name in platform_names:
-        platform_spec_path = platform_spec_dir / f'{platform_name}.yml'
-
-        if not platform_spec_path.exists():
-            rprint(
-                f'[green]{platform_spec_path.name}[/] not found in [orange1]{platform_spec_dir}[/]. Skipping ingestion of [green]{platform_name}[/] data from Google Drive.'
-            )
-            continue
-
-        gdrive_spec: dict = load_data(
-            platform_spec_path, schema=GDRIVE_PLATFORM_SPEC_SCHEMA
-        )
-
-        tracking_spreadsheet = gclient.open_by_url(gdrive_spec['spreadsheet_url'])
-
-        main_sheet_id = gdrive_spec['main_sheet_id']
-        main_sheet = tracking_spreadsheet.get_worksheet_by_id(main_sheet_id)
-        main_sheet_spec = gdrive_spec['worksheets'][main_sheet_id]
-
-        main_datas = TrackingSheet(worksheet=main_sheet, **main_sheet_spec).to_dfs()
-        data_source = (
-            f'{tracking_spreadsheet.title} - {main_sheet.title} ({main_sheet.url})'
-        )
-
-        ordered_tables = (
-            table for table in DATA_INSERTION_ORDER if table in main_datas
-        )
-        for tablename in ordered_tables:
-            with Session.begin() as session:
-                data_rows_to_db(session, main_datas[tablename], data_source=data_source)
+                data_source = f'{spreadsheet.title} - {main_sheet.title} ({main_sheet.url})'
+                try:
+                    datas = TrackingSheet(worksheet=main_sheet, **main_sheet_spec).to_dfs()
+                except:
+                    logging.exception(f'Error reading data from {data_source}. Skipping ingestion of {platform.name} data from Google Drive.')
+                    continue
+                
+                for model_name in self._data_insertion_order:
+                    if model_name not in datas:
+                        continue
+                    try:
+                        data_rows_to_db(session, datas[model_name], data_source=data_source, log=log)
+                    except:
+                        log.exception(f'{model_name} data from {data_source} could not be added to the database.')
+    def delivery_metrics_to_gdrive(self, pipeline_output_dir: DirectoryPath):
+        try:
+            raise NotImplementedError
+        except:
+            log.exception('')
+def main():
+    fire.Fire(SCBLUtils)
