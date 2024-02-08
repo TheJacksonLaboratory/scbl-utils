@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from ..base import Base
@@ -58,8 +58,8 @@ class DataSet(Base, kw_only=True):
     processing_start_date: Mapped[date | None] = mapped_column(default=None, repr=False)
 
     # Parent foreign keys
-    project_id: Mapped[str] = mapped_column(
-        ForeignKey('project.id'), init=False, repr=False
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey('project.id'), default=None, init=False, repr=False
     )
     platform_name: Mapped[str] = mapped_column(ForeignKey('platform.name'), init=False)
     submitter_id: Mapped[int] = mapped_column(
@@ -67,7 +67,7 @@ class DataSet(Base, kw_only=True):
     )
 
     # Parent models
-    project: Mapped[Project] = relationship(back_populates='data_sets')
+    project: Mapped[Project | None] = relationship(back_populates='data_sets')
     submitter: Mapped[Person] = relationship()
 
     # TODO should there be another column for the date that work was

@@ -164,7 +164,7 @@ def data_rows_to_db(
                 no_matches_table = rich_table(
                     unique_parent_data.loc[no_matches], header=error_table_header
                 )
-                console.print(no_matches_table)
+                console.print(no_matches_table, end='\n\n')
 
             if too_many_matches.any():
                 console.print(
@@ -173,7 +173,7 @@ def data_rows_to_db(
                 too_many_matches_table = rich_table(
                     unique_parent_data.loc[too_many_matches], header=error_table_header
                 )
-                console.print(too_many_matches_table)
+                console.print(too_many_matches_table, end='\n\n')
 
             unique_parent_data = unique_parent_data[~no_matches & ~too_many_matches]
             data_to_add = data_to_add.merge(
@@ -222,7 +222,7 @@ def data_rows_to_db(
         try:
             models_to_add.append(model(**rec))  # type: ignore
         except Exception as e:
-            console.print(str(e))
+            console.print(str(e), end='\n\n')
 
     stmt = select(model)
     existing_models = session.execute(stmt).scalars().all()
@@ -237,4 +237,4 @@ def data_rows_to_db(
             try:
                 session.add(model_to_add)
             except Exception as e:
-                console.print(str(e))
+                console.print(str(e), end='\n\n')

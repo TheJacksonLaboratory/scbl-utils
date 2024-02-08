@@ -158,7 +158,8 @@ class SCBLUtils(object):
 
                 if not platform_spec_path.exists():
                     console.print(
-                        f'{platform_spec_path} not found. Skipping ingestion of [green]{platform.name}[/] data from Google Drive.'
+                        f'{platform_spec_path} not found. Skipping ingestion of [green]{platform.name}[/] data from Google Drive.',
+                        end='\n\n',
                     )
                     continue
 
@@ -191,7 +192,7 @@ class SCBLUtils(object):
                             console=console,
                         )
                     except Exception as e:
-                        console.print(str(e))
+                        console.print(str(e), end='\n\n')
 
     def delivery_metrics_to_gdrive(self, pipeline_output_dir: pydantic.DirectoryPath):
         raise NotImplementedError
