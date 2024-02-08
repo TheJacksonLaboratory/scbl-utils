@@ -1,7 +1,5 @@
-import logging
 from os import environ
 from pathlib import Path
-from sys import exit as sys_exit
 
 import fire
 import gspread as gs
@@ -38,8 +36,8 @@ pandas.set_option('future.no_silent_downcasting', True)
 class SCBLUtils(object):
     """A set of command-line utilities that facilitate data processing at the Single Cell Biology Lab at the Jackson Laboratory."""
 
-    config_dir: str | Path = pydantic.Field(
-        default=Path('/sc/service/etc/.config/scbl-utils'), validate_default=True
+    config_dir: pydantic.DirectoryPath = pydantic.Field(
+        default='/sc/service/etc/.config/scbl-utils', validate_default=True
     )
     _data_insertion_order: list[str] = pydantic.Field(
         init=False,
@@ -62,10 +60,14 @@ class SCBLUtils(object):
         validate_default=True,
     )
 
+    @pydantic.field_validator('config_dir', mode='before')
+    @classmethod
+    def _convert_config_dir(cls, config_dir: str) -> Path:
+        return Path(config_dir).expanduser()
+
     @pydantic.field_validator('config_dir', mode='after')
     @classmethod
-    def _validate_config_dir(cls, config_dir: str | Path) -> Path:
-        config_dir = Path(config_dir)
+    def _validate_config_dir(cls, config_dir: Path) -> Path:
         required_files = {
             'db_spec': 'db/db_spec.yml',
             'gdrive_credentials': 'google-drive/service-account.json',
