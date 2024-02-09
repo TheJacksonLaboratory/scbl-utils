@@ -6,10 +6,10 @@ import pandas as pd
 from numpy import nan
 from rich.console import Console
 from sqlalchemy import URL, create_engine, inspect, select
-from sqlalchemy.orm import DeclarativeBase, Mapper, Relationship, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Relationship, Session, sessionmaker
 
-from .helpers import rich_table
-from .orm.base import Base
+from .helpers import construct_where_condition, rich_table
+from .orm.base import Base, Model
 
 
 def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Session]:
@@ -31,26 +31,9 @@ def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Sess
     return Session
 
 
-def construct_where_condition(
-    attribute_name: str, value: Any, model_inspector: Mapper[Base]
-):
-    if '.' not in attribute_name:
-        attribute = model_inspector.attrs[attribute_name].class_attribute
-        return attribute.ilike(value) if isinstance(value, str) else attribute == value
-
-    parent_name, parent_attribute_name = attribute_name.split('.', maxsplit=1)
-    parent_inspector = model_inspector.relationships[parent_name].mapper
-    parent = model_inspector.attrs[parent_name].class_attribute
-
-    parent_where_condition = construct_where_condition(
-        parent_attribute_name, value, model_inspector=parent_inspector
-    )
-    return parent.has(parent_where_condition)
-
-
 def get_matching_obj(
-    data: pd.Series, session: Session, model: type[Base]
-) -> Base | None | bool:
+    data: pd.Series | dict, session: Session, model: type[Model]
+) -> Model | None | bool:
     where_conditions = []
 
     for col, val in data.items():
@@ -96,11 +79,16 @@ def data_rows_to_db(
         )
 
     model_name = model_names.pop()
-    model: type[Base] = next(
-        mapper.class_
-        for mapper in Base.registry.mappers
-        if mapper.class_.__name__ == model_name
-    )
+    try:
+        model: type[Base] = next(
+            mapper.class_
+            for mapper in Base.registry.mappers
+            if mapper.class_.__name__ == model_name
+        )
+    except StopIteration:
+        raise ValueError(
+            f'The model [orange1]{model_name}[/] was not found in the database'
+        )
 
     model_init_fields = {field.name: field for field in fields(model) if field.init}
     required_model_init_fields = {
@@ -110,10 +98,14 @@ def data_rows_to_db(
     }
     renamed_data_columns = {col.split('.')[1] for col in data.columns}
 
-    missing_fields = ', '.join(required_model_init_fields.keys() - renamed_data_columns)
+    missing_fields = required_model_init_fields.keys() - renamed_data_columns
+    if hasattr(model, '__mapper_args__'):
+        missing_fields.remove(model.__mapper_args__.get('polymorphic_on'))
+
     if missing_fields:
+        missing_fields_str = ', '.join(missing_fields)
         raise ValueError(
-            f'The following fields are required to initialize a [green]{model_name}[/], but are missing from the columns of [orange1]{data_source}[/]: [green]{missing_fields}[/]'
+            f'The following fields are required to initialize a [green]{model_name}[/], but are missing from the columns of [orange1]{data_source}[/]: [green]{missing_fields_str}[/]'
         )
 
     column_renamer = {col: col.split('.', maxsplit=1)[1] for col in data.columns}

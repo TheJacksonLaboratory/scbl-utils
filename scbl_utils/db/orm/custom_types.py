@@ -2,8 +2,9 @@ from re import sub
 from string import ascii_letters, digits
 from typing import Annotated
 
+from pydantic import StringConstraints, validate_call
 from sqlalchemy.orm import mapped_column
-from sqlalchemy.types import String, TypeDecorator
+from sqlalchemy.types import Integer, String, TypeDecorator
 
 
 class StrippedString(TypeDecorator):
@@ -15,7 +16,7 @@ class StrippedString(TypeDecorator):
     impl = String
     cache_ok = True
 
-    def process_bind_param(self, string: str | None, dialect: str) -> str | None:
+    def process_bind_param(self, string: str | None, dialect) -> str | None:
         return string.strip() if isinstance(string, str) else None
 
 
@@ -29,7 +30,7 @@ class SamplesheetString(TypeDecorator):
     impl = String
     cache_ok = True
 
-    def process_bind_param(self, string: str, dialect: str) -> str | None:
+    def process_bind_param(self, string: str, dialect) -> str | None:
         if not isinstance(string, str):
             return None
 
@@ -50,6 +51,19 @@ class SamplesheetString(TypeDecorator):
         return string
 
 
+class XeniumSlideSerialNumber(TypeDecorator):
+    """ """
+
+    impl = Integer
+    cache_ok = True
+
+    def process_bind_param(self, serial_number: str, dialect) -> int:
+        return int(serial_number.strip())
+
+    def process_result_value(self, serial_number: int, dialect) -> str:
+        return f'{serial_number:02}'
+
+
 # Commonly used primary key types
 int_pk = Annotated[int, mapped_column(primary_key=True)]
 stripped_str_pk = Annotated[str, mapped_column(StrippedString, primary_key=True)]
@@ -59,7 +73,10 @@ samplesheet_str_pk = Annotated[str, mapped_column(SamplesheetString, primary_key
 stripped_str = Annotated[str, mapped_column(StrippedString)]
 samplesheet_str = Annotated[str, mapped_column(SamplesheetString)]
 
-# Commonly used unique string types
+# Commonly used unique types
 unique_int = Annotated[int, mapped_column(unique=True)]
 unique_stripped_str = Annotated[str, mapped_column(StrippedString, unique=True)]
 unique_samplesheet_str = Annotated[str, mapped_column(SamplesheetString, unique=True)]
+xenium_slide_serial_number = Annotated[
+    str, mapped_column(XeniumSlideSerialNumber, unique=True)
+]

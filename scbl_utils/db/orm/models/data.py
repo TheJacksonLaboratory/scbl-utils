@@ -1,10 +1,17 @@
 from datetime import date
+from re import fullmatch, match
 
-from sqlalchemy import ForeignKey, null
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from ..base import Base
-from ..custom_types import int_pk, samplesheet_str, stripped_str, stripped_str_pk
+from ..custom_types import (
+    SamplesheetString,
+    samplesheet_str,
+    samplesheet_str_pk,
+    stripped_str,
+    stripped_str_pk,
+)
 from .entities import Lab, Person
 
 
@@ -15,63 +22,59 @@ class Platform(Base, kw_only=True):
 
     # Platform attributes
     name: Mapped[stripped_str_pk]
+    data_set_id_prefix: Mapped[str] = mapped_column(SamplesheetString(length=2))
+    sample_id_prefix: Mapped[str] = mapped_column(SamplesheetString(length=2))
+    data_set_id_length: Mapped[int]
+    sample_id_length: Mapped[int]
 
+    @validates('data_set_id_prefix', 'sample_id_prefix')
+    def check_prefix(self, key: str, prefix: str) -> str:
+        pattern = r'^[A-Z]{2}$'
+        prefix = prefix.upper().strip()
 
-class Project(Base, kw_only=True):
-    __tablename__ = 'project'
+        if match(pattern, prefix) is None:
+            raise ValueError(
+                f'[orange1]{prefix}[/] does not match the pattern [green]{pattern}[/].'
+            )
 
-    # Project attributes
-    id: Mapped[stripped_str_pk]
-    description: Mapped[stripped_str | None] = mapped_column(
-        default=None, index=True, compare=False
-    )
+        return prefix
 
-    # Parent foreign keys
-    lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False, repr=False)
+    @validates('data_set_id_length', 'sample_id_length')
+    def check_id_length(self, key: str, id_length: int) -> int:
+        min_id_length = 7
+        max_id_length = 9
 
-    # Parent models
-    lab: Mapped[Lab] = relationship()
+        if not min_id_length <= id_length <= max_id_length:
+            raise ValueError(
+                f'[green]{key}[/] ID length must be between {min_id_length} and {max_id_length}, but {id_length} was given.'
+            )
 
-    # Child models
-    data_sets: Mapped[list['DataSet']] = relationship(
-        back_populates='project', default_factory=list, repr=False, compare=False
-    )
-
-    # TODO: add validation for this
-    @validates('id')
-    def check_id(self, key: str, id: str | None) -> str | None:
-        return id.upper().strip() if isinstance(id, str) else None
+        return id_length
 
 
 class DataSet(Base, kw_only=True):
     __tablename__ = 'data_set'
 
-    # TODO: add validation/auto-setting for id depending on
-    # platform/assay type
-
     # DataSet attributes
-    id: Mapped[int_pk] = mapped_column(init=False, repr=False)
+    # TODO: auto-incrementing behavior
+    id: Mapped[samplesheet_str_pk]
     name: Mapped[samplesheet_str] = mapped_column(index=True)
     ilab_request_id: Mapped[stripped_str] = mapped_column(
         index=True
     )  # TODO: ilab request ID validation
-    processing_start_date: Mapped[date | None] = mapped_column(default=None, repr=False)
+    date_initialized: Mapped[date] = mapped_column(repr=False)
 
     # Parent foreign keys
-    project_id: Mapped[str | None] = mapped_column(
-        ForeignKey('project.id'), default=None, init=False, repr=False
-    )
+    lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False, repr=False)
     platform_name: Mapped[str] = mapped_column(ForeignKey('platform.name'), init=False)
     submitter_id: Mapped[int] = mapped_column(
         ForeignKey('person.id'), init=False, repr=False
     )
 
     # Parent models
-    project: Mapped[Project | None] = relationship(back_populates='data_sets')
+    lab: Mapped[Lab] = relationship()
+    platform: Mapped[Platform] = relationship()
     submitter: Mapped[Person] = relationship()
-
-    # TODO should there be another column for the date that work was
-    # begun on the dataset? this will help generate a batch_id
 
     # Automatically set attributes
     batch_id: Mapped[int] = mapped_column(init=False, default=None, repr=False)
@@ -79,6 +82,11 @@ class DataSet(Base, kw_only=True):
     __mapper_args__ = {
         'polymorphic_on': 'platform_name',
     }
+
+    # TODO: implement validation
+    @validates('id')
+    def check_id(self, key: str, id: str) -> str:
+        return id.upper().strip()
 
     @validates('batch_id')
     def set_batch_id(self, key: str, batch_id: None) -> int:
@@ -95,7 +103,7 @@ class DataSet(Base, kw_only=True):
         # the two datasets will be the same.
         # TODO: this should be fixed somehow
         to_hash = (
-            self.processing_start_date,
+            self.date_initialized,
             self.submitter.email,
             self.submitter.institution_id,
             self.submitter.first_name,
@@ -109,7 +117,7 @@ class Sample(Base, kw_only=True):
     __tablename__ = 'sample'
 
     # Sample attributes
-    id: Mapped[int_pk] = mapped_column(init=False)
+    id: Mapped[samplesheet_str_pk]
     name: Mapped[samplesheet_str] = mapped_column(index=True)
     date_received: Mapped[date] = mapped_column(default_factory=date.today)
 
@@ -120,3 +128,8 @@ class Sample(Base, kw_only=True):
     platform_name: Mapped[str] = mapped_column(ForeignKey('platform.name'), init=False)
 
     __mapper_args__ = {'polymorphic_on': 'platform_name'}
+
+    # TODO: implement validation
+    @validates('id')
+    def check_id(self, key: str, id: str) -> str:
+        return id.upper().strip()

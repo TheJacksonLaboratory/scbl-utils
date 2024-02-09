@@ -146,7 +146,7 @@ class TrackingSheet:
                 [df[df.columns[~column_contains_suffix]], rows_to_append],
                 axis=0,
                 ignore_index=True,
-            )
+            ).drop_duplicates()
 
         return dfs
 

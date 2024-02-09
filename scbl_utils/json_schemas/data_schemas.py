@@ -42,7 +42,13 @@ _person_properties = {
 }
 
 
-_platform_properties = {'Platform.name': {'type': 'string'}}
+_platform_properties = {
+    'Platform.name': {'type': 'string'},
+    'Platform.data_set_id_prefix': {'type': 'string', 'pattern': r'^[A-Z]{2}$'},
+    'Platform.data_set_id_length': {'type': 'integer', 'minimum': 7, 'maximum': 9},
+    'Platform.sample_id_prefix': {'type': 'string', 'pattern': r'^[A-Z]{2}$'},
+    'Platform.sample_id_length': {'type': 'integer', 'minimum': 7, 'maximum': 9},
+}
 
 _library_type_properties = {'LibraryType.name': {'type': 'string'}}
 

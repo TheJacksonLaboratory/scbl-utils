@@ -1,5 +1,7 @@
+from dataclasses import fields
 from os import environ
 from pathlib import Path
+from shutil import copytree
 
 import fire
 import gspread as gs
@@ -13,7 +15,8 @@ from rich.traceback import install
 from sqlalchemy import select
 from yaml import safe_load
 
-from .db.core import data_rows_to_db, db_session
+from .db.core import data_rows_to_db, db_session, get_matching_obj
+from .db.helpers import date_to_id
 from .db.orm.base import Base
 from .db.orm.models.data import Platform
 from .db.orm.models.platforms.chromium import *
@@ -46,12 +49,12 @@ class SCBLUtils(object):
             'Person',
             'Lab',
             'Platform',
-            'Project',
-            'LibraryType',
-            'Tag',
+            'ChromiumAssay',
+            'ChromiumLibraryType',
+            'ChromiumTag',
             'SequencingRun',
             'ChromiumDataSet',
-            'Library',
+            'ChromiumLibrary',
             'ChromiumSample',
             'XeniumRun',
             'XeniumDataSet',
@@ -67,7 +70,9 @@ class SCBLUtils(object):
 
     @pydantic.field_validator('config_dir', mode='after')
     @classmethod
-    def _validate_config_dir(cls, config_dir: Path) -> Path:
+    def _validate_config_dir(
+        cls, config_dir: pydantic.DirectoryPath
+    ) -> pydantic.DirectoryPath:
         required_files = {
             'db_spec': 'db/db_spec.yml',
             'gdrive_credentials': 'google-drive/service-account.json',
@@ -186,15 +191,101 @@ class SCBLUtils(object):
                     if model_name not in datas:
                         continue
 
+                    data = datas[model_name]
+
+                    model = next(
+                        model.class_
+                        for model in Base.registry.mappers
+                        if model.class_.__name__ == model_name
+                    )
+                    # TODO: implement something neater that figures out whether the model requires an ID and then assign it if it's not there
+                    if not issubclass(model, (DataSet, Sample)):
+                        try:
+                            data_rows_to_db(
+                                session,
+                                data,
+                                data_source=data_source,
+                                console=console,
+                            )
+                        except Exception as e:
+                            console.print(str(e), end='\n\n')
+
+                        continue
+
+                    data[f'{model_name}.platform.name'] = platform.name
+
+                    if issubclass(model, DataSet):
+                        prefix = platform.data_set_id_prefix
+                        id_length = platform.data_set_id_length
+                        date_column = f'{model_name}.date_initialized'
+                    else:
+                        prefix = platform.sample_id_prefix
+                        id_length = platform.sample_id_length
+                        date_column = f'{model_name}.date_received'
+
+                    data[f'{model_name}.id'] = data[[date_column]].apply(
+                        date_to_id, prefix=prefix, id_length=id_length, axis=1
+                    )
+
                     try:
                         data_rows_to_db(
                             session,
-                            datas[model_name],
+                            data,
                             data_source=data_source,
                             console=console,
                         )
                     except Exception as e:
                         console.print(str(e), end='\n\n')
+
+    # TODO: make this function more flexible for other assays/platforms
+    # TODO: in the configuration, there should be a platform-specific
+    # of handling directories, with regex and structures predefined in
+    # self._config/something.yml. Also, this just needs to be cleaned
+    @pydantic.validate_call(config=pydantic.ConfigDict(validate_default=True))
+    def format_xenium_dir(
+        self,
+        xenium_dir: pydantic.DirectoryPath,
+        output_dir: pydantic.DirectoryPath = Path('/sc/service/staging'),
+    ):
+        slide_serial_numbers = {
+            sample_dir.name.split('__')[1] for sample_dir in xenium_dir.iterdir()
+        }  # TODO: change this when the xenium ID is corrected
+        with self._Session.begin() as session:
+            for serial_number in slide_serial_numbers:
+                match_on = {'slide_serial_number': serial_number}
+                data_set = get_matching_obj(
+                    data=match_on, model=XeniumDataSet, session=session
+                )
+
+                # TODO: cleaner error handling
+                if not isinstance(data_set, XeniumDataSet):
+                    raise ValueError(
+                        f'No data set found for slide ID [orange1]{serial_number}[/]'
+                    )
+
+                staging_dir = output_dir / Path(data_set.lab.delivery_dir).parts[-1]
+                slide_dir = staging_dir / f'{serial_number}_{data_set.slide_name}'
+
+                sub_dirs = ['design', 'slide_img', 'regions']
+
+                sample_id_to_dir = {
+                    dir_.name[2]: dir_
+                    for dir_ in xenium_dir.glob(f'*__{serial_number}__*')
+                }
+                for sample_id, dir_ in sample_id_to_dir.items():
+                    for sub_dir in sub_dirs:
+                        (slide_dir / sub_dir).mkdir(parents=True, exist_ok=True)
+
+                        if sub_dir == 'regions':
+                            sample = next(
+                                sample
+                                for sample in data_set.samples
+                                if sample.id == sample_id
+                            )
+                            copytree(
+                                src=dir_,
+                                dst=slide_dir / sub_dir / f'{sample_id}_{sample.name}',
+                            )
 
     def delivery_metrics_to_gdrive(self, pipeline_output_dir: pydantic.DirectoryPath):
         raise NotImplementedError

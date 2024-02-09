@@ -30,12 +30,10 @@ class Institution(Base, kw_only=True):
         default=None, index=True, compare=False
     )
     country: Mapped[str] = mapped_column(StrippedString(length=2), default='US')
-    state: Mapped[str | None] = mapped_column(
-        StrippedString(length=2), default=None, insert_default=null()
-    )
+    state: Mapped[str | None] = mapped_column(StrippedString(length=2), default=None)
     city: Mapped[stripped_str] = mapped_column(default=None)
     ror_id: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null(), repr=False, compare=False
+        default=None, repr=False, compare=False
     )
 
     @validates('email_format')
@@ -127,7 +125,7 @@ class Person(Base, kw_only=True):
     )
     email: Mapped[unique_stripped_str] = mapped_column(default=None, index=True)
     orcid: Mapped[unique_stripped_str | None] = mapped_column(
-        default=None, insert_default=null(), repr=False, compare=False
+        default=None, repr=False, compare=False
     )
 
     @validates('first_name', 'last_name')
@@ -237,10 +235,10 @@ class Lab(Base, kw_only=True):
             pi = self.pi
 
             first_name = SamplesheetString().process_bind_param(
-                pi.first_name.lower(), dialect=''
+                pi.first_name.lower(), dialect=None
             )
             last_name = SamplesheetString().process_bind_param(
-                pi.last_name.lower(), dialect=''
+                pi.last_name.lower(), dialect=None
             )
 
             delivery_path = Path(f'{first_name}_{last_name}')
