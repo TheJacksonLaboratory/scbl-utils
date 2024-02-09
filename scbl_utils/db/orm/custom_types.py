@@ -2,7 +2,6 @@ from re import sub
 from string import ascii_letters, digits
 from typing import Annotated
 
-from pydantic import StringConstraints, validate_call
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.types import Integer, String, TypeDecorator
 

@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, null
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from ...base import Base

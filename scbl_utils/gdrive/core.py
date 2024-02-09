@@ -4,7 +4,6 @@ from typing import Any
 
 import gspread as gs
 import pandas as pd
-from numpy import nan
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
 

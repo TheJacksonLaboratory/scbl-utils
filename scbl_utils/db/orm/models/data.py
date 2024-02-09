@@ -1,5 +1,5 @@
 from datetime import date
-from re import fullmatch, match
+from re import match
 
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
