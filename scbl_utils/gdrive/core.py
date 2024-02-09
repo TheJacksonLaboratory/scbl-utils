@@ -145,7 +145,7 @@ class TrackingSheet:
                 [df[df.columns[~column_contains_suffix]], rows_to_append],
                 axis=0,
                 ignore_index=True,
-            ).drop_duplicates()
+            )
 
         return dfs
 
@@ -158,4 +158,11 @@ class TrackingSheet:
         data = values[self.head + 1 :]
 
         whole_df = self.clean_df(pd.DataFrame(data, columns=header))
-        return self.split_combine_df(whole_df)
+        split_dfs = self.split_combine_df(whole_df)
+        unique_split_dfs = {
+            model_name: df.drop_duplicates(ignore_index=True)
+            for model_name, df in split_dfs.items()
+        }
+
+        # TODO: figure out something cleaner
+        return unique_split_dfs

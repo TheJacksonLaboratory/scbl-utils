@@ -29,8 +29,8 @@ class XeniumRun(Base):
 
 class XeniumDataSet(DataSet):
     # XeniumDataSet attributes
-    slide_serial_number: Mapped[xenium_slide_serial_number]
-    slide_name: Mapped[samplesheet_str]
+    slide_serial_number: Mapped[xenium_slide_serial_number | None]
+    slide_name: Mapped[samplesheet_str | None]
 
     # Parent foreign keys
     xenium_run_id: Mapped[int | None] = mapped_column(

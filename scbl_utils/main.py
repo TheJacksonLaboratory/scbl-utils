@@ -1,3 +1,4 @@
+from dataclasses import fields
 from os import environ
 from pathlib import Path
 from shutil import copytree
@@ -102,7 +103,7 @@ class SCBLUtils(object):
         return data_insertion_order
 
     @pydantic.model_validator(mode='after')
-    def _load_config(self) -> 'SCBLUtils':
+    def _load_config(self: 'SCBLUtils') -> 'SCBLUtils':
         self._platform_tracking_sheet_specs_dir = Path(
             self.config_dir, 'google-drive', 'platform_tracking-sheet_specs'
         )
@@ -190,19 +191,18 @@ class SCBLUtils(object):
                     if model_name not in datas:
                         continue
 
-                    data = datas[model_name]
-
                     model = next(
                         model.class_
                         for model in Base.registry.mappers
                         if model.class_.__name__ == model_name
                     )
                     # TODO: implement something neater that figures out whether the model requires an ID and then assign it if it's not there
+                    # Also make this more flexible and less hardcoded
                     if not issubclass(model, (DataSet, Sample)):
                         try:
                             data_rows_to_db(
                                 session,
-                                data,
+                                datas[model_name],
                                 data_source=data_source,
                                 console=console,
                             )
@@ -211,7 +211,7 @@ class SCBLUtils(object):
 
                         continue
 
-                    data[f'{model_name}.platform.name'] = platform.name
+                    datas[model_name][f'{model_name}.platform.name'] = platform.name
 
                     if issubclass(model, DataSet):
                         prefix = platform.data_set_id_prefix
@@ -222,14 +222,14 @@ class SCBLUtils(object):
                         id_length = platform.sample_id_length
                         date_column = f'{model_name}.date_received'
 
-                    data[f'{model_name}.id'] = data[[date_column]].apply(
-                        date_to_id, prefix=prefix, id_length=id_length, axis=1
-                    )
+                    datas[model_name][f'{model_name}.id'] = datas[model_name][
+                        [date_column]
+                    ].apply(date_to_id, prefix=prefix, id_length=id_length, axis=1)
 
                     try:
                         data_rows_to_db(
                             session,
-                            data,
+                            datas[model_name],
                             data_source=data_source,
                             console=console,
                         )

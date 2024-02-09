@@ -84,9 +84,7 @@ def data_rows_to_db(
             if mapper.class_.__name__ == model_name
         )
     except StopIteration:
-        raise ValueError(
-            f'The model [orange1]{model_name}[/] was not found in the database'
-        )
+        raise ValueError(f'The model [orange1]{model_name}[/] was not found.')
 
     model_init_fields = {field.name: field for field in fields(model) if field.init}
     required_model_init_fields = {
@@ -97,9 +95,6 @@ def data_rows_to_db(
     renamed_data_columns = {col.split('.')[1] for col in data.columns}
 
     missing_fields = required_model_init_fields.keys() - renamed_data_columns
-    if hasattr(model, '__mapper_args__'):
-        missing_fields.remove(model.__mapper_args__.get('polymorphic_on'))
-
     if missing_fields:
         missing_fields_str = ', '.join(missing_fields)
         raise ValueError(
