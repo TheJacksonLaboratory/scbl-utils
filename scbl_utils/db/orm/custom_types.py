@@ -16,7 +16,7 @@ class StrippedString(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, string: str | None, dialect) -> str | None:
-        return string.strip() if isinstance(string, str) else None
+        return None if string is None else string.strip()
 
 
 class SamplesheetString(TypeDecorator):
@@ -29,8 +29,8 @@ class SamplesheetString(TypeDecorator):
     impl = String
     cache_ok = True
 
-    def process_bind_param(self, string: str, dialect) -> str | None:
-        if not isinstance(string, str):
+    def process_bind_param(self, string: str | None, dialect) -> str | None:
+        if string is None:
             return None
 
         sep_chars = r'\s_-'

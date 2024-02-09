@@ -4,8 +4,11 @@ from typing import Any
 
 import gspread as gs
 import pandas as pd
+from numpy import nan
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
+
+from ..db.helpers import date_to_id
 
 sheet_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -160,9 +163,17 @@ class TrackingSheet:
         whole_df = self.clean_df(pd.DataFrame(data, columns=header))
         split_dfs = self.split_combine_df(whole_df)
         unique_split_dfs = {
-            model_name: df.drop_duplicates(ignore_index=True)
+            model_name: df.drop_duplicates(ignore_index=True).replace({nan: None})
             for model_name, df in split_dfs.items()
         }
+
+        # # TODO: This is crude and bad
+        # data_set_dfs = {model_name: df for model_name, df in unique_split_dfs.items() if 'DataSet' in model_name}
+        # sample_dfs = {model_name: df for model_name, df in unique_split_dfs.items() if 'Sample' in model_name}
+
+        # for model_name, df in data_set_dfs.items():
+        #     platform = model_name.removesuffix('DataSet')
+        #     unique_split_dfs[model_name][f'{model_name}.id'] = df[f'{model_name}.date_initialized'].apply(date_to_id, axis=1, prefix=)
 
         # TODO: figure out something cleaner
         return unique_split_dfs

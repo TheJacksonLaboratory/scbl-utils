@@ -35,7 +35,7 @@ def get_matching_obj(
     where_conditions = []
 
     for col, val in data.items():
-        if not isinstance(col, str) or val is None:
+        if not isinstance(col, str) or pd.isna(val):
             continue
 
         inspector = inspect(model)
