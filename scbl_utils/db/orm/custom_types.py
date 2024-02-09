@@ -33,7 +33,7 @@ class SamplesheetString(TypeDecorator):
         if string is None:
             return None
 
-        sep_chars = r'\s_-'
+        sep_chars = r'[\s_-]'
         samplesheet_blacklist_pattern = rf'[^{ascii_letters + digits + sep_chars}]'
 
         # Remove illegal characters
