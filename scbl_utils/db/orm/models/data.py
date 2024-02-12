@@ -62,7 +62,7 @@ class DataSet(Base, kw_only=True):
     ilab_request_id: Mapped[stripped_str] = mapped_column(
         index=True
     )  # TODO: ilab request ID validation
-    date_initialized: Mapped[date] = mapped_column(repr=False)
+    date_initialized: Mapped[date | None] = mapped_column(repr=False)
 
     # Parent foreign keys
     lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False, repr=False)

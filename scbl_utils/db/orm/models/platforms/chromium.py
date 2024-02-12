@@ -24,7 +24,7 @@ class ChromiumAssay(Base, kw_only=True):
 
 class ChromiumDataSet(DataSet):
     # Parent foreign keys
-    assay_id: Mapped[int] = mapped_column(
+    assay_id: Mapped[int | None] = mapped_column(
         ForeignKey('chromium_assay.id'), init=False, repr=False
     )
 

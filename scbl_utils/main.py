@@ -185,7 +185,9 @@ class SCBLUtils(object):
                     f'{spreadsheet.title} - {main_sheet.title} ({main_sheet.url})'
                 )
 
-                datas = TrackingSheet(worksheet=main_sheet, **main_sheet_spec).to_dfs()
+                datas = TrackingSheet(
+                    worksheet=main_sheet, db_base_class=Base, **main_sheet_spec
+                ).to_dfs()
 
                 for model_name in self._data_insertion_order:
                     if model_name not in datas:

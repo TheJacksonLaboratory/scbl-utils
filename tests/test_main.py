@@ -14,20 +14,20 @@ from scbl_utils.defaults import DB_INIT_FILES
 from scbl_utils.old_main import app
 
 from .fixtures.db_fixtures import (
-    config_dir,
     data_dir,
     db_data,
-    db_path,
     delivery_parent_dir,
     other_parent_names,
     table_relationships,
-    test_db_session,
+    tmp_db_path,
+    tmp_db_session,
 )
+from .fixtures.main_fixtures import config_dir
 
 
 class TestDatabaseInitialization:
     @fixture
-    def run_init_db(self, config_dir: Path, data_dir: Path, test_db_session: Path):
+    def run_init_db(self, config_dir: Path, data_dir: Path, tmp_db_session: Path):
         runner = CliRunner()
 
         args = ['--config-dir', str(config_dir), 'init-db', str(data_dir)]
@@ -37,11 +37,11 @@ class TestDatabaseInitialization:
 
     def test_init_db_adds_correct_n_rows(
         self,
-        test_db_session: sessionmaker[Session],
+        tmp_db_session: sessionmaker[Session],
         db_data: dict[str, pd.DataFrame],
         run_init_db: None,
     ):
-        with test_db_session.begin() as session:
+        with tmp_db_session.begin() as session:
             for init_file in DB_INIT_FILES:
                 tablename = init_file.stem
                 model = Base.get_model(tablename)
@@ -55,12 +55,12 @@ class TestDatabaseInitialization:
 
     def test_init_db_relationships(
         self,
-        test_db_session: sessionmaker[Session],
+        tmp_db_session: sessionmaker[Session],
         table_relationships: dict[tuple[str, str], pd.DataFrame],
         run_init_db: None,
         other_parent_names: dict[str, str],
     ):
-        with test_db_session.begin() as session:
+        with tmp_db_session.begin() as session:
             for (
                 child_tablename,
                 parent_tablename,

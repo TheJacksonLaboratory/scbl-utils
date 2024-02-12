@@ -1,4 +1,4 @@
-from dataclasses import MISSING, fields
+from dataclasses import fields
 from typing import Any
 
 import pandas as pd
@@ -6,7 +6,16 @@ from rich.console import Console
 from sqlalchemy import URL, create_engine, inspect, select
 from sqlalchemy.orm import DeclarativeBase, Relationship, Session, sessionmaker
 
-from .helpers import construct_where_condition, rich_table
+from ..validation import validate_data_columns
+from .helpers import (
+    child_model_from_data_columns,
+    construct_agg_funcs,
+    construct_where_condition,
+    model_init_fields,
+    parent_models_from_data_columns,
+    required_model_init_fields,
+    rich_table,
+)
 from .orm.base import Base, Model
 
 
@@ -34,10 +43,13 @@ def get_matching_obj(
 ) -> Model | None | bool:
     where_conditions = []
 
-    for col, val in data.items():
-        if not isinstance(col, str) or pd.isna(val):
-            continue
-
+    model_field_names = (field.name for field in fields(model))
+    cleaned_data = {
+        col: val
+        for col, val in data.items()
+        if not pd.isna(val) and isinstance(col, str) and col in model_field_names
+    }
+    for col, val in cleaned_data.items():
         inspector = inspect(model)
         where = construct_where_condition(col, value=val, model_inspector=inspector)
         where_conditions.append(where)
@@ -66,77 +78,44 @@ def data_rows_to_db(
     console: Console,
 ):
     """"""
-    data = pd.DataFrame.from_records(data) if isinstance(data, list) else data
-    data = data.drop_duplicates()
+    validate_data_columns(
+        data.columns, db_model_base_class=Base, data_source=data_source
+    ) if isinstance(data, pd.DataFrame) else validate_data_columns(
+        data[0].keys(), db_model_base_class=Base, data_source=data_source
+    )
 
-    model_names = {col.split('.')[0] for col in data.columns}
-
-    if len(model_names) != 1:
-        raise ValueError(
-            f'The data must represent only one table in the database, but {model_names} were found'
-        )
-
-    model_name = model_names.pop()
-    try:
-        model: type[Base] = next(
-            mapper.class_
-            for mapper in Base.registry.mappers
-            if mapper.class_.__name__ == model_name
-        )
-    except StopIteration:
-        raise ValueError(f'The model [orange1]{model_name}[/] was not found.')
-
-    model_init_fields = {field.name: field for field in fields(model) if field.init}
-    required_model_init_fields = {
-        field_name: field
-        for field_name, field in model_init_fields.items()
-        if field.default is MISSING and field.default_factory is MISSING
-    }
-    renamed_data_columns = {col.split('.')[1] for col in data.columns}
-
-    missing_fields = required_model_init_fields.keys() - renamed_data_columns
-    if missing_fields:
-        missing_fields_str = ', '.join(missing_fields)
-        raise ValueError(
-            f'The following fields are required to initialize a [green]{model_name}[/], but are missing from the columns of [orange1]{data_source}[/]: [green]{missing_fields_str}[/]'
-        )
+    data = pd.DataFrame.from_records(data).drop_duplicates()
+    child_model = child_model_from_data_columns(data.columns, db_model_base_class=Base)
 
     column_renamer = {col: col.split('.', maxsplit=1)[1] for col in data.columns}
-    renamed_unique_data = data.drop_duplicates().rename(columns=column_renamer)
-    renamed_unique_data['match'] = renamed_unique_data.agg(
-        get_matching_obj, axis=1, session=session, model=model
+    renamed_data = data.rename(columns=column_renamer)
+
+    matches = renamed_data.agg(
+        get_matching_obj, axis=1, session=session, model=child_model
     )
-    data_to_add = renamed_unique_data[renamed_unique_data['match'].isna()]
+    data_to_add = renamed_data[matches.isna()]
 
     if data_to_add.empty:
         return
 
-    parent_columns = [col for col in data.columns if col.count('.') > 1]
-    parent_names = {col.split('.')[1] for col in parent_columns}
-
-    inspector = inspect(model)
-    for parent_name in parent_names:  # TODO: parent_name might be a bad name
-        parent_model: type[Base] = inspector.relationships[parent_name].mapper.class_
-
-        parent_column_pattern = rf'{parent_name}\..*'
+    parent_models = parent_models_from_data_columns(
+        data.columns, child_model=child_model
+    )
+    required_fields = required_model_init_fields(child_model)
+    for (
+        parent_name,
+        parent_model,
+    ) in parent_models.items():  # TODO: parent_name might be a bad name
         parent_columns = data_to_add.columns[
-            data_to_add.columns.str.match(parent_column_pattern)
+            data_to_add.columns.str.startswith(parent_name)
         ].to_list()
         unique_parent_data = data_to_add[parent_columns].drop_duplicates()
 
-        renamed_parent_columns = [
-            col.split('.', maxsplit=1)[1] for col in parent_columns
-        ]
-        parent_column_renamer = dict(zip(parent_columns, renamed_parent_columns))
-        renamed_unique_parent_data = unique_parent_data.rename(
-            columns=parent_column_renamer
-        )
-
-        unique_parent_data[parent_name] = renamed_unique_parent_data.agg(
+        unique_parent_data[parent_name] = unique_parent_data.agg(
             get_matching_obj, axis=1, session=session, model=parent_model
         )
 
-        if parent_name in required_model_init_fields:
+        if parent_name in required_model_init_fields(parent_model):
             no_matches = unique_parent_data[parent_name].isna()
             too_many_matches = unique_parent_data[parent_name] == False
 
@@ -144,7 +123,7 @@ def data_rows_to_db(
 
             if no_matches.any():
                 console.print(
-                    f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added.'
+                    f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{child_model.__name__}[/]. These rows will not be added.'
                 )
                 no_matches_table = rich_table(
                     unique_parent_data.loc[no_matches], header=error_table_header
@@ -153,7 +132,7 @@ def data_rows_to_db(
 
             if too_many_matches.any():
                 console.print(
-                    f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model_name}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{model_name}[/].'
+                    f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{child_model.__name__}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{child_model.__name__}[/].'
                 )
                 too_many_matches_table = rich_table(
                     unique_parent_data.loc[too_many_matches], header=error_table_header
@@ -173,43 +152,33 @@ def data_rows_to_db(
                 unique_parent_data, how='left', on=parent_columns
             )
 
-    model_init_fields_in_data = {
-        field_name: field
-        for field_name, field in model_init_fields.items()
-        if field_name in data_to_add.columns
-    }
-
+    model_init_fields_in_data = [
+        col for col in model_init_fields(child_model) if col in data_to_add.columns
+    ]
     # TODO: Is this robust? What if I miss something with 'first'
     # Write a test.
     if 'id' in data_to_add.columns:
-        collection_classes = [
-            (att, inspector.relationships.get(att, Relationship()).collection_class)
-            for att in model_init_fields_in_data
-        ]
-        agg_funcs = {
-            att: 'first' if collection_class is None else collection_class
-            for att, collection_class in collection_classes
-        }
+        agg_funcs = construct_agg_funcs(child_model, data_columns=data_to_add.columns)
 
         grouped_data_to_add = data_to_add.groupby('id', dropna=False).agg(
             func=agg_funcs
         )
-        data_to_add = grouped_data_to_add[model_init_fields_in_data.keys()]
+        data_to_add = grouped_data_to_add[model_init_fields_in_data]
     else:
-        data_to_add = data_to_add[model_init_fields_in_data.keys()]
+        data_to_add = data_to_add[model_init_fields_in_data]
 
     records_to_add = data_to_add.dropna(
-        subset=list(required_model_init_fields), how='any'
+        subset=list(required_fields.keys()), how='any'
     ).to_dict(orient='records')
 
     models_to_add = []
     for rec in records_to_add:
         try:
-            models_to_add.append(model(**rec))  # type: ignore
+            models_to_add.append(child_model(**rec))  # type: ignore
         except Exception as e:
             console.print(str(e), end='\n\n')
 
-    stmt = select(model)
+    stmt = select(child_model)
     existing_models = session.execute(stmt).scalars().all()
 
     unique_new_models = []

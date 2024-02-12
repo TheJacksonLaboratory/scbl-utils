@@ -7,15 +7,22 @@ import pandas as pd
 from numpy import nan
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic.dataclasses import dataclass
+from sqlalchemy.orm import DeclarativeBase
 
 from ..db.helpers import date_to_id
 
 sheet_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-@dataclass(config=sheet_config)
+# TODO: validation for the columns (check against the necessary columns of the models)
+# TODO: assign platform
+# TODO: assign ID? As input, take some mapping of models to a mapping of columns to argument parameters to to assign date_to_id
+# TODO: some kind of grouping function for columns like "dataset.date_initialized", which should just pick the first
+@dataclass(config=sheet_config, kw_only=True)
 class TrackingSheet:
     worksheet: gs.Worksheet
+    # db_base_class: type[DeclarativeBase]
+    # platform_name: str
     empty_means_drop: list[str]
     cols_to_targets: Collection[
         dict[str, str | Collection[str] | dict[str, str]]
@@ -26,7 +33,15 @@ class TrackingSheet:
 
     @field_validator('cols_to_targets')
     @classmethod
-    def check_cols_to_targets(
+    def cols_to_targets_sources_in_spreadsheet(
+        cls,
+        cols_to_targets: Collection[dict[str, str | Collection[str] | dict[str, str]]],
+    ):
+        return cols_to_targets
+
+    @field_validator('cols_to_targets')
+    @classmethod
+    def cols_to_targets_targets_in_db(
         cls,
         cols_to_targets: Collection[dict[str, str | Collection[str] | dict[str, str]]],
     ):

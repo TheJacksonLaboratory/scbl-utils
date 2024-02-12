@@ -21,9 +21,9 @@ from scbl_utils.db_models.metadata_models import (
 
 from ..fixtures.db_fixtures import (
     complete_db_objects,
-    db_path,
     delivery_parent_dir,
-    test_db_session,
+    tmp_db_path,
+    tmp_db_session,
 )
 
 
@@ -77,7 +77,7 @@ class TestInstitutionModel:
         self,
         institution_data: dict[str, str],
         expected_institution: dict[str, str],
-        test_db_session: sessionmaker[Session],
+        tmp_db_session: sessionmaker[Session],
     ):
         """
         Test that given a correct ROR ID, the `Institution` model
@@ -87,10 +87,10 @@ class TestInstitutionModel:
         """
         institution = Institution(**institution_data, labs=[])
 
-        with test_db_session.begin() as session:
+        with tmp_db_session.begin() as session:
             session.add(institution)
 
-        with test_db_session.begin() as session:
+        with tmp_db_session.begin() as session:
             stmt = select(Institution)
             processed_institution = session.execute(stmt).scalar()
 

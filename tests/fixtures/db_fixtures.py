@@ -7,30 +7,16 @@ import pandas as pd
 from pytest import MonkeyPatch, fixture
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session, sessionmaker
-from yaml import dump as dump_yml
 
-from scbl_utils.core.db import db_session
-from scbl_utils.db_models.base import Base
-from scbl_utils.db_models.data_models.chromium import (
-    Library,
-    LibraryType,
-    SequencingRun,
-    Tag,
-)
-from scbl_utils.db_models.metadata_models import (
-    DataSet,
-    Institution,
-    Lab,
-    Person,
-    Platform,
-    Project,
-    Sample,
-)
-from scbl_utils.defaults import DATA_SCHEMAS
+from scbl_utils.db.core import db_session
+from scbl_utils.db.orm.base import Base
+from scbl_utils.db.orm.models.data import *
+from scbl_utils.db.orm.models.platforms.chromium import *
+from scbl_utils.db.orm.models.platforms.xenium import *
 
 
 @fixture
-def db_path(tmp_path: Path) -> Path:
+def tmp_db_path(tmp_path: Path) -> Path:
     """
     Create a temporary database path for testing.
     """
@@ -38,11 +24,11 @@ def db_path(tmp_path: Path) -> Path:
 
 
 @fixture
-def test_db_session(db_path: Path) -> sessionmaker[Session]:
+def tmp_db_session(tmp_db_path: Path) -> sessionmaker[Session]:
     """
     Create a database session for testing.
     """
-    Session = db_session(Base, drivername='sqlite', database=str(db_path))
+    Session = db_session(Base, drivername='sqlite', database=str(tmp_db_path))
     return Session
 
 
@@ -57,27 +43,9 @@ def delivery_parent_dir(monkeypatch: MonkeyPatch, tmp_path: Path) -> Path:
     delivery_parent_dir = tmp_path / 'delivery'
     delivery_parent_dir.mkdir()
 
-    monkeypatch.setenv('DELIVERY_PARENT_DIR', str(delivery_parent_dir))
     monkeypatch.setattr('pathlib.Path.group', lambda s: 'test_group')
 
     return delivery_parent_dir
-
-
-@fixture
-def config_dir(tmp_path: Path, db_path: Path) -> Path:
-    """
-    Create a temporary configuration directory for testing.
-    """
-    config_dir = tmp_path / '.config' / 'db'
-    config_dir.mkdir(parents=True)
-
-    db_config = {'drivername': 'sqlite', 'database': str(db_path)}
-
-    config_path = config_dir / 'db-spec.yml'
-    with config_path.open('w') as f:
-        dump_yml(db_config, f)
-
-    return config_dir.parent
 
 
 @fixture

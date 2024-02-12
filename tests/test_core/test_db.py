@@ -16,11 +16,11 @@ from scbl_utils.defaults import DATA_INSERTION_ORDER, DATA_SCHEMAS
 from ..fixtures.db_fixtures import (
     complete_db_objects,
     db_data,
-    db_path,
     delivery_parent_dir,
     other_parent_names,
     table_relationships,
-    test_db_session,
+    tmp_db_path,
+    tmp_db_session,
 )
 
 
@@ -28,18 +28,18 @@ from ..fixtures.db_fixtures import (
 # make sense to factor away the repetition because the tests are the
 # same
 def test_data_rows_to_db(
-    test_db_session: sessionmaker[Session],
+    tmp_db_session: sessionmaker[Session],
     db_data: dict[str, pd.DataFrame],
     table_relationships: dict[tuple[str, str], pd.DataFrame],
     other_parent_names: dict[str, str],
 ):
     for tablename in DATA_INSERTION_ORDER:
-        with test_db_session.begin() as session:
+        with tmp_db_session.begin() as session:
             data_rows_to_db(
                 session, data=db_data[tablename], data_source=f'test-{tablename}-data'
             )
 
-    with test_db_session.begin() as session:
+    with tmp_db_session.begin() as session:
         for tablename in DATA_INSERTION_ORDER:
             model = Base.get_model(tablename)
             stmt = select(model)
@@ -47,7 +47,7 @@ def test_data_rows_to_db(
 
             assert len(rows_in_db) == db_data[tablename].shape[0]
 
-    with test_db_session.begin() as session:
+    with tmp_db_session.begin() as session:
         for (
             child_tablename,
             parent_tablename,
