@@ -8,7 +8,6 @@ import gspread as gs
 import pandas as pd
 import pydantic
 from jsonschema import validate as validate_schema
-from numpy import nan
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 from rich.traceback import install
@@ -20,8 +19,16 @@ from .db.core import assign_ids, data_rows_to_db, db_session
 from .db.helpers import get_matching_obj
 from .db.orm.base import Base
 from .db.orm.models.data import Platform
-from .db.orm.models.platforms.chromium import *
-from .db.orm.models.platforms.xenium import *
+from .db.orm.models.platforms.chromium import (
+    ChromiumAssay,
+    ChromiumDataSet,
+    ChromiumLibrary,
+    ChromiumLibraryType,
+    ChromiumSample,
+    ChromiumTag,
+    SequencingRun,
+)
+from .db.orm.models.platforms.xenium import XeniumDataSet, XeniumRun, XeniumSample
 from .db.validators import validate_data_columns
 from .gdrive.core import TrackingSheet
 from .json_schemas.config_schemas import (
@@ -159,8 +166,8 @@ class SCBLUtils(object):
                 validated_datas, session=session, db_base_class=Base
             )
 
-        for model_name, data in validated_datas.items():
-            with self._db_session.begin() as session:
+        with self._db_session.begin() as session:
+            for model_name, data in validated_datas.items():
                 data_rows_to_db(
                     session=session,
                     data=data,
@@ -192,8 +199,8 @@ class SCBLUtils(object):
                     validated_datas, db_base_class=Base, session=session
                 )
 
-            for model_name, data in validated_datas.items():
-                with self._db_session.begin() as session:
+            with self._db_session.begin() as session:
+                for model_name, data in validated_datas.items():
                     data_rows_to_db(
                         session=session,
                         data=data,

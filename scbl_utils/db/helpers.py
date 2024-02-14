@@ -120,6 +120,7 @@ def get_matching_obj(
         for col, val in data.items()
         if not isna(val) and isinstance(col, str) and col in model_field_names
     }
+
     for col, val in cleaned_data.items():
         inspector = inspect(model)
         where = construct_where_condition(col, value=val, model_inspector=inspector)

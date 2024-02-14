@@ -7,7 +7,8 @@ from pytest import exit as test_exit
 from pytest import fixture
 from yaml import dump as dump_yml
 
-from .db_fixtures import delivery_parent_dir, tmp_db_path
+from .db.data import delivery_parent_dir
+from .db.utils import tmp_db_path
 
 
 # TODO: finish this

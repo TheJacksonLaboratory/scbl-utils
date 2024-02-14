@@ -13,10 +13,10 @@ from scbl_utils.db_models.base import Base
 from scbl_utils.db_models.metadata_models import Institution, Lab, Person
 from scbl_utils.defaults import DATA_INSERTION_ORDER, DATA_SCHEMAS
 
-from ..fixtures.db_fixtures import (
+from ..fixtures.db.data import delivery_parent_dir
+from ..fixtures.db.utils import (
     complete_db_objects,
     db_data,
-    delivery_parent_dir,
     other_parent_names,
     table_relationships,
     tmp_db_path,

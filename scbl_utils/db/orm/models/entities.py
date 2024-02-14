@@ -5,7 +5,7 @@ from re import match
 from email_validator import validate_email
 from requests import get
 from rich import print as rich_print
-from sqlalchemy import ForeignKey, UniqueConstraint, inspect, null
+from sqlalchemy import ForeignKey, UniqueConstraint, inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from ....data_io.validators import validate_directory
@@ -245,7 +245,7 @@ class Lab(Base, kw_only=True):
         else:
             delivery_path = Path(delivery_dir)
 
-        validate_directory(delivery_parent_dir, required_structure=[delivery_path])
+        validate_directory(delivery_parent_dir, required_structure={delivery_path: []})
 
         return str(delivery_parent_dir / delivery_path)
 

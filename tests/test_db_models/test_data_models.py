@@ -19,12 +19,8 @@ from scbl_utils.db_models.metadata_models import (
     Project,
 )
 
-from ..fixtures.db_fixtures import (
-    complete_db_objects,
-    delivery_parent_dir,
-    tmp_db_path,
-    tmp_db_session,
-)
+from ..fixtures.db.data import delivery_parent_dir
+from ..fixtures.db.utils import complete_db_objects, tmp_db_path, tmp_db_session
 
 
 class TestInstitutionModel:

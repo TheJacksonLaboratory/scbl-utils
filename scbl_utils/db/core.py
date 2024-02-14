@@ -1,6 +1,8 @@
 from collections.abc import Mapping
+from dataclasses import fields
 
 import pandas as pd
+from numpy import nan
 from rich.console import Console
 from sqlalchemy import URL, create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -30,18 +32,15 @@ def assign_ids(
     }
     for model_name, data in datas.items():
         model = model_name_to_model[model_name]
-        if issubclass(model, DataSet):
-            date_col = f'{model_name}.date_initialized'
-            prefix = platform.data_set_id_prefix
-            id_length = platform.data_set_id_length
-        elif issubclass(model, Sample):
-            date_col = f'{model_name}.date_received'
-            prefix = platform.sample_id_prefix
-            id_length = platform.sample_id_length
-        else:
+        if f'{model_name}.id' in data.columns:
+            continue
+        if 'id' not in required_model_init_fields(model):
             continue
 
-        data = data.drop_duplicates(ignore_index=True)
+        id_based_on = next(
+            field.default for field in fields(model) if field.name == 'id_based_on'
+        )
+        date_col = f'{model_name}.{id_based_on}'
 
         platform_name = data[f'{model_name}.platform.name'].iloc[0]
         platform = session.execute(
@@ -50,6 +49,11 @@ def assign_ids(
 
         if platform is None:
             raise ValueError(f'Platform [orange1]{platform_name}[/] does not exist')
+
+        prefix = platform.prefixes[model.__base__.__name__]
+        id_length = platform.id_lengths[model.__base__.__name__]
+
+        data = data.drop_duplicates(ignore_index=True)
 
         data[f'{model_name}.id'] = data[[f'{model_name}.{date_col}']].apply(
             date_to_id, axis=1, prefix=prefix, id_length=id_length
@@ -60,35 +64,35 @@ def assign_ids(
     # TODO: can we make this more elegant
     for model_name, data in datas.items():
         model = model_name_to_model[model_name]
-        if 'data_set' not in model_init_fields(model):
+
+        if 'data_set' not in required_model_init_fields(model):
             continue
 
-        data_set_parent_name = next(
+        data_set_type = next(
             parent_model_name
             for parent_model_name, parent_model in parent_models_from_data_columns(
                 data.columns, model=model
             ).items()
             if issubclass(parent_model, DataSet)
         )
+        data_set_data = datas[data_set_type]
 
-        parent_columns_on_child = data.columns[
+        data_set_columns_on_child = data.columns[
             data.columns.str.match(rf'{model_name}\.data_set\.')
         ]
-        parent_columns_on_parent = datas[data_set_parent_name].columns[
-            data.columns.str.fullmatch(rf'{data_set_parent_name}\.\w+')
+        data_set_columns_on_data_set = data_set_data.columns[
+            data.columns.str.fullmatch(rf'{data_set_type}\.\w+')
         ]
 
         data = data.merge(
-            datas[data_set_parent_name],
+            data_set_data,
             how='left',
-            left_on=parent_columns_on_child,
-            right_on=parent_columns_on_parent,
+            left_on=data_set_columns_on_child,
+            right_on=data_set_columns_on_data_set,
         )
 
-        data[f'{model_name}.{data_set_parent_name}.id'] = data[
-            f'{data_set_parent_name}.id'
-        ]
-        datas[model_name] = data.drop(columns=parent_columns_on_parent)
+        data[f'{model_name}.data_set.id'] = data[f'{data_set_type}.id']
+        datas[model_name] = data.drop(columns=data_set_columns_on_child)
 
     return datas
 
@@ -143,7 +147,7 @@ def data_rows_to_db(
         parent_columns = new_data.columns[
             new_data.columns.str.startswith(parent_name)
         ].to_list()
-        parent_data = new_data.drop_duplicates(subset=parent_columns).copy()
+        parent_data = new_data[parent_columns].drop_duplicates().copy()
 
         parent_data[parent_name] = parent_data.agg(
             get_matching_obj, axis=1, session=session, model=parent_model
@@ -176,11 +180,10 @@ def data_rows_to_db(
                 console.print(too_many_matches_table, end='\n\n')
 
             parent_data = parent_data[~no_matches & ~too_many_matches]
-            new_data = new_data.merge(parent_data, how='left', on=parent_columns)
-
         else:
             parent_data[parent_name] = parent_data[parent_name].replace(False, None)
-            new_data = new_data.merge(parent_data, how='left', on=parent_columns)
+
+        new_data = new_data.merge(parent_data, how='left', on=parent_columns)
 
     if 'id' in new_data.columns:
         agg_funcs = construct_agg_funcs(model, data_columns=new_data.columns)
@@ -189,7 +192,7 @@ def data_rows_to_db(
     new_data = new_data[model_init_fields(model)].dropna(
         subset=required_fields, how='any'
     )
-    records = new_data.to_dict(orient='records')
+    records = new_data.replace({nan: None}).to_dict(orient='records')
 
     model_instances = []
     for rec in records:

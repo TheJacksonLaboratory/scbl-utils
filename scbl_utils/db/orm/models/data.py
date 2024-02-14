@@ -1,3 +1,4 @@
+from dataclasses import field
 from datetime import date
 from re import match
 
@@ -15,8 +16,6 @@ from ..custom_types import (
 from .entities import Lab, Person
 
 
-# TODO: implement some kind of test that makes sure each platform type
-# has a corresponding file in the data_models folder
 class Platform(Base, kw_only=True):
     __tablename__ = 'platform'
 
@@ -34,7 +33,7 @@ class Platform(Base, kw_only=True):
 
         if match(pattern, prefix) is None:
             raise ValueError(
-                f'[orange1]{prefix}[/] does not match the pattern [green]{pattern}[/].'
+                f'[green]{key}[/] [orange1]{prefix}[/] does not match the pattern [green]{pattern}[/].'
             )
 
         return prefix
@@ -46,10 +45,18 @@ class Platform(Base, kw_only=True):
 
         if not min_id_length <= id_length <= max_id_length:
             raise ValueError(
-                f'[green]{key}[/] ID length must be between {min_id_length} and {max_id_length}, but {id_length} was given.'
+                f'[green]{key}[/] must be between {min_id_length} and {max_id_length}, but {id_length} was given.'
             )
 
         return id_length
+
+    @property
+    def prefixes(self) -> dict[str, str]:
+        return {'DataSet': self.data_set_id_prefix, 'Sample': self.sample_id_prefix}
+
+    @property
+    def id_lengths(self) -> dict[str, int]:
+        return {'DataSet': self.data_set_id_length, 'Sample': self.sample_id_length}
 
 
 class DataSet(Base, kw_only=True):
@@ -62,7 +69,7 @@ class DataSet(Base, kw_only=True):
     ilab_request_id: Mapped[stripped_str] = mapped_column(
         index=True
     )  # TODO: ilab request ID validation
-    date_initialized: Mapped[date | None] = mapped_column(repr=False)
+    date_initialized: Mapped[date] = mapped_column(repr=False)
 
     # Parent foreign keys
     lab_id: Mapped[int] = mapped_column(ForeignKey('lab.id'), init=False, repr=False)
@@ -78,6 +85,9 @@ class DataSet(Base, kw_only=True):
 
     # Automatically set attributes
     batch_id: Mapped[int] = mapped_column(init=False, default=None, repr=False)
+
+    # Model metadata
+    id_based_on: str = field(default='date_received', init=False, repr=False)
 
     __mapper_args__ = {
         'polymorphic_on': 'platform_name',
@@ -126,6 +136,9 @@ class Sample(Base, kw_only=True):
         ForeignKey('data_set.id'), init=False, repr=False
     )
     platform_name: Mapped[str] = mapped_column(ForeignKey('platform.name'), init=False)
+
+    # Model metadata
+    id_based_on: str = field(default='date_received', init=False, repr=False)
 
     __mapper_args__ = {'polymorphic_on': 'platform_name'}
 
