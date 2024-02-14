@@ -1,15 +1,15 @@
-from collections.abc import Collection, Iterable
-from dataclasses import MISSING, Field, fields
+from collections.abc import Iterable
+from dataclasses import MISSING, fields
 from datetime import date
 from re import findall
 from typing import Any
 
-from pandas import DataFrame, Series
+from pandas import DataFrame, Series, isna
 from rich.table import Table
-from sqlalchemy import inspect
-from sqlalchemy.orm import Mapper, Relationship
+from sqlalchemy import inspect, select
+from sqlalchemy.orm import Mapper, Relationship, Session
 
-from .orm.base import Base
+from .orm.base import Base, Model
 
 
 def get_format_string_vars(string: str) -> set[str]:
@@ -61,7 +61,7 @@ def date_to_id(date_data: Series, prefix: str, id_length: int) -> str:
     return f'{prefix}{date_.strftime("%y")}{index:0{id_length - 4}}'
 
 
-def child_model_from_data_columns(
+def model_from_data_columns(
     columns: Iterable[str], db_model_base_class: type[Base]
 ) -> type[Base]:
     db_models = {
@@ -76,24 +76,24 @@ def child_model_from_data_columns(
 
 
 def parent_models_from_data_columns(
-    columns: Iterable[str], child_model: type[Base]
+    columns: Iterable[str], model: type[Base]
 ) -> dict[str, type[Base]]:
-    inspector = inspect(child_model)
+    inspector = inspect(model)
     parent_columns = {col.split('.')[1] for col in columns if col.count('.') > 1}
 
     return {col: inspector.relationships[col].mapper.class_ for col in parent_columns}
 
 
-def model_init_fields(model: type[Base]) -> dict[str, Field]:
-    return {field.name: field for field in fields(model) if field.init}
+def model_init_fields(model: type[Base]) -> list[str]:
+    return [field.name for field in fields(model) if field.init]
 
 
-def required_model_init_fields(model: type[Base]):
-    return {
-        field_name: field
-        for field_name, field in model_init_fields(model).items()
-        if field.default is MISSING and field.default_factory is MISSING
-    }
+def required_model_init_fields(model: type[Base]) -> list[str]:
+    return [
+        field.name
+        for field in fields(model)
+        if field.init and field.default is MISSING and field.default_factory is MISSING
+    ]
 
 
 def construct_agg_funcs(model: type[Base], data_columns: Iterable[str]) -> dict:
@@ -107,3 +107,33 @@ def construct_agg_funcs(model: type[Base], data_columns: Iterable[str]) -> dict:
         col: 'first' if collection_class is None else collection_class
         for col, collection_class in collection_classes.items()
     }
+
+
+def get_matching_obj(
+    data: Series | dict, session: Session, model: type[Model]
+) -> Model | None | bool:
+    where_conditions = []
+
+    model_field_names = (field.name for field in fields(model))
+    cleaned_data = {
+        col: val
+        for col, val in data.items()
+        if not isna(val) and isinstance(col, str) and col in model_field_names
+    }
+    for col, val in cleaned_data.items():
+        inspector = inspect(model)
+        where = construct_where_condition(col, value=val, model_inspector=inspector)
+        where_conditions.append(where)
+
+    if not where_conditions:
+        return None
+
+    stmt = select(model).where(*where_conditions)
+    matches = session.execute(stmt).scalars().all()
+
+    if len(matches) == 0:
+        return None
+    elif len(matches) > 1:
+        return False
+
+    return matches[0]

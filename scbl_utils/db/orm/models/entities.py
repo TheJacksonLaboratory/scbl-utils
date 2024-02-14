@@ -8,7 +8,7 @@ from rich import print as rich_print
 from sqlalchemy import ForeignKey, UniqueConstraint, inspect, null
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from ....validation import validate_directory
+from ....data_io.validators import validate_directory
 from ...helpers import get_format_string_vars
 from ..base import Base
 from ..custom_types import (
@@ -245,7 +245,7 @@ class Lab(Base, kw_only=True):
         else:
             delivery_path = Path(delivery_dir)
 
-        validate_directory(delivery_parent_dir, required_directories=[delivery_path])
+        validate_directory(delivery_parent_dir, required_structure=[delivery_path])
 
         return str(delivery_parent_dir / delivery_path)
 

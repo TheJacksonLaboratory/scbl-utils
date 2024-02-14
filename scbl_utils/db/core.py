@@ -1,25 +1,99 @@
-from dataclasses import fields
-from typing import Any
+from collections.abc import Mapping
 
 import pandas as pd
 from rich.console import Console
-from sqlalchemy import URL, create_engine, inspect, select
-from sqlalchemy.orm import DeclarativeBase, Relationship, Session, sessionmaker
+from sqlalchemy import URL, create_engine, select
+from sqlalchemy.orm import Session, sessionmaker
 
-from ..validation import validate_data_columns
 from .helpers import (
-    child_model_from_data_columns,
     construct_agg_funcs,
-    construct_where_condition,
+    date_to_id,
+    get_matching_obj,
+    model_from_data_columns,
     model_init_fields,
     parent_models_from_data_columns,
     required_model_init_fields,
     rich_table,
 )
-from .orm.base import Base, Model
+from .orm.base import Base
+from .orm.models.data import DataSet, Platform, Sample
 
 
-def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Session]:
+def assign_ids(
+    datas: dict[str, pd.DataFrame], db_base_class: type[Base], session: Session
+) -> Mapping[str, pd.DataFrame]:
+    model_name_to_model = {
+        model_name: model_from_data_columns(
+            data.columns, db_model_base_class=db_base_class
+        )
+        for model_name, data in datas.items()
+    }
+    for model_name, data in datas.items():
+        model = model_name_to_model[model_name]
+        if issubclass(model, DataSet):
+            date_col = f'{model_name}.date_initialized'
+            prefix = platform.data_set_id_prefix
+            id_length = platform.data_set_id_length
+        elif issubclass(model, Sample):
+            date_col = f'{model_name}.date_received'
+            prefix = platform.sample_id_prefix
+            id_length = platform.sample_id_length
+        else:
+            continue
+
+        data = data.drop_duplicates(ignore_index=True)
+
+        platform_name = data[f'{model_name}.platform.name'].iloc[0]
+        platform = session.execute(
+            select(Platform).where(Platform.name.ilike(platform_name))
+        ).scalar()
+
+        if platform is None:
+            raise ValueError(f'Platform [orange1]{platform_name}[/] does not exist')
+
+        data[f'{model_name}.id'] = data[[f'{model_name}.{date_col}']].apply(
+            date_to_id, axis=1, prefix=prefix, id_length=id_length
+        )
+
+        datas[model_name] = data.copy()
+
+    # TODO: can we make this more elegant
+    for model_name, data in datas.items():
+        model = model_name_to_model[model_name]
+        if 'data_set' not in model_init_fields(model):
+            continue
+
+        data_set_parent_name = next(
+            parent_model_name
+            for parent_model_name, parent_model in parent_models_from_data_columns(
+                data.columns, model=model
+            ).items()
+            if issubclass(parent_model, DataSet)
+        )
+
+        parent_columns_on_child = data.columns[
+            data.columns.str.match(rf'{model_name}\.data_set\.')
+        ]
+        parent_columns_on_parent = datas[data_set_parent_name].columns[
+            data.columns.str.fullmatch(rf'{data_set_parent_name}\.\w+')
+        ]
+
+        data = data.merge(
+            datas[data_set_parent_name],
+            how='left',
+            left_on=parent_columns_on_child,
+            right_on=parent_columns_on_parent,
+        )
+
+        data[f'{model_name}.{data_set_parent_name}.id'] = data[
+            f'{data_set_parent_name}.id'
+        ]
+        datas[model_name] = data.drop(columns=parent_columns_on_parent)
+
+    return datas
+
+
+def db_session(db_base_class: type[Base], **kwargs) -> sessionmaker[Session]:
     """Create and return a new database session, initializing the
     database if necessary.
 
@@ -33,162 +107,105 @@ def db_session(base_class: type[DeclarativeBase], **kwargs) -> sessionmaker[Sess
     url = URL.create(**kwargs)
     engine = create_engine(url)
     Session = sessionmaker(engine)
-    base_class.metadata.create_all(engine)
+    db_base_class.metadata.create_all(engine)
 
     return Session
-
-
-def get_matching_obj(
-    data: pd.Series | dict, session: Session, model: type[Model]
-) -> Model | None | bool:
-    where_conditions = []
-
-    model_field_names = (field.name for field in fields(model))
-    cleaned_data = {
-        col: val
-        for col, val in data.items()
-        if not pd.isna(val) and isinstance(col, str) and col in model_field_names
-    }
-    for col, val in cleaned_data.items():
-        inspector = inspect(model)
-        where = construct_where_condition(col, value=val, model_inspector=inspector)
-        where_conditions.append(where)
-
-    if not where_conditions:
-        return None
-
-    stmt = select(model).where(*where_conditions)
-    matches = session.execute(stmt).scalars().all()
-
-    if len(matches) == 0:
-        return None
-    elif len(matches) > 1:
-        return False
-
-    return matches[0]
 
 
 # TODO: this function is good but needs some simplification. It's too
 # long and should be split into smaller functions. Also, the design
 # can be simplified.
 def data_rows_to_db(
+    db_base_class: type[Base],
     session: Session,
-    data: pd.DataFrame | list[dict[str, Any]],
+    data: pd.DataFrame,
     data_source: str,
     console: Console,
 ):
     """"""
-    validate_data_columns(
-        data.columns, db_model_base_class=Base, data_source=data_source
-    ) if isinstance(data, pd.DataFrame) else validate_data_columns(
-        data[0].keys(), db_model_base_class=Base, data_source=data_source
-    )
-
-    data = pd.DataFrame.from_records(data).drop_duplicates()
-    child_model = child_model_from_data_columns(data.columns, db_model_base_class=Base)
+    model = model_from_data_columns(data.columns, db_model_base_class=db_base_class)
+    parent_models = parent_models_from_data_columns(data.columns, model=model)
 
     column_renamer = {col: col.split('.', maxsplit=1)[1] for col in data.columns}
-    renamed_data = data.rename(columns=column_renamer)
+    data = data.rename(columns=column_renamer).drop_duplicates()
 
-    matches = renamed_data.agg(
-        get_matching_obj, axis=1, session=session, model=child_model
-    )
-    data_to_add = renamed_data[matches.isna()]
+    exist_in_db = data.agg(get_matching_obj, axis=1, session=session, model=model)
+    new_data = data[exist_in_db.isna()]
 
-    if data_to_add.empty:
+    if new_data.empty:
         return
 
-    parent_models = parent_models_from_data_columns(
-        data.columns, child_model=child_model
-    )
-    required_fields = required_model_init_fields(child_model)
+    required_fields = required_model_init_fields(model)
     for (
         parent_name,
         parent_model,
     ) in parent_models.items():  # TODO: parent_name might be a bad name
-        parent_columns = data_to_add.columns[
-            data_to_add.columns.str.startswith(parent_name)
+        parent_columns = new_data.columns[
+            new_data.columns.str.startswith(parent_name)
         ].to_list()
-        unique_parent_data = data_to_add[parent_columns].drop_duplicates()
+        parent_data = new_data.drop_duplicates(subset=parent_columns).copy()
 
-        unique_parent_data[parent_name] = unique_parent_data.agg(
+        parent_data[parent_name] = parent_data.agg(
             get_matching_obj, axis=1, session=session, model=parent_model
         )
 
-        if parent_name in required_model_init_fields(parent_model):
-            no_matches = unique_parent_data[parent_name].isna()
-            too_many_matches = unique_parent_data[parent_name] == False
+        if parent_name in required_fields:
+            no_matches = parent_data[parent_name].isna()
+            too_many_matches = parent_data[parent_name] == False
 
             error_table_header = ['index'] + parent_columns
 
             if no_matches.any():
                 console.print(
-                    f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{child_model.__name__}[/]. These rows will not be added.'
+                    f'The following rows from {data_source} could not be matched to any rows in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model.__name__}[/]. These rows will not be added.'
                 )
                 no_matches_table = rich_table(
-                    unique_parent_data.loc[no_matches], header=error_table_header
+                    parent_data.loc[no_matches, parent_columns],
+                    header=error_table_header,
                 )
                 console.print(no_matches_table, end='\n\n')
 
             if too_many_matches.any():
                 console.print(
-                    f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{child_model.__name__}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{child_model.__name__}[/].'
+                    f'The following rows from {data_source} were matched to more than one row in the database table [green]{parent_model.__tablename__}[/] in assigning the [green]{parent_name}[/] for a [green]{model.__name__}[/]. These rows will not be added. Please specify or add more columns in {data_source} that uniquely identify the [green]{parent_name} for a [green]{model.__name__}[/].'
                 )
                 too_many_matches_table = rich_table(
-                    unique_parent_data.loc[too_many_matches], header=error_table_header
+                    parent_data.loc[too_many_matches, parent_columns],
+                    header=error_table_header,
                 )
                 console.print(too_many_matches_table, end='\n\n')
 
-            unique_parent_data = unique_parent_data[~no_matches & ~too_many_matches]
-            data_to_add = data_to_add.merge(
-                unique_parent_data, how='left', on=parent_columns
-            )
+            parent_data = parent_data[~no_matches & ~too_many_matches]
+            new_data = new_data.merge(parent_data, how='left', on=parent_columns)
 
         else:
-            unique_parent_data[parent_name] = unique_parent_data[parent_name].replace(
-                False, None
-            )
-            data_to_add = data_to_add.merge(
-                unique_parent_data, how='left', on=parent_columns
-            )
+            parent_data[parent_name] = parent_data[parent_name].replace(False, None)
+            new_data = new_data.merge(parent_data, how='left', on=parent_columns)
 
-    model_init_fields_in_data = [
-        col for col in model_init_fields(child_model) if col in data_to_add.columns
-    ]
-    # TODO: Is this robust? What if I miss something with 'first'
-    # Write a test.
-    if 'id' in data_to_add.columns:
-        agg_funcs = construct_agg_funcs(child_model, data_columns=data_to_add.columns)
+    if 'id' in new_data.columns:
+        agg_funcs = construct_agg_funcs(model, data_columns=new_data.columns)
+        new_data = new_data.groupby('id').agg(func=agg_funcs)
 
-        grouped_data_to_add = data_to_add.groupby('id', dropna=False).agg(
-            func=agg_funcs
-        )
-        data_to_add = grouped_data_to_add[model_init_fields_in_data]
-    else:
-        data_to_add = data_to_add[model_init_fields_in_data]
+    new_data = new_data[model_init_fields(model)].dropna(
+        subset=required_fields, how='any'
+    )
+    records = new_data.to_dict(orient='records')
 
-    records_to_add = data_to_add.dropna(
-        subset=list(required_fields.keys()), how='any'
-    ).to_dict(orient='records')
-
-    models_to_add = []
-    for rec in records_to_add:
+    model_instances = []
+    for rec in records:
         try:
-            models_to_add.append(child_model(**rec))  # type: ignore
+            model_instances.append(model(**rec))  # type: ignore
         except Exception as e:
-            console.print(str(e), end='\n\n')
+            console.print(f'{rec} could not be added: {e}', end='\n\n')
 
-    stmt = select(child_model)
+    stmt = select(model)
     existing_models = session.execute(stmt).scalars().all()
 
-    unique_new_models = []
-    for model_to_add in models_to_add:
-        if (
-            model_to_add not in unique_new_models
-            and model_to_add not in existing_models
-        ):
-            unique_new_models.append(model_to_add)
+    unique_new_instances = []
+    for instance in model_instances:
+        if instance not in unique_new_instances and instance not in existing_models:
+            unique_new_instances.append(instance)
             try:
-                session.add(model_to_add)
+                session.add(instance)
             except Exception as e:
-                console.print(str(e), end='\n\n')
+                console.print(f'{instance} could not be added: {e}', end='\n\n')
