@@ -58,17 +58,3 @@ class SystemConfig:
     delivery_parent_dir: DirectoryPath = Field(
         default=Path('/sc/service/delivery/'), validate_default=True
     )
-
-
-@dataclass(frozen=True, kw_only=True)
-class DBConfig:
-    database: str  # TODO: add extra validation for this to make sure it's a valid database
-    drivername: Literal['sqlite']
-
-    def sessionmaker(self, db_base_class: type[Base]) -> sessionmaker[Session]:
-        url = URL.create(database=self.database, drivername=self.drivername)
-        engine = create_engine(url)
-        Session = sessionmaker(engine)
-        db_base_class.metadata.create_all(engine)
-
-        return Session

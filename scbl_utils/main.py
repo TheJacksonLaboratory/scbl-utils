@@ -1,5 +1,5 @@
 from csv import QUOTE_STRINGS, DictReader
-from functools import cached_property
+from functools import cache, cached_property
 from os import environ
 from pathlib import Path
 from shutil import copytree
@@ -9,19 +9,19 @@ from typing import ClassVar
 import fire
 import gspread as gs
 import pandas as pd
-import pydantic
+from db_utils import DBConfig
 from jsonschema import validate as validate_schema
+from pydantic import DirectoryPath, FilePath, computed_field, validate_call
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 from rich.traceback import install
 from scbl_db import ORDERED_MODELS, Base
-from scbl_db.validators import validate_directory
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
 from scbl_utils.data_io_utils import data_to_insert
 
-from .config_classes import DBConfig, GSPreadsheetConfig, SystemConfig
+from .config_classes import GSPreadsheetConfig, SystemConfig
 from .db.core import assign_ids, data_rows_to_db, db_session
 from .db.helpers import get_matching_obj
 from .db.validators import validate_data_columns
@@ -31,57 +31,58 @@ from .json_schemas.config_schemas import (
     GDRIVE_PLATFORM_SPEC_SCHEMA,
     SYSTEM_CONFIG_SCHEMA,
 )
+from .pydantic_model_config import StrictBaseModel
 
 console = Console()
-install(console=console, max_frames=1, suppress=[fire, pd, pydantic])
+install(console=console, max_frames=1, suppress=[fire, pd])
 pd.set_option('future.no_silent_downcasting', True)
 
 
-@dataclass(kw_only=True, config=pydantic.ConfigDict(arbitrary_types_allowed=True))
-class SCBLUtils(object):
+class SCBLUtils(StrictBaseModel, frozen=True):
     """A set of command-line utilities that facilitate data processing at the Single Cell Biology Lab at the Jackson Laboratory."""
 
-    config_dir: pydantic.DirectoryPath = pydantic.Field(
-        default='/sc/service/etc/.config/scbl-utils', validate_default=True
-    )
+    config_dir: DirectoryPath = Path('/sc/service/etc/.config/scbl-utils')
 
-    @pydantic.field_validator('config_dir', mode='after')
-    @classmethod
-    def _validate_config_dir(cls, config_dir: pydantic.DirectoryPath) -> Path:
-        config_dir_structure = {
-            '.': ['db.yml', 'system.yml'],
-            'google-drive': {
-                'tracking_sheets': [],
-                '.': ['service-account.json'],
-            },
-        }
-        validate_directory(config_dir, required_structure=config_dir_structure)
+    @computed_field
+    @property
+    @validate_call(validate_return=True)
+    def _db_config_path(self) -> FilePath:
+        return self.config_dir / 'db.yml'
 
-        return config_dir
-
-    @pydantic.computed_field(repr=False)
-    @cached_property
-    def _db_session(self: 'SCBLUtils') -> sessionmaker[Session]:
-        db_config_path = self.config_dir / 'db.yml'
-        db_config = safe_load(db_config_path.read_bytes())
-        return DBConfig(**db_config).sessionmaker(db_base_class=Base)
-
-    @pydantic.computed_field(repr=False)
-    @cached_property
-    def _gdrive_config_dir(self: 'SCBLUtils') -> Path:
+    @computed_field
+    @property
+    @validate_call(validate_return=True)
+    def _gdrive_config_dir(self) -> DirectoryPath:
         return self.config_dir / 'google-drive'
 
-    @pydantic.computed_field(repr=False)
-    @cached_property
-    def _tracking_sheet_specs(self: 'SCBLUtils') -> list[GSPreadsheetConfig]:
-        tracking_sheet_spec_dir = self._gdrive_config_dir / 'tracking_sheets'
-        tracking_sheet_specs = (
-            safe_load(path.read_bytes()) for path in tracking_sheet_spec_dir.iterdir()
-        )
-        return [GSPreadsheetConfig(**spec) for spec in tracking_sheet_specs]
+    @computed_field
+    @property
+    @validate_call(validate_return=True)
+    def _gdrive_credential_path(self) -> FilePath:
+        return self._gdrive_config_dir / 'service-account.json'
 
-    @pydantic.computed_field(repr=False)
-    @cached_property
+    @computed_field
+    @property
+    @validate_call(validate_return=True)
+    def _tracking_sheet_spec_dir(self) -> DirectoryPath:
+        return self._gdrive_config_dir / 'tracking_sheets'
+
+    @cache
+    def _db_session(self: 'SCBLUtils') -> sessionmaker[Session]:
+        db_config = safe_load(self._db_config_path.read_bytes())
+        return DBConfig.model_validate(db_config).sessionmaker(Base)
+
+    @cache
+    def _tracking_sheet_specs(self: 'SCBLUtils') -> list[GSPreadsheetConfig]:
+        tracking_sheet_specs = (
+            safe_load(path.read_bytes())
+            for path in self._tracking_sheet_spec_dir.iterdir()
+        )
+        return [
+            GSPreadsheetConfig.model_validate(spec) for spec in tracking_sheet_specs
+        ]
+
+    @cache
     def _gclient(self: 'SCBLUtils') -> gs.Client:
         credential_path = self._gdrive_config_dir / 'service-account.json'
         return gs.service_account(filename=credential_path)

@@ -17,17 +17,18 @@ PyYAML = "^6.0.1"
 jsonschema = "^4.21.1"
 gspread = "^5.12.4"
 pandas = "^2.2.0"
-pydantic = "^2.6.1"
+pydantic = "^2.6.3"
 fire = "^0.5.0"
 rich = "^13.7.0"
 pyarrow = "^15.0.0"
 sqlalchemy = "^2.0.27"
-scbl-db = "^0.1.4"
+scbl-db = "^0.1.8"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.2.0"
 isort = "^5.13.2"
 pre-commit = "^3.6.2"
+mypy = "^1.8.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.0.1"
