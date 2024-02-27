@@ -62,12 +62,13 @@ def lab(delivery_parent_dir: Path, institution: Institution, person: Person) -> 
 
 @fixture
 def institution_as_df(institution: Institution) -> DataFrame:
-    """Create a DataFrame with the institution data"""
+    """Create a DataFrame with the Institution data"""
+
     return DataFrame(
         [
             {
                 'ror_id': institution.ror_id,
-                'Institution.name': institution.name,
+                'name': institution.name,
                 'short_name': institution.short_name,
                 'email_format': institution.email_format,
                 'city': institution.city,
