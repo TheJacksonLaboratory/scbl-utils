@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from csv import QUOTE_STRINGS, DictReader
 from functools import cache, cached_property
 from os import environ
@@ -9,19 +10,22 @@ from typing import ClassVar
 import fire
 import gspread as gs
 import pandas as pd
-from db_utils import DBConfig
 from jsonschema import validate as validate_schema
 from pydantic import DirectoryPath, FilePath, computed_field, validate_call
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 from rich.traceback import install
 from scbl_db import ORDERED_MODELS, Base
+from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
+from scbl_utils.config_models.db import DBConfig
 from scbl_utils.data_io_utils import data_to_insert
 
-from .config_classes import GSPreadsheetConfig, SystemConfig
+from .config_models.gdrive import SpreadsheetConfig
+from .config_models.system import SystemConfig
+from .data_io_utils import DataToInsert
 from .db.core import assign_ids, data_rows_to_db, db_session
 from .db.helpers import get_matching_obj
 from .db.validators import validate_data_columns
@@ -44,75 +48,94 @@ class SCBLUtils(StrictBaseModel, frozen=True):
     config_dir: DirectoryPath = Path('/sc/service/etc/.config/scbl-utils')
 
     @computed_field
-    @property
+    @cached_property
     @validate_call(validate_return=True)
     def _db_config_path(self) -> FilePath:
         return self.config_dir / 'db.yml'
 
     @computed_field
-    @property
+    @cached_property
+    @validate_call(validate_return=True)
+    def _system_config_path(self) -> FilePath:
+        return self.config_dir / 'system.yml'
+
+    @computed_field
+    @cached_property
     @validate_call(validate_return=True)
     def _gdrive_config_dir(self) -> DirectoryPath:
         return self.config_dir / 'google-drive'
 
     @computed_field
-    @property
+    @cached_property
     @validate_call(validate_return=True)
     def _gdrive_credential_path(self) -> FilePath:
         return self._gdrive_config_dir / 'service-account.json'
 
     @computed_field
-    @property
+    @cached_property
     @validate_call(validate_return=True)
     def _tracking_sheet_spec_dir(self) -> DirectoryPath:
         return self._gdrive_config_dir / 'tracking_sheets'
 
     @cache
-    def _db_session(self: 'SCBLUtils') -> sessionmaker[Session]:
-        db_config = safe_load(self._db_config_path.read_bytes())
-        return DBConfig.model_validate(db_config).sessionmaker(Base)
+    def _db_sessionmaker(self: 'SCBLUtils') -> sessionmaker[Session]:
+        raw_db_config = safe_load(self._db_config_path.read_bytes())
+        db_config = DBConfig.model_validate(raw_db_config)
+
+        url = URL.create(**db_config.model_dump())
+        engine = create_engine(url)
+        return sessionmaker(engine)
+
+    @computed_field(repr=False)
+    @cached_property
+    def _system_config(self: 'SCBLUtils') -> SystemConfig:
+        raw_system_config = safe_load(self._system_config_path.read_bytes())
+        return SystemConfig.model_validate(raw_system_config)
 
     @cache
-    def _tracking_sheet_specs(self: 'SCBLUtils') -> list[GSPreadsheetConfig]:
+    def _gclient(self: 'SCBLUtils') -> gs.Client:
+        return gs.service_account(filename=self._gdrive_credential_path)
+
+    @computed_field
+    @cached_property
+    def _tracking_sheet_specs(
+        self: 'SCBLUtils',
+    ) -> Generator[SpreadsheetConfig, None, None]:
         tracking_sheet_specs = (
             safe_load(path.read_bytes())
             for path in self._tracking_sheet_spec_dir.iterdir()
         )
-        return [
-            GSPreadsheetConfig.model_validate(spec) for spec in tracking_sheet_specs
-        ]
+        return (SpreadsheetConfig.model_validate(spec) for spec in tracking_sheet_specs)
 
-    @cache
-    def _gclient(self: 'SCBLUtils') -> gs.Client:
-        credential_path = self._gdrive_config_dir / 'service-account.json'
-        return gs.service_account(filename=credential_path)
-
-    @pydantic.computed_field(repr=False)
-    @cached_property
-    def _system_config(self: 'SCBLUtils') -> SystemConfig:
-        system_config_path = self.config_dir / 'system.yml'
-        system_config = safe_load(system_config_path.read_bytes())
-        return SystemConfig(**system_config)
-
-    @pydantic.validate_call
-    def fill_db(self, data_dir: pydantic.DirectoryPath | None = None) -> None:
+    @validate_call
+    def fill_db(self, data_dir: DirectoryPath | None = None) -> None:
         if data_dir is not None:
-            self._directory_to_db(data_dir)
+            data_to_insert = self._load_directory(data_dir)
 
         # self._gdrive_to_db()
 
-    def _directory_to_db(self, data_dir: Path):
+    def _load_directory(self, data_dir: Path):
+        model_instances = []
         for model_name, model in ORDERED_MODELS.items():
             data_path = data_dir / f'{model_name}.csv'
 
             if not data_path.is_file():
                 continue
 
-            raw_data = data_path.read_text().splitlines()
-            records = [
-                {k: v if v != '' else None for k, v in row.items()}
-                for row in DictReader(raw_data, dialect='unix', quoting=QUOTE_STRINGS)
-            ]
+            raw_data_list = data_path.read_text().splitlines()
+            reader = DictReader(raw_data_list, dialect='unix', quoting=QUOTE_STRINGS)
+
+            if reader.fieldnames is None:
+                raise ValueError(
+                    f'Could not infer column names from [orange1]{data_path}[/]'
+                )
+
+            model_instances = DataToInsert(
+                source=str(data_dir),
+                data=reader,
+                model=model,
+                columns=reader.fieldnames,
+            )
 
             d = data_to_insert(source=str(data_path), data=records, model=model)
             print(d)
