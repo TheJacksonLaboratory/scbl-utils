@@ -3,46 +3,31 @@ from csv import QUOTE_STRINGS, DictReader
 from functools import cache, cached_property
 from os import environ
 from pathlib import Path
-from shutil import copytree
-from typing import ClassVar
 
-# TODO switch
 import fire
 import gspread as gs
-import pandas as pd
-from jsonschema import validate as validate_schema
-from pydantic import DirectoryPath, FilePath, computed_field, validate_call
+from pydantic import ConfigDict, DirectoryPath, FilePath, computed_field, validate_call
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 from rich.traceback import install
 from scbl_db import ORDERED_MODELS, Base
+from scbl_db.bases import Data
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
-from scbl_utils.config_models.db import DBConfig
-from scbl_utils.data_io_utils import data_to_insert
-
+from .config_models.db import DBConfig
 from .config_models.gdrive import SpreadsheetConfig
 from .config_models.system import SystemConfig
 from .data_io_utils import DataToInsert
-from .db.core import assign_ids, data_rows_to_db, db_session
-from .db.helpers import get_matching_obj
-from .db.validators import validate_data_columns
-from .gdrive.core import TrackingSheet
-from .json_schemas.config_schemas import (
-    DB_SPEC_SCHEMA,
-    GDRIVE_PLATFORM_SPEC_SCHEMA,
-    SYSTEM_CONFIG_SCHEMA,
-)
-from .pydantic_model_config import StrictBaseModel
+from .pydantic_model_config import strict_config
 
 console = Console()
-install(console=console, max_frames=1, suppress=[fire, pd])
-pd.set_option('future.no_silent_downcasting', True)
+install(console=console, max_frames=20)
 
 
-class SCBLUtils(StrictBaseModel, frozen=True):
+@dataclass(config=strict_config, frozen=True)
+class SCBLUtils:
     """A set of command-line utilities that facilitate data processing at the Single Cell Biology Lab at the Jackson Laboratory."""
 
     config_dir: DirectoryPath = Path('/sc/service/etc/.config/scbl-utils')
@@ -84,13 +69,17 @@ class SCBLUtils(StrictBaseModel, frozen=True):
 
         url = URL.create(**db_config.model_dump())
         engine = create_engine(url)
+        Base.metadata.create_all(engine)
+
         return sessionmaker(engine)
 
     @computed_field(repr=False)
     @cached_property
     def _system_config(self: 'SCBLUtils') -> SystemConfig:
         raw_system_config = safe_load(self._system_config_path.read_bytes())
-        return SystemConfig.model_validate(raw_system_config)
+        system_config = SystemConfig.model_validate(raw_system_config)
+
+        return system_config
 
     @cache
     def _gclient(self: 'SCBLUtils') -> gs.Client:
@@ -109,84 +98,40 @@ class SCBLUtils(StrictBaseModel, frozen=True):
 
     @validate_call
     def fill_db(self, data_dir: DirectoryPath | None = None) -> None:
+        environ.update(self._system_config.model_dump(mode='json'))
         if data_dir is not None:
-            data_to_insert = self._load_directory(data_dir)
+            self._directory_to_db(data_dir)
 
         # self._gdrive_to_db()
 
-    def _load_directory(self, data_dir: Path):
-        model_instances = []
-        for model_name, model in ORDERED_MODELS.items():
+    def _directory_to_db(self, data_dir: Path):
+        supported_csv_models = {
+            model_name: model
+            for model_name, model in ORDERED_MODELS.items()
+            if not issubclass(model, Data)
+        }
+        for model_name, model in supported_csv_models.items():
             data_path = data_dir / f'{model_name}.csv'
 
             if not data_path.is_file():
                 continue
 
-            raw_data_list = data_path.read_text().splitlines()
-            reader = DictReader(raw_data_list, dialect='unix', quoting=QUOTE_STRINGS)
+            with data_path.open() as f:
+                columns = [col.strip() for col in f.readline().split(',')]
+                raw_data = {row for row in f}
 
-            if reader.fieldnames is None:
-                raise ValueError(
-                    f'Could not infer column names from [orange1]{data_path}[/]'
-                )
-
-            model_instances = DataToInsert(
-                source=str(data_dir),
-                data=reader,
-                model=model,
-                columns=reader.fieldnames,
+            reader = DictReader(
+                raw_data, fieldnames=columns, dialect='unix', quoting=QUOTE_STRINGS
             )
-
-            d = data_to_insert(source=str(data_path), data=records, model=model)
-            print(d)
-            quit()
-
-            data = pd.read_csv(data_path)
-            validate_data_columns(
-                data.columns, db_model_base_class=Base, data_source=str(data_path)
-            )
-
-            with self._db_session.begin() as session:
-                data = assign_ids(data, session=session, db_base_class=Base)
-
-            with self._db_session.begin() as session:
-                data_rows_to_db(
+            with self._db_sessionmaker().begin() as session:
+                DataToInsert(
+                    source=data_path,
+                    data=reader,
+                    model=model,
+                    columns=columns,
                     session=session,
-                    data=data,
-                    data_source=f'{model_name}.csv',
-                    console=console,
-                    db_base_class=Base,
-                )
+                ).to_db()
 
-
-#         validated_datas = {}
-#         for model_name in self._data_insertion_order:
-#             data_path = data_dir / f'{model_name}.csv'
-
-#             if not data_path.is_file():
-#                 continue
-
-#             data = pd.read_csv(data_path)
-#             validate_data_columns(
-#                 data.columns, db_model_base_class=Base, data_source=str(data_path)
-#             )
-
-#             validated_datas[model_name] = data
-
-#         with self._db_session.begin() as session:
-#             validated_datas = assign_ids(
-#                 validated_datas, session=session, db_base_class=Base
-#             )
-
-#         with self._db_session.begin() as session:
-#             for model_name, data in validated_datas.items():
-#                 data_rows_to_db(
-#                     session=session,
-#                     data=data,
-#                     data_source=f'{model_name}.csv',
-#                     console=console,
-#                     db_base_class=Base,
-#                 )
 
 #     def _gdrive_to_db(self):
 #         for platform_name, platform_spec in self._platform_tracking_sheet_specs.items():
@@ -278,5 +223,5 @@ class SCBLUtils(StrictBaseModel, frozen=True):
 #         raise NotImplementedError
 
 
-# def main():
-#     fire.Fire(SCBLUtils)
+def main():
+    fire.Fire(SCBLUtils)

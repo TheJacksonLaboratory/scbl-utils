@@ -1,7 +1,7 @@
 from collections.abc import Mapping
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import HttpUrl, NonNegativeInt, StringConstraints, model_validator
+from pydantic import HttpUrl, NonNegativeInt, model_validator
 
 from scbl_utils.data_io_utils import DBTarget
 
@@ -17,7 +17,7 @@ class ColumnToTargets(StrictBaseModel, frozen=True):
 class WorksheetConfig(StrictBaseModel, frozen=True):
     replace: Mapping[str, Any]
     head: NonNegativeInt = 0
-    type_converters: Mapping[str, Annotated[str, StringConstraints]]
+    type_converters: Mapping[str, str]  # TODO: add validation for type conversion
     empty_means_drop: set[str]
     cols_to_targets: list[ColumnToTargets]
 

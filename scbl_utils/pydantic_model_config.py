@@ -1,13 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-
-class StrictBaseModel(
-    BaseModel,
+strict_config = ConfigDict(
     extra='forbid',
     frozen=True,
-    strict=True,
     validate_assignment=True,
     validate_default=True,
     validate_return=True,
-):
-    pass
+)
+
+
+class StrictBaseModel(BaseModel, frozen=True):
+    model_config = strict_config
