@@ -1,30 +1,32 @@
 from collections.abc import Generator, Iterable, Sequence
+from dataclasses import InitVar
 from functools import cache, cached_property
 from itertools import groupby
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from pydantic import (
     AfterValidator,
-    BaseModel,
     ConfigDict,
+    Field,
     StringConstraints,
     computed_field,
-    model_validator,
-    validate_call,
 )
+from pydantic.dataclasses import dataclass
 from scbl_db import ORDERED_MODELS, Base
 from scbl_db.bases import Base
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapper, Session
 
+from .db_query_utils import get_matching_obj
+
 
 @cache
 def validate_model_field(model: type[Base], field: str):
     if field.count('.') == 0:
         if field not in model.field_names():
-            raise ValueError(f'[orange1]{field}[/] not in [green]{model.__name__}[/]')
+            raise ValueError(f'{field} not a field of {model.__name__}')
 
         return
 
@@ -55,172 +57,147 @@ DBTarget = Annotated[
     ),
     AfterValidator(validate_db_target),
 ]
-DataRowDict = dict[DBTarget, Any]
 
 
-@cache
-def construct_where_condition(attribute_name: str, value, model_mapper: Mapper[Base]):
-    if '.' not in attribute_name:
-        attribute = model_mapper.attrs[attribute_name].class_attribute
-        return attribute.ilike(value) if isinstance(value, str) else attribute == value
-
-    parent_name, parent_attribute_name = attribute_name.split('.', maxsplit=1)
-    try:
-        parent_mapper = model_mapper.relationships[parent_name].mapper
-    except KeyError:
-        print(
-            parent_name,
-            parent_attribute_name,
-            model_mapper.relationships.keys(),
-            model_mapper,
-            sep='\n',
-        )
-        raise Exception
-    parent = model_mapper.attrs[parent_name].class_attribute
-
-    parent_where_condition = construct_where_condition(
-        parent_attribute_name, value, model_mapper=parent_mapper
-    )
-    return parent.has(parent_where_condition)
-
-
-@cache
-@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-def get_matching_obj(
-    columns: tuple[str, ...], row: tuple, session: Session, model_mapper: Mapper[Base]
-) -> Sequence[Base]:
-    where_conditions = []
-
-    for col, val in zip(columns, row, strict=True):
-        where = construct_where_condition(col, value=val, model_mapper=model_mapper)
-        where_conditions.append(where)
-
-    if not where_conditions:
-        return []
-
-    stmt = select(model_mapper).where(*where_conditions)
-    matches = session.execute(stmt).scalars().all()
-
-    return matches
-
-
-class DataToInsert(
-    BaseModel,
-    arbitrary_types_allowed=True,
-    extra='forbid',
-    strict=True,
-    validate_assignment=True,
-    validate_default=True,
-    validate_return=True,
-):
-    source: str | Path
-    data: Iterable[DataRowDict]
-    columns: Sequence[DBTarget]
+@dataclass(
+    kw_only=True,
+    config=ConfigDict(
+        arbitrary_types_allowed=True,
+        extra='forbid',
+        validate_default=True,
+        validate_return=True,
+        strict=True,
+    ),
+    unsafe_hash=True,
+)
+class DataToInsert:
+    columns: InitVar[list[DBTarget]]
+    relative_columns: list[str] | tuple[str, ...] = Field(init=False)
+    data: Iterable[list]
     model: type[Base]
     session: Session
+    source: str | Path
 
-    @model_validator(mode='after')
-    def validate_data_columns(self: 'DataToInsert') -> 'DataToInsert':
-        if not all(col.startswith(self.model.__name__) for col in self.columns):
+    def __post_init__(self: 'DataToInsert', columns: list[str]) -> None:
+        if not all(col.startswith(self.model.__name__) for col in columns):
             raise ValueError(
-                f'All column names in [orange]{self.source}[/] must start with [green]{self.model.__name__}[/]'
+                f'All column names in {self.source} must start with {self.model.__name__}'
             )
 
-        return self
+        self.relative_columns = tuple(
+            col.removeprefix(f'{self.model.__name__}.') for col in columns
+        )
 
     @computed_field
     @cached_property
-    def column_renamer(self) -> dict[DBTarget, str]:
-        return {
-            col: col.removeprefix(f'{self.model.__name__}.') for col in self.columns
-        }
+    def columns_as_set(self) -> set[str]:
+        return set(self.relative_columns)
 
     @computed_field
     @cached_property
-    def parent_to_original_columns(self) -> dict[str, tuple[str, ...]]:
+    def parent_to_columns(self) -> dict[str, tuple[int, ...]]:
         parent_columns = sorted(
-            self.column_renamer[col] for col in self.columns if col.count('.') > 1
+            (
+                (i, col)
+                for (i, col) in enumerate(self.relative_columns)
+                if col.count('.') > 0
+                and col.split('.')[0] in self.model.init_field_names()
+            ),
+            key=lambda idx_col: idx_col[1],
         )
 
         return {
-            parent_name: tuple(columns)
-            for parent_name, columns in groupby(
-                parent_columns, key=lambda col: col.split('.')[0]
+            parent_name: tuple(i for i, col in column_list)
+            for parent_name, column_list in groupby(
+                parent_columns, key=lambda idx_col: idx_col[1].split('.')[0]
             )
         }
+
+    @computed_field
+    @property
+    def cleaned_data(self) -> Generator[tuple, None, None]:
+        return (
+            tuple(val if val != '' else None for val in value_list)
+            for value_list in self.data
+        )
+
+    @cache
+    def assign_parent(
+        self,
+        row: tuple,
+        parent_column_idxs: tuple[int, ...],
+        parent_mapper: Mapper[Base],
+        parent_name: str,
+    ) -> Sequence[Base]:
+        parent_columns = tuple(
+            self.relative_columns[i].removeprefix(f'{parent_name}.')
+            for i in parent_column_idxs
+            if row[i] is not None
+        )
+        parent_row = tuple(row[i] for i in parent_column_idxs if row[i] is not None)
+
+        return get_matching_obj(
+            columns=parent_columns,
+            row=parent_row,
+            session=self.session,
+            model_mapper=parent_mapper,
+        )
+
+    @cache
+    def row_to_model(self, row: tuple) -> Base | None:
+        relationships = inspect(self.model).relationships
+        row_parents: dict[str, Base | None] = {}
+
+        for parent_name, parent_column_idxs in self.parent_to_columns.items():
+            if parent_name in self.relative_columns:
+                continue
+
+            parent_mapper = relationships[parent_name].mapper
+            found_parents = self.assign_parent(
+                row,
+                parent_column_idxs=parent_column_idxs,
+                parent_mapper=parent_mapper,
+                parent_name=parent_name,
+            )
+
+            if len(found_parents) != 1:
+                if parent_name in self.model.required_init_field_names():
+                    break
+                else:
+                    row_parents[parent_name] = None
+
+            else:
+                row_parents[parent_name] = found_parents[0]
+
+        row_as_dict = {
+            col: row[i]
+            for i, col in enumerate(self.relative_columns)
+            if col in self.model.init_field_names()
+        }
+        model_initializer = row_as_dict | row_parents
+
+        if model_initializer.keys() < self.model.required_init_field_names():
+            return
+
+        return self.model(**model_initializer)
 
     @computed_field
     @cached_property
     def model_instances_in_db(self) -> Sequence[Base]:
         return self.session.execute(select(self.model)).scalars().all()
 
-    @computed_field
-    @property
-    def cleaned_data(self) -> Generator[dict[str, Any | None], None, None]:
-        return (
-            {
-                self.column_renamer[col]: value if value != '' else None
-                for col, value in row.items()
-            }
-            for row in self.data
-        )
-
-    def assign_parents(
-        self,
-        row: dict[str, Any],
-        parent_mapper: Mapper[Base],
-        parent_columns: tuple[str, ...],
-    ) -> Sequence[Base]:
-        parent_data = {col: row[col] for col in parent_columns if row[col] is not None}
-
-        relative_column_names = tuple(col.split('.')[1] for col in parent_data.keys())
-        parent_row = tuple(parent_data.values())
-
-        return get_matching_obj(
-            columns=relative_column_names,
-            row=parent_row,
-            session=self.session,
-            model_mapper=parent_mapper,
-        )
-
+    # TODO: add some way to track which rows were not added
     def to_db(self) -> None:
-        relationships = inspect(self.model).relationships
-
         for row in self.cleaned_data:
-            for parent_name, parent_columns in self.parent_to_original_columns.items():
-                if parent_name in row:
-                    continue
+            model_instance = self.row_to_model(row)
 
-                parent_mapper = parent_mapper = relationships[parent_name].mapper
-                parents = self.assign_parents(
-                    row, parent_mapper=parent_mapper, parent_columns=parent_columns
-                )
-
-                if len(parents) != 1:
-                    if parent_name in self.model.required_init_field_names():
-                        break
-                    else:
-                        row[parent_name] = None
-
-                else:
-                    row[parent_name] = parents[0]
-
-            available_init_fields = row.keys() & self.model.init_field_names()
-
-            if available_init_fields < self.model.required_init_field_names():
+            if model_instance in self.model_instances_in_db:
                 continue
 
-            model_instance = self.model(
-                **{field: row[field] for field in available_init_fields}
-            )
-            if (
-                model_instance in self.model_instances_in_db
-                or model_instance in self.session
-            ):
-                continue
+            self.session.add(model_instance)
 
             try:
-                self.session.add(model_instance)
                 self.session.flush()
             except IntegrityError:
+                self.session.expunge(model_instance)
                 continue

@@ -1,17 +1,17 @@
 from collections.abc import Generator
-from csv import QUOTE_STRINGS, DictReader
+from csv import QUOTE_STRINGS
+from csv import reader as csv_reader
 from functools import cache, cached_property
 from os import environ
 from pathlib import Path
 
 import fire
 import gspread as gs
-from pydantic import ConfigDict, DirectoryPath, FilePath, computed_field, validate_call
+from pydantic import DirectoryPath, FilePath, computed_field, validate_call
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 from rich.traceback import install
 from scbl_db import ORDERED_MODELS, Base
-from scbl_db.bases import Data
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
@@ -23,7 +23,7 @@ from .data_io_utils import DataToInsert
 from .pydantic_model_config import strict_config
 
 console = Console()
-install(console=console, max_frames=20)
+install(console=console, max_frames=1)
 
 
 @dataclass(config=strict_config, frozen=True)
@@ -100,127 +100,38 @@ class SCBLUtils:
     def fill_db(self, data_dir: DirectoryPath | None = None) -> None:
         environ.update(self._system_config.model_dump(mode='json'))
         if data_dir is not None:
-            self._directory_to_db(data_dir)
+            self._directory_to_models(data_dir)
 
         # self._gdrive_to_db()
 
-    def _directory_to_db(self, data_dir: Path):
-        supported_csv_models = {
-            model_name: model
-            for model_name, model in ORDERED_MODELS.items()
-            if not issubclass(model, Data)
-        }
-        for model_name, model in supported_csv_models.items():
+    def _directory_to_models(self, data_dir: Path):
+        session_maker = self._db_sessionmaker()
+
+        for model_name, model in ORDERED_MODELS.items():
             data_path = data_dir / f'{model_name}.csv'
 
             if not data_path.is_file():
                 continue
 
+            # TODO: make this more performant. Converting to tuple means
+            # iteration over the whole CSV, and then you're gonna
+            # iterate over it again in the to_db method. Try to load lazily
             with data_path.open() as f:
-                columns = [col.strip() for col in f.readline().split(',')]
-                raw_data = {row for row in f}
+                data = csv_reader(f, quoting=QUOTE_STRINGS)
+                columns = next(data)
+                # reader = tuple(DictReader(f, dialect='unix', quoting=QUOTE_STRINGS))
+                # DataToInsert(data=reader, model=model, session=session, source=data_path)
+                with session_maker.begin() as session:
+                    DataToInsert(
+                        columns=columns,
+                        data=data,
+                        model=model,
+                        session=session,
+                        source=data_path,
+                    ).to_db()
 
-            reader = DictReader(
-                raw_data, fieldnames=columns, dialect='unix', quoting=QUOTE_STRINGS
-            )
-            with self._db_sessionmaker().begin() as session:
-                DataToInsert(
-                    source=data_path,
-                    data=reader,
-                    model=model,
-                    columns=columns,
-                    session=session,
-                ).to_db()
-
-
-#     def _gdrive_to_db(self):
-#         for platform_name, platform_spec in self._platform_tracking_sheet_specs.items():
-#             spreadsheet = self._gclient.open_by_url(platform_spec['spreadsheet_url'])
-#             main_sheet = spreadsheet.get_worksheet_by_id(platform_spec['main_sheet_id'])
-#             main_sheet_spec = platform_spec['worksheets'][main_sheet.id]
-
-#             data_source = f'{spreadsheet.title} - {main_sheet.title} ({main_sheet.url})'
-#             datas = TrackingSheet(worksheet=main_sheet, **main_sheet_spec).to_dfs()
-
-#             validated_datas = {}
-#             for model_name, data in datas.items():
-#                 data[f'{model_name}.platform.name'] = platform_name
-#                 validate_data_columns(
-#                     data.columns, db_model_base_class=Base, data_source=data_source
-#                 )
-
-#                 validated_datas[model_name] = data.copy()
-
-#             with self._db_session.begin() as session:
-#                 validated_datas = assign_ids(
-#                     validated_datas, db_base_class=Base, session=session
-#                 )
-
-#             with self._db_session.begin() as session:
-#                 for model_name, data in validated_datas.items():
-#                     data_rows_to_db(
-#                         session=session,
-#                         data=data,
-#                         data_source=data_source,
-#                         console=console,
-#                         db_base_class=Base,
-#                     )
-
-#         pass
-
-#     # TODO: make this function more flexible for other assays/platforms
-#     # TODO: in the configuration, there should be a platform-specific
-#     # of handling directories, with regex and structures predefined in
-#     # self._config/something.yml. Also, this just needs to be cleaned
-#     @pydantic.validate_call(config=pydantic.ConfigDict(validate_default=True))
-#     def format_xenium_dir(
-#         self,
-#         xenium_dir: pydantic.DirectoryPath,
-#         output_dir: pydantic.DirectoryPath = Path('/sc/service/staging'),
-#     ):
-#         # raise NotImplementedError
-#         slide_serial_numbers = {
-#             sample_dir.name.split('__')[1] for sample_dir in xenium_dir.iterdir()
-#         }  # TODO: change this when the xenium ID is corrected
-#         with self._Session.begin() as session:
-#             for serial_number in slide_serial_numbers:
-#                 match_on = {'slide_serial_number': serial_number}
-#                 data_set = get_matching_obj(
-#                     data=match_on, model=XeniumDataSet, session=session
-#                 )
-
-#                 # TODO: cleaner error handling
-#                 if not isinstance(data_set, XeniumDataSet):
-#                     raise ValueError(
-#                         f'No data set found for slide ID [orange1]{serial_number}[/]'
-#                     )
-
-#                 staging_dir = output_dir / Path(data_set.lab.delivery_dir).parts[-1]
-#                 slide_dir = staging_dir / f'{serial_number}_{data_set.slide_name}'
-
-#                 sub_dirs = ['design', 'slide_img', 'regions']
-
-#                 sample_id_to_dir = {
-#                     dir_.name[2]: dir_
-#                     for dir_ in xenium_dir.glob(f'*__{serial_number}__*')
-#                 }
-#                 for sample_id, dir_ in sample_id_to_dir.items():
-#                     for sub_dir in sub_dirs:
-#                         (slide_dir / sub_dir).mkdir(parents=True, exist_ok=True)
-
-#                         if sub_dir == 'regions':
-#                             sample = next(
-#                                 sample
-#                                 for sample in data_set.samples
-#                                 if sample.id == sample_id
-#                             )
-#                             copytree(
-#                                 src=dir_,
-#                                 dst=slide_dir / sub_dir / f'{sample_id}_{sample.name}',
-#                             )
-
-#     def delivery_metrics_to_gdrive(self, pipeline_output_dir: pydantic.DirectoryPath):
-#         raise NotImplementedError
+    def _gdrive_to_db(self):
+        pass
 
 
 def main():
