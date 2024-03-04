@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Annotated
-
+from pathlib import Path
 import typer
 
 from scbl_utils.utils.samplesheet import map_libs_to_fastqdirs
@@ -222,7 +222,7 @@ def xenium_mappings(output_path: Path = Path('xenium_mappings.yml')) -> None:
     from yaml import safe_load
     # TODO: this has been shoddily written for speed. In scbl-utils v2, it will be more robust
     gdrive_config_dir = CONFIG_DIR / 'google-drive'
-    required_config_files = [Path(filename) for filename in ('service-account.json', 'xenium-sheet_spec.yml')] # TODO: add validation
+    required_config_files = [Path(filename) for filename in ('service-account.json')] # TODO: add validation
     config_files = validate.direc(gdrive_config_dir, required_config_files)
     
     xenium_sheet_spec = safe_load(config_files['xenium-sheet_spec.yml'].read_text())
