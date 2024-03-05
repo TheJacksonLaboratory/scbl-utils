@@ -1,9 +1,8 @@
-from csv import reader
-from os import stat
+from csv import DictReader
 from pathlib import Path
 
-from pytest import fixture, mark
-from scbl_db import ORDERED_MODELS, Base
+from pytest import fixture
+from scbl_db import ORDERED_MODELS
 from sqlalchemy import select
 
 from scbl_utils.main import SCBLUtils
@@ -18,36 +17,14 @@ class TestSCBLUtils:
     def data_dir(self) -> Path:
         return Path(__file__).parent / 'data'
 
-    @fixture
-    def insert_data(self, cli: SCBLUtils, data_dir: Path) -> None:
-        cli._directory_to_db(data_dir=data_dir)
+    def test_correct_n_rows(self, cli: SCBLUtils, data_dir: Path) -> None:
+        cli._directory_to_db(data_dir)
 
-    @mark.parametrize(
-        argnames=['model_name', 'model'],
-        argvalues=[(model_name, model) for model_name, model in ORDERED_MODELS.items()],
-    )
-    def test_correct_n_rows(
-        self,
-        cli: SCBLUtils,
-        data_dir: Path,
-        insert_data: None,
-        model_name: str,
-        model: type[Base],
-    ) -> None:
-        data_file = data_dir / f'{model_name}.csv'
+        for file in data_dir.iterdir():
+            model = ORDERED_MODELS[file.stem]
 
-        if data_file not in data_dir.iterdir():
-            return
+            with file.open() as f, cli._db_sessionmaker.begin() as s:
+                data = tuple(DictReader(f))
+                model_instances_in_db = s.execute(select(model)).scalars().all()
 
-        if stat(data_file).st_size == 0:
-            return
-
-        with data_file.open() as f:
-            csv = reader(f)
-
-            _ = next(csv)
-            data = tuple(csv)
-
-            with cli._db_sessionmaker().begin() as s:
-                results = s.execute(select(model)).scalars().all()
-                assert len(results) == len(data)
+                assert len(model_instances_in_db) == len(data)

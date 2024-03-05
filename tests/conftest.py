@@ -4,8 +4,7 @@ from typing import Any
 from pytest import MonkeyPatch, fixture
 from yaml import safe_dump
 
-from scbl_utils.config_models.db import DBConfig
-from scbl_utils.config_models.system import SystemConfig
+from scbl_utils.config import DBConfig, SystemConfig
 
 
 @fixture

@@ -16,10 +16,9 @@ from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
-from .config_models.db import DBConfig
-from .config_models.gdrive import SpreadsheetConfig
-from .config_models.system import SystemConfig
+from .config import DBConfig, SpreadsheetConfig, SystemConfig
 from .data_io import DataToInsert
+from .gdrive import GSpreadsheet
 from .pydantic_model_config import strict_config
 
 console = Console()
@@ -59,10 +58,11 @@ class SCBLUtils:
     @computed_field
     @cached_property
     @validate_call(validate_return=True)
-    def _tracking_sheet_spec_dir(self) -> DirectoryPath:
+    def _tracking_sheet_config_dir(self) -> DirectoryPath:
         return self._gdrive_config_dir / 'tracking_sheets'
 
-    @cache
+    @computed_field
+    @cached_property
     def _db_sessionmaker(self: 'SCBLUtils') -> sessionmaker[Session]:
         raw_db_config = safe_load(self._db_config_path.read_bytes())
         db_config = DBConfig.model_validate(raw_db_config)
@@ -73,7 +73,7 @@ class SCBLUtils:
 
         return sessionmaker(engine)
 
-    @computed_field(repr=False)
+    @computed_field
     @cached_property
     def _system_config(self: 'SCBLUtils') -> SystemConfig:
         raw_system_config = safe_load(self._system_config_path.read_bytes())
@@ -81,20 +81,24 @@ class SCBLUtils:
 
         return system_config
 
-    @cache
+    @computed_field
+    @cached_property
     def _gclient(self: 'SCBLUtils') -> gs.Client:
         return gs.service_account(filename=self._gdrive_credential_path)
 
     @computed_field
     @cached_property
-    def _tracking_sheet_specs(
+    def _tracking_sheet_configs(
         self: 'SCBLUtils',
     ) -> Generator[SpreadsheetConfig, None, None]:
-        tracking_sheet_specs = (
+        tracking_sheet_configs = (
             safe_load(path.read_bytes())
-            for path in self._tracking_sheet_spec_dir.iterdir()
+            for path in self._tracking_sheet_config_dir.iterdir()
         )
-        return (SpreadsheetConfig.model_validate(spec) for spec in tracking_sheet_specs)
+        return (
+            SpreadsheetConfig.model_validate(config)
+            for config in tracking_sheet_configs
+        )
 
     @validate_call
     def fill_db(self, data_dir: DirectoryPath | None = None) -> None:
@@ -105,7 +109,7 @@ class SCBLUtils:
         self._gdrive_to_db()
 
     def _directory_to_db(self, data_dir: Path):
-        session_maker = self._db_sessionmaker()
+        session_maker = self._db_sessionmaker
 
         for model_name, model in ORDERED_MODELS.items():
             data_path = data_dir / f'{model_name}.csv'
@@ -130,6 +134,9 @@ class SCBLUtils:
                     ).to_db()
 
     def _gdrive_to_db(self):
+        for config in self._tracking_sheet_configs:
+            GSpreadsheet(config=config, gclient=self._gclient)
+
         pass
 
 

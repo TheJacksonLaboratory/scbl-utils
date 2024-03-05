@@ -14,13 +14,10 @@ scbl-utils = 'scbl_utils.main:main'
 [tool.poetry.dependencies]
 python = ">=3.12,<3.13"
 PyYAML = "^6.0.1"
-jsonschema = "^4.21.1"
 gspread = "^5.12.4"
-pandas = "^2.2.0"
 pydantic = "^2.6.3"
 fire = "^0.5.0"
 rich = "^13.7.0"
-pyarrow = "^15.0.0"
 sqlalchemy = "^2.0.27"
 scbl-db = "^0.1.10"
 
