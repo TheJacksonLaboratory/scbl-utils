@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Annotated
-
+from pathlib import Path
 import typer
 
 from scbl_utils.utils.samplesheet import map_libs_to_fastqdirs
@@ -212,3 +212,22 @@ def delivery_dir_to_metrics(
     """
     # TODO figure out what to do
     ...
+
+@app.command(no_args_is_help=True)
+def xenium_mappings(output_path: Path = Path('xenium_mappings.yml')) -> None:
+    """
+    """
+    from utils import gdrive
+    from utils.defaults import SCOPES
+    from yaml import safe_load
+    # TODO: this has been shoddily written for speed. In scbl-utils v2, it will be more robust
+    gdrive_config_dir = CONFIG_DIR / 'google-drive'
+    required_config_files = [Path(filename) for filename in ('service-account.json')] # TODO: add validation
+    config_files = validate.direc(gdrive_config_dir, required_config_files)
+    
+    xenium_sheet_spec = safe_load(config_files['xenium-sheet_spec.yml'].read_text())
+    
+    gclient = gdrive.login(scopes=SCOPES, filename=config_files['service-account.json'])
+    sheet = gdrive.GSheet(client=gclient, properties={'id': xenium_sheet_spec['id']})
+
+    xenium_df = sheet.to_df(sheet_id=xenium_sheet_spec['sheet_id'], col_renaming=xenium_sheet_spec['columns'], header_row=xenium_sheet_spec['header_row'], to_join=xenium_sheet_spec['join'])

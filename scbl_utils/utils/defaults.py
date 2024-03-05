@@ -36,7 +36,7 @@ _lib_types_to_program = {
     ('cellranger', 'vdj', ['10x-vdj']),
 
     ('Spatial Gene Expression',):
-    ('spaceranger', 'count', ['10x-vis']),
+    ('spaceranger', 'count', ['10x-rna']),
 
     ('Antibody Capture', 'Gene Expression'):
     ('cellranger', 'count', ['10x-rna']),
