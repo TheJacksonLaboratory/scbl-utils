@@ -1,99 +1,53 @@
+from csv import reader
+from os import stat
 from pathlib import Path
-from re import L
 
-import pandas as pd
-from pytest import fixture
+from pytest import fixture, mark
+from scbl_db import ORDERED_MODELS, Base
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
-from typer.testing import CliRunner
 
-from scbl_utils.db_models.base import Base
-from scbl_utils.db_models.data_models.chromium import *
-from scbl_utils.db_models.definitions import *
-from scbl_utils.defaults import DB_INIT_FILES
-from scbl_utils.old_main import app
-
-from .fixtures.db.data import delivery_parent_dir
-from .fixtures.db.utils import (
-    data_dir,
-    db_data,
-    other_parent_names,
-    table_relationships,
-    tmp_db_path,
-    tmp_db_session,
-)
-from .fixtures.main_fixtures import config_dir
+from scbl_utils.main import SCBLUtils
 
 
-class TestDatabaseInitialization:
+class TestSCBLUtils:
     @fixture
-    def run_init_db(self, config_dir: Path, data_dir: Path, tmp_db_session: Path):
-        runner = CliRunner()
+    def cli(self, config_dir: Path) -> SCBLUtils:
+        return SCBLUtils(config_dir=config_dir)
 
-        args = ['--config-dir', str(config_dir), 'init-db', str(data_dir)]
-        result = runner.invoke(app, args=args, color=True)
+    @fixture
+    def data_dir(self) -> Path:
+        return Path(__file__).parent / 'data'
 
-        assert result.exit_code == 0, result.stdout
+    @fixture
+    def insert_data(self, cli: SCBLUtils, data_dir: Path) -> None:
+        cli._directory_to_db(data_dir=data_dir)
 
-    def test_init_db_adds_correct_n_rows(
+    @mark.parametrize(
+        argnames=['model_name', 'model'],
+        argvalues=[(model_name, model) for model_name, model in ORDERED_MODELS.items()],
+    )
+    def test_correct_n_rows(
         self,
-        tmp_db_session: sessionmaker[Session],
-        db_data: dict[str, pd.DataFrame],
-        run_init_db: None,
-    ):
-        with tmp_db_session.begin() as session:
-            for init_file in DB_INIT_FILES:
-                tablename = init_file.stem
-                model = Base.get_model(tablename)
-                stmt = select(model)
-                rows = session.execute(stmt).scalars().all()
+        cli: SCBLUtils,
+        data_dir: Path,
+        insert_data: None,
+        model_name: str,
+        model: type[Base],
+    ) -> None:
+        data_file = data_dir / f'{model_name}.csv'
 
-                expected_n_rows = db_data[tablename].shape[0]
-                found_n_rows = len(rows)
+        if data_file not in data_dir.iterdir():
+            return
 
-                assert found_n_rows == expected_n_rows
+        if stat(data_file).st_size == 0:
+            return
 
-    def test_init_db_relationships(
-        self,
-        tmp_db_session: sessionmaker[Session],
-        table_relationships: dict[tuple[str, str], pd.DataFrame],
-        run_init_db: None,
-        other_parent_names: dict[str, str],
-    ):
-        with tmp_db_session.begin() as session:
-            for (
-                child_tablename,
-                parent_tablename,
-            ), joined_df in table_relationships.items():
-                child_model = Base.get_model(child_tablename)
-                stmt = select(child_model)
-                children = session.execute(stmt).scalars().all()
-                parent_id_col = (
-                    other_parent_names.get(
-                        f'{child_tablename}.{parent_tablename}', parent_tablename
-                    )
-                    + '.id'
-                )
+        with data_file.open() as f:
+            csv = reader(f)
 
-                for child in children:
-                    assigned_parent = getattr(
-                        child, parent_tablename
-                    )  # TODO: add a type-hint here?
-                    correct_parent_id = joined_df.loc[
-                        joined_df[f'{child_tablename}.id'] == child.id, parent_id_col
-                    ]
+            _ = next(csv)
+            data = tuple(csv)
 
-                    if not isinstance(correct_parent_id, pd.Series):
-                        pass
-                    elif len(correct_parent_id) == 1:
-                        correct_parent_id = correct_parent_id.values[0]
-                    else:
-                        raise ValueError(
-                            f'Duplicate children found for {child_tablename} with id {child.id}'
-                        )
-
-                    assert assigned_parent.id == correct_parent_id
-
-
-class TestDatabaseUpdate:
-    ...
+            with cli._db_sessionmaker().begin() as s:
+                results = s.execute(select(model)).scalars().all()
+                assert len(results) == len(data)

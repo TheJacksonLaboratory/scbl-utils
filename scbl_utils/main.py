@@ -2,7 +2,7 @@ from collections.abc import Generator
 from csv import QUOTE_STRINGS
 from csv import reader as csv_reader
 from functools import cache, cached_property
-from os import environ
+from os import environ, stat
 from pathlib import Path
 
 import fire
@@ -19,7 +19,7 @@ from yaml import safe_load
 from .config_models.db import DBConfig
 from .config_models.gdrive import SpreadsheetConfig
 from .config_models.system import SystemConfig
-from .data_io_utils import DataToInsert
+from .data_io import DataToInsert
 from .pydantic_model_config import strict_config
 
 console = Console()
@@ -100,11 +100,11 @@ class SCBLUtils:
     def fill_db(self, data_dir: DirectoryPath | None = None) -> None:
         environ.update(self._system_config.model_dump(mode='json'))
         if data_dir is not None:
-            self._directory_to_models(data_dir)
+            self._directory_to_db(data_dir)
 
-        # self._gdrive_to_db()
+        self._gdrive_to_db()
 
-    def _directory_to_models(self, data_dir: Path):
+    def _directory_to_db(self, data_dir: Path):
         session_maker = self._db_sessionmaker()
 
         for model_name, model in ORDERED_MODELS.items():
@@ -113,14 +113,13 @@ class SCBLUtils:
             if not data_path.is_file():
                 continue
 
-            # TODO: make this more performant. Converting to tuple means
-            # iteration over the whole CSV, and then you're gonna
-            # iterate over it again in the to_db method. Try to load lazily
+            if stat(data_path).st_size == 0:
+                continue
+
             with data_path.open() as f:
                 data = csv_reader(f, quoting=QUOTE_STRINGS)
-                columns = next(data)
-                # reader = tuple(DictReader(f, dialect='unix', quoting=QUOTE_STRINGS))
-                # DataToInsert(data=reader, model=model, session=session, source=data_path)
+                columns = tuple(next(data))
+
                 with session_maker.begin() as session:
                     DataToInsert(
                         columns=columns,

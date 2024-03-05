@@ -1,25 +1,18 @@
 from collections.abc import Generator, Iterable, Sequence
-from dataclasses import InitVar
 from functools import cache, cached_property
 from itertools import groupby
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import (
-    AfterValidator,
-    ConfigDict,
-    Field,
-    StringConstraints,
-    computed_field,
-)
-from pydantic.dataclasses import dataclass
+from pydantic import AfterValidator, StringConstraints, computed_field, model_validator
 from scbl_db import ORDERED_MODELS, Base
 from scbl_db.bases import Base
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapper, Session
 
-from .db_query_utils import get_matching_obj
+from .db_query import get_matching_obj
+from .pydantic_model_config import StrictBaseModel
 
 
 @cache
@@ -59,33 +52,29 @@ DBTarget = Annotated[
 ]
 
 
-@dataclass(
-    kw_only=True,
-    config=ConfigDict(
-        arbitrary_types_allowed=True,
-        extra='forbid',
-        validate_default=True,
-        validate_return=True,
-        strict=True,
-    ),
-    unsafe_hash=True,
-)
-class DataToInsert:
-    columns: InitVar[list[DBTarget]]
-    relative_columns: list[str] | tuple[str, ...] = Field(init=False)
-    data: Iterable[list]
+class DataToInsert(
+    StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
+):
+    columns: tuple[DBTarget, ...]
+    data: Iterable[Iterable]
     model: type[Base]
     session: Session
     source: str | Path
 
-    def __post_init__(self: 'DataToInsert', columns: list[str]) -> None:
-        if not all(col.startswith(self.model.__name__) for col in columns):
+    @model_validator(mode='after')
+    def validate_columns(self: 'DataToInsert') -> 'DataToInsert':
+        if not all(col.startswith(self.model.__name__) for col in self.columns):
             raise ValueError(
                 f'All column names in {self.source} must start with {self.model.__name__}'
             )
 
-        self.relative_columns = tuple(
-            col.removeprefix(f'{self.model.__name__}.') for col in columns
+        return self
+
+    @computed_field
+    @cached_property
+    def relative_columns(self: 'DataToInsert') -> tuple[str, ...]:
+        return tuple(
+            col.removeprefix(f'{self.model.__name__}.') for col in self.columns
         )
 
     @computed_field
@@ -191,7 +180,7 @@ class DataToInsert:
         for row in self.cleaned_data:
             model_instance = self.row_to_model(row)
 
-            if model_instance in self.model_instances_in_db:
+            if model_instance in self.model_instances_in_db or model_instance is None:
                 continue
 
             self.session.add(model_instance)

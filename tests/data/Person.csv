@@ -1,0 +1,2 @@
+Person.first_name,Person.last_name,Person.email,Person.orcid,Person.institution.name
+Ahmed,Said,ahmed.said@jax.org,0009-0008-3754-6150,Jackson Laboratory for Genomic Medicine

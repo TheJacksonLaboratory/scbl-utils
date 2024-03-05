@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import HttpUrl, NonNegativeInt, model_validator
 
-from scbl_utils.data_io_utils import DBTarget
+from scbl_utils.data_io import DBTarget
 
 from ..pydantic_model_config import StrictBaseModel
 
