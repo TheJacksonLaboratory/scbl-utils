@@ -27,7 +27,7 @@ _lib_types_to_program = {
     ('cellranger-atac', 'count', ['10x-atac']),
 
     ('CytAssist Gene Expression',):
-    ('spaceranger', 'count', ['10x-vis']),
+    ('spaceranger', 'count', ['10x-rna']),
 
     ('Gene Expression',):
     ('cellranger', 'count', ['10x-rna']),
