@@ -109,8 +109,6 @@ class SCBLUtils:
         self._gdrive_to_db()
 
     def _directory_to_db(self, data_dir: Path):
-        session_maker = self._db_sessionmaker
-
         for model_name, model in ORDERED_MODELS.items():
             data_path = data_dir / f'{model_name}.csv'
 
@@ -120,18 +118,17 @@ class SCBLUtils:
             if stat(data_path).st_size == 0:
                 continue
 
-            with data_path.open() as f:
+            with data_path.open() as f, self._db_sessionmaker.begin() as session:
                 data = csv_reader(f, quoting=QUOTE_STRINGS)
                 columns = tuple(next(data))
 
-                with session_maker.begin() as session:
-                    DataToInsert(
-                        columns=columns,
-                        data=data,
-                        model=model,
-                        session=session,
-                        source=data_path,
-                    ).to_db()
+                DataToInsert(
+                    columns=columns,
+                    data=data,
+                    model=model,
+                    session=session,
+                    source=data_path,
+                ).to_db()
 
     def _gdrive_to_db(self):
         for config in self._tracking_sheet_configs:
