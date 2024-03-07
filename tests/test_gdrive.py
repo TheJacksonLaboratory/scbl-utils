@@ -31,4 +31,7 @@ def test_something():
     )
     df = GSpreadsheet(config=configspreadsheet, gclient=gclient)
     for sheet in df.worksheets:
-        print(*sheet.as_records['Institution'][:5], sep='\n')
+        print(sheet.as_insertable_data)
+        print(sheet.as_insertable_data['Person']['columns'])
+        print(sheet.as_insertable_data['Institution']['columns'])
+    assert False

@@ -3,16 +3,10 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import (
-    DirectoryPath,
-    HttpUrl,
-    NonNegativeInt,
-    computed_field,
-    model_validator,
-)
+from pydantic import DirectoryPath, HttpUrl, NonNegativeInt, model_validator
 
 from .pydantic_model_config import StrictBaseModel
-from .validated_types import DBTarget
+from .validated_types import DBModelName, DBTarget
 
 
 class DBConfig(StrictBaseModel, frozen=True, strict=True):
@@ -21,13 +15,8 @@ class DBConfig(StrictBaseModel, frozen=True, strict=True):
 
 
 class TargetConfig(StrictBaseModel, frozen=True, strict=True):
-    targets: set[DBTarget]
+    target_from_columns: dict[DBTarget, set[str]]
     replace: dict[str, Any]
-
-    @computed_field
-    @cached_property
-    def db_model_names(self) -> set[str]:
-        return {target.split('.')[0] for target in self.targets}
 
 
 class WorksheetConfig(StrictBaseModel, frozen=True, strict=True):
@@ -35,7 +24,7 @@ class WorksheetConfig(StrictBaseModel, frozen=True, strict=True):
     head: NonNegativeInt = 0
     type_converters: dict[str, str]
     empty_means_drop: set[str]
-    columns_to_targets: dict[str, TargetConfig]
+    db_target_configs: dict[DBModelName, TargetConfig]
 
     @model_validator(mode='after')
     def validate_column_existence(self: 'WorksheetConfig') -> 'WorksheetConfig':
@@ -44,22 +33,17 @@ class WorksheetConfig(StrictBaseModel, frozen=True, strict=True):
             ('empty_means_drop', self.empty_means_drop),
         )
 
+        all_sheet_columns = set()
+        for target_config in self.db_target_configs.values():
+            all_sheet_columns |= set(target_config.target_from_columns.values())
+
         for subset_key, subset in column_subsets:
-            if not subset <= self.columns_to_targets.keys():
+            if not subset <= all_sheet_columns:
                 raise ValueError(
-                    f'{subset_key} must be a subset of the columns defined as keys of columns_to_targets'
+                    f'{subset_key} must be a subset of the columns defined in db_target_config'
                 )
 
         return self
-
-    @computed_field
-    @cached_property
-    def db_model_names(self) -> set[str]:
-        return {
-            model_name
-            for target_config in self.columns_to_targets.values()
-            for model_name in target_config.db_model_names
-        }
 
 
 class SpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):

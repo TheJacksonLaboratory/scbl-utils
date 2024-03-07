@@ -1,13 +1,19 @@
 from collections.abc import Generator
 from functools import cached_property
 from re import fullmatch
-from typing import Any
+from typing import TypedDict
 
 import gspread as gs
+import polars as pl
 from pydantic import computed_field
 
 from .config import SpreadsheetConfig, WorksheetConfig
 from .pydantic_model_config import StrictBaseModel
+
+
+class InsertableData(TypedDict):
+    columns: list[str]
+    data: list[list]
 
 
 class GWorksheet(
@@ -18,34 +24,49 @@ class GWorksheet(
 
     @computed_field
     @cached_property
-    def _split_data(self) -> dict[str, list]:
-        return {db_model_name: [] for db_model_name in self.config.db_model_names}
+    def _raw_df(self):
+        raw_values = self.worksheet.get(
+            pad_values=True, maintain_size=True, combine_merged_cells=True
+        )
+
+        columns = raw_values[self.config.head]
+        data = raw_values[self.config.head + 1 :]
+
+        return pl.DataFrame(schema=columns, data=data)
 
     @computed_field
     @cached_property
-    def _raw_values(self) -> list[list[str]]:
-        return self.worksheet.get_values(combine_merged_cells=True)
+    def _cleaned_df(self):
+        df = self._raw_df
+        desired_columns = self.config.db_target_configs.values()
+
+        return df.with_columns(pl.all(*desired_columns).replace('', None))
 
     @computed_field
     @cached_property
-    def _all_columns(self) -> list[str]:
-        return self._raw_values[self.config.head]
-
-    @computed_field
-    @cached_property
-    def _formatted_data(
-        self,
-    ) -> Generator[Generator[str | None, None, None], None, None]:
-        all_data = self._raw_values[self.config.head + 1 :]
-        return ((val if val != '' else None for val in row) for row in all_data)
+    def _split_data(self) -> dict[str, pl.DataFrame]:
+        return {
+            db_model_name: pl.DataFrame()
+            for db_model_name in self.config.db_model_names
+        }
 
     # TODO: optimize this
     @computed_field
     @cached_property
-    def as_records(self) -> dict[str, list[Any]]:
-        for row in self._formatted_data:
-            split_records = {db_model_name: {} for db_model_name in self._split_data}
+    def as_insertable_data(self) -> dict[str, InsertableData]:
+        for i, col in enumerate(self._all_columns):
+            if col not in self.config.columns_to_targets:
+                continue
 
+            target_config = self.config.columns_to_targets[col]
+            for target in target_config.targets:
+                db_model_name = target.split('.')[0]
+                df = self._split_data[db_model_name]
+
+                df.columns.append(col)
+                df[col] = [row for row in self._formated_data]
+
+        for row in self._formatted_data:
             for col, val in zip(self._all_columns, row, strict=True):
                 if col not in self.config.columns_to_targets:
                     continue
@@ -57,14 +78,19 @@ class GWorksheet(
 
                 for target in target_config.targets:
                     db_model_name = target.split('.')[0]
-                    rec = split_records[db_model_name]
+                    df = self._split_data[db_model_name]
 
-                    if target not in rec:
-                        rec[target] = val
+                    if target not in df.columns:
+                        df.columns.append(target)
+                        df.select(pl.col(target))
+                        rec['columns'].append(target)
+                        rec['row'].append(val)
                         continue
 
-                    if f'{target}_1' not in rec:
-                        rec[f'{target}_1'] = val
+                    first_duplicate_name = f'{target}_1'
+                    if first_duplicate_name not in rec:
+                        rec['columns'].append(first_duplicate_name)
+                        rec['row'].append(val)
                         continue
 
                     col_pattern = rf'{target}(_\d+)'
@@ -76,10 +102,11 @@ class GWorksheet(
                         match.group(1) for match in matches if match is not None
                     )
 
-                    rec[f'{target}{latest_duplicate_number}'] = val
+                    rec['columns'].append(f'{target}{latest_duplicate_number}')
+                    rec['row'].append(val)
 
-            for db_model_name, data in self._split_data.items():
-                data.append(split_records[db_model_name])
+            for db_model_name, data_set in self._split_data.items():
+                data_set['data'].append(split_records[db_model_name]['row'])
 
         return self._split_data
 

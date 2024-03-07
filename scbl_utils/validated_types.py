@@ -2,6 +2,7 @@ from functools import cache
 from typing import Annotated
 
 from pydantic import AfterValidator, StringConstraints
+from pydantic.types import enum
 from scbl_db import ORDERED_MODELS, Base
 from scbl_db.bases import Base
 from sqlalchemy import inspect
@@ -35,10 +36,11 @@ def _validate_db_target(db_target: str) -> str:
     return db_target
 
 
+DBModelName = Annotated[
+    str, StringConstraints(pattern=rf'^{"|".join(ORDERED_MODELS.keys())}$')
+]
 DBTarget = Annotated[
     str,
-    StringConstraints(
-        pattern=rf'({"|".join(model_name for model_name in ORDERED_MODELS)})\.[\w.]+'
-    ),
+    StringConstraints(pattern=rf'({"|".join(ORDERED_MODELS.keys())})\.[\w.]+'),
     AfterValidator(_validate_db_target),
 ]
