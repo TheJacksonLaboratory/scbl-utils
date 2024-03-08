@@ -1,13 +1,10 @@
-from collections.abc import Generator
-from functools import cached_property
-from re import fullmatch
-from typing import TypedDict
+from collections.abc import Collection
+from typing import Literal, Protocol, TypedDict
 
-import gspread as gs
 import polars as pl
-from pydantic import computed_field
+import polars.selectors as cs
 
-from .config import SpreadsheetConfig, WorksheetConfig
+from .config import GoogleSpreadsheetConfig, GoogleWorksheetConfig
 from .pydantic_model_config import StrictBaseModel
 
 
@@ -16,116 +13,87 @@ class InsertableData(TypedDict):
     data: list[list]
 
 
-class GWorksheet(
-    StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
-):
-    config: WorksheetConfig
-    worksheet: gs.Worksheet
+class GoogleApiResource(Protocol):
+    """Class just for type-hinting. not implementeed yet"""
 
-    @computed_field
-    @cached_property
-    def _raw_df(self):
-        raw_values = self.worksheet.get(
-            pad_values=True, maintain_size=True, combine_merged_cells=True
+    pass
+
+
+# TODO: switch to lazyframes when I figure it out
+class _GoogleSheetValueRange(StrictBaseModel, frozen=True, strict=True):
+    range: str
+    majorDimension: Literal['ROWS']
+    values: list[list[str]]
+
+    def _to_raw_lf(self, header: int) -> pl.LazyFrame:
+        columns = self.values[header]
+        data = self.values[header + 1 :]
+
+        return pl.LazyFrame(schema=columns, data=data, orient='row')
+
+    def _to_clean_lf(
+        self,
+        raw_lf: pl.LazyFrame,
+        desired_columns: Collection[str],
+        empty_means_drop: Collection[str],
+    ):
+        cleaned_lf = raw_lf.select(desired_columns).with_columns(
+            pl.col(desired_columns).replace('', None)
         )
 
-        columns = raw_values[self.config.head]
-        data = raw_values[self.config.head + 1 :]
+        return (
+            cleaned_lf.drop_nulls(subset=empty_means_drop)
+            if empty_means_drop
+            else cleaned_lf.drop_nulls()
+        )
 
-        return pl.DataFrame(schema=columns, data=data)
+    def to_lf(self, config: GoogleWorksheetConfig) -> pl.LazyFrame:
+        raw_lf = self._to_raw_lf(config.header)
+        cleaned_lf = self._to_clean_lf(
+            raw_lf,
+            desired_columns=config.column_to_targets.keys(),
+            empty_means_drop=config.empty_means_drop,
+        )
+        return cleaned_lf.cast(config.column_to_type)
 
-    @computed_field
-    @cached_property
-    def _cleaned_df(self):
-        df = self._raw_df
-        desired_columns = self.config.db_target_configs.values()
 
-        return df.with_columns(pl.all(*desired_columns).replace('', None))
+class GoogleSheetResponse(StrictBaseModel, frozen=True, strict=True):
+    spreadsheetId: str
+    valueRanges: list[_GoogleSheetValueRange]
 
-    @computed_field
-    @cached_property
-    def _split_data(self) -> dict[str, pl.DataFrame]:
-        return {
-            db_model_name: pl.DataFrame()
-            for db_model_name in self.config.db_model_names
-        }
+    def to_lfs(self, config: GoogleSpreadsheetConfig) -> dict[str, pl.LazyFrame]:
+        lfs: dict[str, pl.LazyFrame] = {}
 
-    # TODO: optimize this
-    @computed_field
-    @cached_property
-    def as_insertable_data(self) -> dict[str, InsertableData]:
-        for i, col in enumerate(self._all_columns):
-            if col not in self.config.columns_to_targets:
-                continue
+        for value_range in self.valueRanges:
+            sheet_name = value_range.range
+            sheet_config = config.worksheet_configs[sheet_name]
 
-            target_config = self.config.columns_to_targets[col]
-            for target in target_config.targets:
-                db_model_name = target.split('.')[0]
-                df = self._split_data[db_model_name]
+            sheet_as_lf = value_range.to_lf(sheet_config)
 
-                df.columns.append(col)
-                df[col] = [row for row in self._formated_data]
+            for old_column in sheet_as_lf.columns:
+                column_config = sheet_config.column_to_targets[old_column]
 
-        for row in self._formatted_data:
-            for col, val in zip(self._all_columns, row, strict=True):
-                if col not in self.config.columns_to_targets:
-                    continue
-
-                if col in self.config.empty_means_drop and val is None:
-                    break
-
-                target_config = self.config.columns_to_targets[col]
-
-                for target in target_config.targets:
+                for target in column_config.targets:
                     db_model_name = target.split('.')[0]
-                    df = self._split_data[db_model_name]
+                    lf = lfs.get(db_model_name, pl.LazyFrame())
 
-                    if target not in df.columns:
-                        df.columns.append(target)
-                        df.select(pl.col(target))
-                        rec['columns'].append(target)
-                        rec['row'].append(val)
-                        continue
+                    if target not in lf.columns:
+                        new_column = target
+                    else:
+                        i = 0
+                        while f'{target}_{i}' in lf.columns:
+                            i += 1
 
-                    first_duplicate_name = f'{target}_1'
-                    if first_duplicate_name not in rec:
-                        rec['columns'].append(first_duplicate_name)
-                        rec['row'].append(val)
-                        continue
+                        new_column = f'{target}_{i}'
 
-                    col_pattern = rf'{target}(_\d+)'
-                    matches = (
-                        fullmatch(pattern=col_pattern, string=existing_col)
-                        for existing_col in rec
-                    )
-                    latest_duplicate_number = max(
-                        match.group(1) for match in matches if match is not None
+                    replace = column_config.replace.get(target, {})
+
+                    column_data_to_append = sheet_as_lf.select(
+                        pl.col(old_column).replace(replace).alias(new_column)
                     )
 
-                    rec['columns'].append(f'{target}{latest_duplicate_number}')
-                    rec['row'].append(val)
+                    lfs[db_model_name] = lf.with_columns(
+                        column_data_to_append.collect()
+                    )
 
-            for db_model_name, data_set in self._split_data.items():
-                data_set['data'].append(split_records[db_model_name]['row'])
-
-        return self._split_data
-
-
-class GSpreadsheet(
-    StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
-):
-    config: SpreadsheetConfig
-    gclient: gs.Client
-
-    @computed_field
-    @cached_property
-    def spreadsheet(self) -> gs.Spreadsheet:
-        return self.gclient.open_by_url(str(self.config.spreadsheet_url))
-
-    @computed_field
-    @cached_property
-    def worksheets(self) -> Generator[GWorksheet, None, None]:
-        for worksheet_id, config in self.config.worksheet_configs.items():
-            worksheet = self.spreadsheet.get_worksheet_by_id(worksheet_id)
-
-            yield GWorksheet(config=config, worksheet=worksheet)
+        return lfs

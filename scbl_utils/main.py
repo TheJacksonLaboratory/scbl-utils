@@ -6,7 +6,8 @@ from os import environ, stat
 from pathlib import Path
 
 import fire
-import gspread as gs
+from googleapiclient.discovery import Resource, build
+from oauth2client.service_account import ServiceAccountCredentials
 from pydantic import DirectoryPath, FilePath, computed_field, validate_call
 from pydantic.dataclasses import dataclass
 from rich.console import Console
@@ -16,9 +17,9 @@ from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
-from .config import DBConfig, SpreadsheetConfig, SystemConfig
+from .config import DBConfig, GoogleSpreadsheetConfig, SystemConfig
 from .data_io import DataToInsert
-from .gdrive import GSpreadsheet
+from .gdrive import GoogleSheetResponse
 from .pydantic_model_config import strict_config
 
 console = Console()
@@ -83,20 +84,23 @@ class SCBLUtils:
 
     @computed_field
     @cached_property
-    def _gclient(self: 'SCBLUtils') -> gs.Client:
-        return gs.service_account(filename=self._gdrive_credential_path)
+    def _google_resource(self: 'SCBLUtils') -> Resource:
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(
+            self._gdrive_credential_path
+        )
+        return build(serviceName='sheets', version='v4', credentials=credentials)
 
     @computed_field
     @cached_property
     def _tracking_sheet_configs(
         self: 'SCBLUtils',
-    ) -> Generator[SpreadsheetConfig, None, None]:
+    ) -> Generator[GoogleSpreadsheetConfig, None, None]:
         tracking_sheet_configs = (
             safe_load(path.read_bytes())
             for path in self._tracking_sheet_config_dir.iterdir()
         )
         return (
-            SpreadsheetConfig.model_validate(config)
+            GoogleSpreadsheetConfig.model_validate(config)
             for config in tracking_sheet_configs
         )
 
@@ -132,9 +136,22 @@ class SCBLUtils:
 
     def _gdrive_to_db(self):
         for config in self._tracking_sheet_configs:
-            GSpreadsheet(config=config, gclient=self._gclient)
+            # TODO: make this more robust by keeping a record of what we have ingested from google drive in the database
+            google_sheet_response = (
+                self._google_resource.spreadsheets()
+                .values()
+                .batchGet(
+                    spreadsheetId=config.spreadsheet_id,
+                    ranges=config.worksheet_configs.keys(),
+                    majorDimension='COLUMNS',
+                )
+                .execute()
+            )
+            google_sheet_response = GoogleSheetResponse.model_validate(
+                google_sheet_response
+            )
 
-        pass
+            google_sheet_response.to_lfs(config)
 
 
 def main():

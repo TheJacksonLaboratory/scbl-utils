@@ -2,7 +2,6 @@ from functools import cache
 from typing import Annotated
 
 from pydantic import AfterValidator, StringConstraints
-from pydantic.types import enum
 from scbl_db import ORDERED_MODELS, Base
 from scbl_db.bases import Base
 from sqlalchemy import inspect
@@ -12,7 +11,7 @@ from sqlalchemy import inspect
 def _validate_model_field(model: type[Base], field: str):
     if field.count('.') == 0:
         if field not in model.field_names():
-            raise ValueError(f'{field} not a field of {model.__name__}')
+            raise ValueError(f'{field} is not a field of {model.__name__}')
 
         return
 
@@ -44,3 +43,16 @@ DBTarget = Annotated[
     StringConstraints(pattern=rf'({"|".join(ORDERED_MODELS.keys())})\.[\w.]+'),
     AfterValidator(_validate_db_target),
 ]
+
+
+def _validate_type_string(string: str):
+    evaluated_str = eval(string)
+    valid_types = (bool, float, int, str)
+
+    if not issubclass(evaluated_str, valid_types):
+        raise ValueError(f'String {string} must be one of {valid_types}')
+
+    return evaluated_str
+
+
+TypeString = Annotated[str, AfterValidator(_validate_type_string)]

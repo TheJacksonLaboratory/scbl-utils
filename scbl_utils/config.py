@@ -1,12 +1,10 @@
-from collections.abc import Sequence
-from functools import cached_property
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import DirectoryPath, HttpUrl, NonNegativeInt, model_validator
+from pydantic import DirectoryPath, NonNegativeInt, field_validator, model_validator
 
 from .pydantic_model_config import StrictBaseModel
-from .validated_types import DBModelName, DBTarget
+from .validated_types import DBTarget, TypeString
 
 
 class DBConfig(StrictBaseModel, frozen=True, strict=True):
@@ -14,47 +12,44 @@ class DBConfig(StrictBaseModel, frozen=True, strict=True):
     drivername: Literal['sqlite'] = 'sqlite'
 
 
-class TargetConfig(StrictBaseModel, frozen=True, strict=True):
-    target_from_columns: dict[DBTarget, set[str]]
-    replace: dict[str, Any]
+class GoogleColumnConfig(StrictBaseModel, frozen=True, strict=True):
+    targets: set[DBTarget]
+    replace: dict[DBTarget, dict[str, Any]] = {}
 
 
-class WorksheetConfig(StrictBaseModel, frozen=True, strict=True):
-    replace: dict[str, Any]
-    head: NonNegativeInt = 0
-    type_converters: dict[str, str]
-    empty_means_drop: set[str]
-    db_target_configs: dict[DBModelName, TargetConfig]
+class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
+    replace: dict[str, Any] = {}
+    header: NonNegativeInt = 0
+    column_to_type: dict[str, TypeString] = {}
+    empty_means_drop: set[str] = set()
+    column_to_targets: dict[str, GoogleColumnConfig]
 
+    # TODO: validate that empty_means_drop must be subset of columns_to_targets
     @model_validator(mode='after')
-    def validate_column_existence(self: 'WorksheetConfig') -> 'WorksheetConfig':
-        column_subsets = (
-            ('type_converters', self.type_converters.keys()),
-            ('empty_means_drop', self.empty_means_drop),
-        )
-
-        all_sheet_columns = set()
-        for target_config in self.db_target_configs.values():
-            all_sheet_columns |= set(target_config.target_from_columns.values())
-
-        for subset_key, subset in column_subsets:
-            if not subset <= all_sheet_columns:
-                raise ValueError(
-                    f'{subset_key} must be a subset of the columns defined in db_target_config'
-                )
+    def validate_columns(self):
+        if self.column_to_type.keys() > self.column_to_targets.keys():
+            raise ValueError(f'Some helpful error')
 
         return self
 
 
-class SpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
-    spreadsheet_url: HttpUrl
-    worksheet_configs: dict[str, WorksheetConfig]
-    worksheet_priority: Sequence[str]
+class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
+    spreadsheet_id: str
+    worksheet_configs: dict[str, GoogleWorksheetConfig]
+    merge_priority: dict[DBTarget, list[str]] = {}
 
     @model_validator(mode='after')
-    def validate_worksheet_ids(self: 'SpreadsheetConfig') -> 'SpreadsheetConfig':
-        if not self.worksheet_configs.keys() == set(self.worksheet_priority):
-            raise ValueError(f'Workheet priority and worksheet IDs must be the same.')
+    def validate_worksheet_ids(
+        self: 'GoogleSpreadsheetConfig',
+    ) -> 'GoogleSpreadsheetConfig':
+        if self.worksheet_configs.keys() < {
+            worksheet_id
+            for worksheet_id_list in self.merge_priority.values()
+            for worksheet_id in worksheet_id_list
+        }:
+            raise ValueError(
+                f'Workheet merge priority and worksheet IDs must be the same.'
+            )
 
         return self
 
