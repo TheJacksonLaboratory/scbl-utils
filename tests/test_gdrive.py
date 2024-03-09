@@ -74,24 +74,17 @@ class TestGoogleSheetResponse:
         google_spreadsheet_config: GoogleSpreadsheetConfig,
     ):
         result_lfs = google_sheet_response.to_lfs(google_spreadsheet_config)
+        expected_lfs = {}
 
-        expected_institution = {
-            'Institution.name': ['name'],
-            'Institution.name_0': ['other_name'],
+        expected_lfs[('Institution', 'worksheet1')] = {'Institution.name': ['name']}
+        expected_lfs[('Institution', 'worksheet2')] = {
+            'Institution.name': ['other_name']
         }
-        expected_person = {
-            'Person.first_name': ['name'],
-            'Person.first_name_0': ['other_name'],
-        }
+        expected_lfs[('Person', 'worksheet1')] = {'Person.first_name': ['name']}
+        expected_lfs[('Person', 'worksheet2')] = {'Person.first_name': ['other_name']}
 
-        expected_institution = pl.LazyFrame(expected_institution)
-        expected_person = pl.LazyFrame(expected_person)
-
-        print(expected_institution.collect())
-        print(result_lfs['Institution'].collect())
-
-        assert_frame_equal(result_lfs['Institution'], expected_institution)
-        assert_frame_equal(result_lfs['Person'], expected_person)
+        for key, expected_data in expected_lfs.items():
+            assert_frame_equal(result_lfs[key], pl.LazyFrame(expected_data))
 
 
 # def test_something():

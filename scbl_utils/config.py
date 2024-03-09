@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import DirectoryPath, NonNegativeInt, field_validator, model_validator
 
 from .pydantic_model_config import StrictBaseModel
-from .validated_types import DBTarget, TypeString
+from .validated_types import DBModelName, DBTarget, TypeString
 
 
 class DBConfig(StrictBaseModel, frozen=True, strict=True):
@@ -40,22 +40,30 @@ class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
         return self
 
 
+class MergeStrategy(StrictBaseModel, frozen=True, strict=True):
+    on: DBTarget
+    order: list[str]
+
+
 class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
     spreadsheet_id: str
     worksheet_configs: dict[str, GoogleWorksheetConfig]
-    merge_order: dict[DBTarget, list[str]] = {}
+    merge_strategies: dict[DBModelName, MergeStrategy] = {}
 
     @model_validator(mode='after')
     def validate_worksheet_ids(
         self: 'GoogleSpreadsheetConfig',
     ) -> 'GoogleSpreadsheetConfig':
-        if self.worksheet_configs.keys() < {
-            worksheet_id
-            for worksheet_id_list in self.merge_priority.values()
-            for worksheet_id in worksheet_id_list
-        }:
+        worksheet_names_from_config = self.worksheet_configs.keys()
+        worksheet_names_from_merge_strategies = {
+            worksheet_name
+            for merge_strategy in self.merge_strategies.values()
+            for worksheet_name in merge_strategy.order
+        }
+
+        if worksheet_names_from_config < worksheet_names_from_merge_strategies:
             raise ValueError(
-                f'Workheet merge priority and worksheet IDs must be the same.'
+                f'Workheet configurations must be a superset of worksheet names in merge strategies.'
             )
 
         return self
