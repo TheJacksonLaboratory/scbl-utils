@@ -1,8 +1,7 @@
 from collections.abc import Collection
-from typing import Literal, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 
 import polars as pl
-import polars.selectors as cs
 
 from .config import GoogleSpreadsheetConfig, GoogleWorksheetConfig
 from .pydantic_model_config import StrictBaseModel
@@ -20,7 +19,7 @@ class GoogleApiResource(Protocol):
 
 
 # TODO: switch to lazyframes when I figure it out
-class _GoogleSheetValueRange(StrictBaseModel, frozen=True, strict=True):
+class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
     range: str
     majorDimension: Literal['ROWS']
     values: list[list[str]]
@@ -31,38 +30,44 @@ class _GoogleSheetValueRange(StrictBaseModel, frozen=True, strict=True):
 
         return pl.LazyFrame(schema=columns, data=data, orient='row')
 
-    def _to_clean_lf(
-        self,
-        raw_lf: pl.LazyFrame,
-        desired_columns: Collection[str],
-        empty_means_drop: Collection[str],
-    ):
-        cleaned_lf = raw_lf.select(desired_columns).with_columns(
-            pl.col(desired_columns).replace('', None)
+    def _replace_values(
+        self, lf: pl.LazyFrame, replace: dict[str, Any]
+    ) -> pl.LazyFrame:
+        return lf.with_columns(pl.all().replace(replace))
+
+    def _filter(
+        self, lf: pl.LazyFrame, empty_means_drop: Collection[str]
+    ) -> pl.LazyFrame:
+        return lf.filter(pl.all_horizontal(pl.all().is_null())).drop_nulls(
+            subset=empty_means_drop
         )
 
-        return (
-            cleaned_lf.drop_nulls(subset=empty_means_drop)
-            if empty_means_drop
-            else cleaned_lf.drop_nulls()
-        )
+    def _subset(
+        self, lf: pl.LazyFrame, desired_columns: Collection[str]
+    ) -> pl.LazyFrame:
+        return lf.select(*desired_columns)
+
+    def _cast(self, lf: pl.LazyFrame, column_to_type: dict[str, type]) -> pl.LazyFrame:
+        return lf.cast(column_to_type)
 
     def to_lf(self, config: GoogleWorksheetConfig) -> pl.LazyFrame:
         raw_lf = self._to_raw_lf(config.header)
-        cleaned_lf = self._to_clean_lf(
-            raw_lf,
-            desired_columns=config.column_to_targets.keys(),
-            empty_means_drop=config.empty_means_drop,
+        lf_with_replaced_values = self._replace_values(raw_lf, replace=config.replace)
+        desired_lf_subset = self._subset(
+            lf_with_replaced_values, desired_columns=config.column_to_targets.keys()
         )
-        return cleaned_lf.cast(config.column_to_type)
+        cleaned_lf = self._cast(desired_lf_subset, column_to_type=config.column_to_type)
+
+        return cleaned_lf
 
 
-class GoogleSheetResponse(StrictBaseModel, frozen=True, strict=True):
+class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
     spreadsheetId: str
-    valueRanges: list[_GoogleSheetValueRange]
+    valueRanges: list[GoogleSheetsValueRange]
 
     def to_lfs(self, config: GoogleSpreadsheetConfig) -> dict[str, pl.LazyFrame]:
         lfs: dict[str, pl.LazyFrame] = {}
+        sources: dict[str, str] = {}
 
         for value_range in self.valueRanges:
             sheet_name = value_range.range
@@ -77,23 +82,31 @@ class GoogleSheetResponse(StrictBaseModel, frozen=True, strict=True):
                     db_model_name = target.split('.')[0]
                     lf = lfs.get(db_model_name, pl.LazyFrame())
 
-                    if target not in lf.columns:
-                        new_column = target
-                    else:
-                        i = 0
-                        while f'{target}_{i}' in lf.columns:
-                            i += 1
+                    # if target not in lf.columns:
+                    #     column_data_to_append = sheet_as_lf.select(
+                    #         pl.col(old_column).replace(replace).alias(target)
+                    #     )
 
-                        new_column = f'{target}_{i}'
+                    #     lfs[db_model_name] = lf.with_columns(
+                    #         column_data_to_append.collect()
+                    #     )
 
-                    replace = column_config.replace.get(target, {})
+                    #     continue
+                    # elif target not in config.merge_order:
 
-                    column_data_to_append = sheet_as_lf.select(
-                        pl.col(old_column).replace(replace).alias(new_column)
-                    )
+                    # # prior_data_source = sources[target]
+                    # merge_priority = config.merge_priority[target]
 
-                    lfs[db_model_name] = lf.with_columns(
-                        column_data_to_append.collect()
-                    )
+                    # # if merge_priority.index(prior_data_source) < merge_priority.index(sheet_name):
+
+                    # elif sources[target]:
+
+                    #     i = 0
+                    #     new_column = f'{target}_{i}'
+                    #     while new_column in lf.columns:
+                    #         i += 1
+                    #         new_column = f'{target}_{i}'
+
+                    # replace = column_config.replace.get(target, {})
 
         return lfs

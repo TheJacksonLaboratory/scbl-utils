@@ -19,7 +19,7 @@ from yaml import safe_load
 
 from .config import DBConfig, GoogleSpreadsheetConfig, SystemConfig
 from .data_io import DataToInsert
-from .gdrive import GoogleSheetResponse
+from .gdrive import GoogleSheetsResponse
 from .pydantic_model_config import strict_config
 
 console = Console()
@@ -147,7 +147,7 @@ class SCBLUtils:
                 )
                 .execute()
             )
-            google_sheet_response = GoogleSheetResponse.model_validate(
+            google_sheet_response = GoogleSheetsResponse.model_validate(
                 google_sheet_response
             )
 

@@ -16,15 +16,22 @@ class GoogleColumnConfig(StrictBaseModel, frozen=True, strict=True):
     targets: set[DBTarget]
     replace: dict[DBTarget, dict[str, Any]] = {}
 
+    @model_validator(mode='after')
+    def validate_replace(self):
+        if self.replace.keys() > self.targets:
+            raise ValueError
+
+        return self
+
 
 class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
-    replace: dict[str, Any] = {}
-    header: NonNegativeInt = 0
+    column_to_targets: dict[str, GoogleColumnConfig]
     column_to_type: dict[str, TypeString] = {}
     empty_means_drop: set[str] = set()
-    column_to_targets: dict[str, GoogleColumnConfig]
+    header: NonNegativeInt = 0
+    index_col: str | None = None
+    replace: dict[str, Any] = {}
 
-    # TODO: validate that empty_means_drop must be subset of columns_to_targets
     @model_validator(mode='after')
     def validate_columns(self):
         if self.column_to_type.keys() > self.column_to_targets.keys():
@@ -36,7 +43,7 @@ class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
 class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
     spreadsheet_id: str
     worksheet_configs: dict[str, GoogleWorksheetConfig]
-    merge_priority: dict[DBTarget, list[str]] = {}
+    merge_order: dict[DBTarget, list[str]] = {}
 
     @model_validator(mode='after')
     def validate_worksheet_ids(

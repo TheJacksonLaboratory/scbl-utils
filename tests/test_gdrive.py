@@ -7,7 +7,7 @@ from scbl_utils.config import (
     GoogleSpreadsheetConfig,
     GoogleWorksheetConfig,
 )
-from scbl_utils.gdrive import GoogleSheetResponse, _GoogleSheetValueRange
+from scbl_utils.gdrive import GoogleSheetsResponse, GoogleSheetsValueRange
 
 
 @fixture
@@ -20,10 +20,10 @@ def google_spreadsheet_config():
     )
 
     worksheet_config1 = GoogleWorksheetConfig(
-        column_to_targets={'column1': column_config1}
+        column_to_targets={'column1': column_config1}, replace={'': None}
     )
     worksheet_config2 = GoogleWorksheetConfig(
-        column_to_targets={'column2': column_config2}
+        column_to_targets={'column2': column_config2}, replace={'': None}
     )
 
     return GoogleSpreadsheetConfig(
@@ -37,32 +37,32 @@ def google_spreadsheet_config():
 
 class TestGoogleSheetResponse:
     @fixture
-    def google_sheet_value_range1(self) -> _GoogleSheetValueRange:
+    def google_sheet_value_range1(self) -> GoogleSheetsValueRange:
         range = 'worksheet1'
         major_dimension = 'ROWS'
         values = [['column1', 'other_column'], ['name', 'value'], ['', '']]
 
-        return _GoogleSheetValueRange(
+        return GoogleSheetsValueRange(
             range=range, majorDimension=major_dimension, values=values
         )
 
     @fixture
-    def google_sheet_value_range2(self) -> _GoogleSheetValueRange:
+    def google_sheet_value_range2(self) -> GoogleSheetsValueRange:
         range = 'worksheet2'
         major_dimension = 'ROWS'
         values = [['column2'], ['other_name']]
 
-        return _GoogleSheetValueRange(
+        return GoogleSheetsValueRange(
             range=range, majorDimension=major_dimension, values=values
         )
 
     @fixture
     def google_sheet_response(
         self,
-        google_sheet_value_range1: _GoogleSheetValueRange,
-        google_sheet_value_range2: _GoogleSheetValueRange,
+        google_sheet_value_range1: GoogleSheetsValueRange,
+        google_sheet_value_range2: GoogleSheetsValueRange,
     ):
-        return GoogleSheetResponse(
+        return GoogleSheetsResponse(
             spreadsheetId='spreadsheet_id',
             valueRanges=[google_sheet_value_range1, google_sheet_value_range2],
         )
@@ -70,7 +70,7 @@ class TestGoogleSheetResponse:
     # TODO: see if we can make this a bit more sophisticated and less hardcoded
     def test_sheet_splitting(
         self,
-        google_sheet_response: GoogleSheetResponse,
+        google_sheet_response: GoogleSheetsResponse,
         google_spreadsheet_config: GoogleSpreadsheetConfig,
     ):
         result_lfs = google_sheet_response.to_lfs(google_spreadsheet_config)
@@ -86,6 +86,9 @@ class TestGoogleSheetResponse:
 
         expected_institution = pl.LazyFrame(expected_institution)
         expected_person = pl.LazyFrame(expected_person)
+
+        print(expected_institution.collect())
+        print(result_lfs['Institution'].collect())
 
         assert_frame_equal(result_lfs['Institution'], expected_institution)
         assert_frame_equal(result_lfs['Person'], expected_person)
