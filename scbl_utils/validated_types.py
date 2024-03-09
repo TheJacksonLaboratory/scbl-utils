@@ -9,6 +9,9 @@ from sqlalchemy import inspect
 
 @cache
 def _validate_model_field(model: type[Base], field: str):
+    if 'sample' in model.__name__.lower() or 'sample' in field.lower():
+        print(model)
+        print(field)
     if field.count('.') == 0:
         if field not in model.field_names():
             raise ValueError(f'{field} is not a field of {model.__name__}')

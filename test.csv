@@ -1,7 +1,0 @@
-worksheet,column,db_model_field
-10X,SCID,ChromiumLibrary.id
-10X,Sample name,ChromiumLibrary.DataSet.name
-Multiplexing,SCID,ChromiumLibrary.id
-10X,Submitter,ChromiumLibrary.DataSet.submitter.name
-10X,Submitter,Person.name
-10X,PI,Person.name

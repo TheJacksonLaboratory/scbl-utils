@@ -28,7 +28,7 @@ class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
         columns = self.values[header]
         data = self.values[header + 1 :]
 
-        return pl.LazyFrame(schema=columns, data=data, orient='row')
+        return pl.LazyFrame(schema=columns, data=data)
 
     def _replace_values(
         self, lf: pl.LazyFrame, replace: dict[str, Any]
@@ -43,7 +43,7 @@ class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
     def _filter(
         self, lf: pl.LazyFrame, empty_means_drop: Collection[str]
     ) -> pl.LazyFrame:
-        filtered = lf.filter(pl.all().is_not_null())
+        filtered = lf.filter(~pl.all_horizontal(pl.all().is_null()))
         return (
             filtered.drop_nulls(subset=empty_means_drop)
             if empty_means_drop
@@ -62,7 +62,6 @@ class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
         filtered_lf = self._filter(
             desired_lf_subset, empty_means_drop=config.empty_means_drop
         )
-        print(filtered_lf.collect())
         clean_lf = self._cast(filtered_lf, column_to_type=config.column_to_type)
 
         return clean_lf
@@ -97,24 +96,42 @@ class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
         self,
         split_lfs: dict[str, dict[str, pl.LazyFrame]],
         merge_strategies: dict[str, MergeStrategy],
-    ) -> dict[str, pl.LazyFrame]:
-        merged_lfs = {}
+    ) -> dict[str, pl.DataFrame]:
+        merged_dfs = {}
 
         for db_model_name, strategy in merge_strategies.items():
-            lf = None
+            df = None
 
             for sheet_name in strategy.order:
-                other_lf = split_lfs[sheet_name][db_model_name]
-                if lf is None:
-                    lf = other_lf
-                else:
-                    lf = lf.join(other_lf, how='left', on=strategy.on)
+                right_df = split_lfs[sheet_name][db_model_name].collect()
 
-            merged_lfs[db_model_name] = lf
+                if df is None:
+                    df = right_df
+                    continue
 
-        return merged_lfs
+                suffix = '_right'
+                df = df.join(
+                    right_df, how='outer_coalesce', on=strategy.on, suffix=suffix
+                )
 
-    def to_lfs(self, config: GoogleSpreadsheetConfig) -> dict[str, pl.LazyFrame]:
+                duplicate_columns = (
+                    (col.removesuffix(suffix), col)
+                    for col in df.columns
+                    if col.endswith(suffix)
+                )
+                for left_column, right_column in duplicate_columns:
+                    left_series, right_series = df.get_column(
+                        left_column
+                    ), df.get_column(right_column)
+                    left_filled = left_series.fill_null(right_series)
+
+                    df = df.with_columns(left_filled).drop(right_column)
+
+            merged_dfs[db_model_name] = df
+
+        return merged_dfs
+
+    def to_dfs(self, config: GoogleSpreadsheetConfig) -> dict[str, pl.DataFrame]:
         split_lfs: dict[str, dict[str, pl.LazyFrame]] = {}
 
         for value_range in self.valueRanges:
@@ -123,8 +140,8 @@ class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
 
             split_lfs[sheet_name] = self._split_value_range(value_range, sheet_config)
 
-        merged_lfs = self._merge_lfs(
+        merged_dfs = self._merge_lfs(
             split_lfs, merge_strategies=config.merge_strategies
         )
 
-        return merged_lfs
+        return merged_dfs

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import DirectoryPath, NonNegativeInt, field_validator, model_validator
+from pydantic import DirectoryPath, NonNegativeInt, model_validator
 
 from .pydantic_model_config import StrictBaseModel
 from .validated_types import DBModelName, DBTarget, TypeString

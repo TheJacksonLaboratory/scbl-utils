@@ -6,51 +6,79 @@ from scbl_utils.config import (
     GoogleColumnConfig,
     GoogleSpreadsheetConfig,
     GoogleWorksheetConfig,
+    MergeStrategy,
 )
 from scbl_utils.gdrive import GoogleSheetsResponse, GoogleSheetsValueRange
+
+# TODO: rewrite these tests a bit
 
 
 @fixture
 def google_spreadsheet_config():
-    column_config1 = GoogleColumnConfig(
-        targets={'Institution.name', 'Person.first_name'}
-    )
-    column_config2 = GoogleColumnConfig(
-        targets={'Institution.name', 'Person.first_name'}
+    main_sheet_config = GoogleWorksheetConfig(
+        column_to_targets={
+            'library id': GoogleColumnConfig(targets={'ChromiumLibrary.id'}),
+            'sample name': GoogleColumnConfig(
+                targets={
+                    'ChromiumLibrary.data_set.name',
+                    'ChromiumLibrary.data_set.samples.name',
+                }
+            ),
+        }
     )
 
-    worksheet_config1 = GoogleWorksheetConfig(
-        column_to_targets={'column1': column_config1}, replace={'': None}
-    )
-    worksheet_config2 = GoogleWorksheetConfig(
-        column_to_targets={'column2': column_config2}, replace={'': None}
+    multiplexing_sheet_config = GoogleWorksheetConfig(
+        column_to_targets={
+            'library id': GoogleColumnConfig(targets={'ChromiumLibrary.id'}),
+            'dataset name': GoogleColumnConfig(
+                targets={'ChromiumLibrary.data_set.name'}
+            ),
+            'sample name': GoogleColumnConfig(
+                targets={'ChromiumLibrary.data_set.samples.name'}
+            ),
+        }
     )
 
     return GoogleSpreadsheetConfig(
         spreadsheet_id='id',
         worksheet_configs={
-            'worksheet1': worksheet_config1,
-            'worksheet2': worksheet_config2,
+            'main_sheet': main_sheet_config,
+            'multiplexing_sheet': multiplexing_sheet_config,
+        },
+        merge_strategies={
+            'ChromiumLibrary': MergeStrategy(
+                on='ChromiumLibrary.id', order=['multiplexing_sheet', 'main_sheet']
+            )
         },
     )
 
 
 class TestGoogleSheetResponse:
     @fixture
-    def google_sheet_value_range1(self) -> GoogleSheetsValueRange:
-        range = 'worksheet1'
+    def main_sheet(self) -> GoogleSheetsValueRange:
+        range = 'main_sheet'
         major_dimension = 'ROWS'
-        values = [['column1', 'other_column'], ['name', 'value'], ['', '']]
+        values = [
+            ['library id', 'sample name', 'extraneous column'],
+            ['SC0', 'SC1', 'SC2', 'SC3'],
+            ['sample0', 'sample1', 'sample2', 'sample3'],
+            ['foo', 'bar', 'baz', 'bah'],
+        ]
 
         return GoogleSheetsValueRange(
             range=range, majorDimension=major_dimension, values=values
         )
 
     @fixture
-    def google_sheet_value_range2(self) -> GoogleSheetsValueRange:
-        range = 'worksheet2'
+    def multiplexing_sheet(self) -> GoogleSheetsValueRange:
+        range = 'multiplexing_sheet'
         major_dimension = 'ROWS'
-        values = [['column2'], ['other_name']]
+        values = [
+            ['library id', 'dataset name', 'sample name'],
+            ['SC1', 'SC1'],
+            ['multiplexed_dataset1', 'multiplexed_dataset1'],
+            ['multiplexed_sample1', 'multiplexed_sample2'],
+        ]
 
         return GoogleSheetsValueRange(
             range=range, majorDimension=major_dimension, values=values
@@ -59,12 +87,12 @@ class TestGoogleSheetResponse:
     @fixture
     def google_sheet_response(
         self,
-        google_sheet_value_range1: GoogleSheetsValueRange,
-        google_sheet_value_range2: GoogleSheetsValueRange,
+        main_sheet: GoogleSheetsValueRange,
+        multiplexing_sheet: GoogleSheetsValueRange,
     ):
         return GoogleSheetsResponse(
             spreadsheetId='spreadsheet_id',
-            valueRanges=[google_sheet_value_range1, google_sheet_value_range2],
+            valueRanges=[main_sheet, multiplexing_sheet],
         )
 
     # TODO: see if we can make this a bit more sophisticated and less hardcoded
@@ -73,48 +101,27 @@ class TestGoogleSheetResponse:
         google_sheet_response: GoogleSheetsResponse,
         google_spreadsheet_config: GoogleSpreadsheetConfig,
     ):
-        result_lfs = google_sheet_response.to_lfs(google_spreadsheet_config)
-        expected_lfs = {}
+        result_dfs = google_sheet_response.to_dfs(google_spreadsheet_config)
 
-        expected_lfs[('Institution', 'worksheet1')] = {'Institution.name': ['name']}
-        expected_lfs[('Institution', 'worksheet2')] = {
-            'Institution.name': ['other_name']
+        expected_dfs = {}
+
+        expected_dfs['ChromiumLibrary'] = {
+            'ChromiumLibrary.id': ['SC0', 'SC1', 'SC1', 'SC2', 'SC3'],
+            'ChromiumLibrary.data_set.name': [
+                'sample0',
+                'multiplexed_dataset1',
+                'multiplexed_dataset1',
+                'sample2',
+                'sample3',
+            ],
+            'ChromiumLibrary.data_set.samples.name': [
+                'sample0',
+                'multiplexed_sample1',
+                'multiplexed_sample2',
+                'sample2',
+                'sample3',
+            ],
         }
-        expected_lfs[('Person', 'worksheet1')] = {'Person.first_name': ['name']}
-        expected_lfs[('Person', 'worksheet2')] = {'Person.first_name': ['other_name']}
 
-        for key, expected_data in expected_lfs.items():
-            assert_frame_equal(result_lfs[key], pl.LazyFrame(expected_data))
-
-
-# def test_something():
-#     column_config = GoogleColumnConfig(
-#         targets={
-#             'Institution.name',
-#             'Person.first_name',
-#             'Person.last_name',
-#             'Lab.name',
-#         },
-#         replace={},
-#     )
-#     sheet_config = GoogleWorksheetConfig(
-#         replace={},
-#         columns_to_targets={'institution': column_config},
-#         type_converters={},
-#         empty_means_drop=set(),
-#     )
-#     configspreadsheet = GoogleSpreadsheetConfig(
-#         spreadsheet_url='https://docs.google.com/spreadsheets/d/1oMgSTEUBIgO4XlhL4jPlsH4dvAGjfqvQMLCVp3-YdPA/edit#gid=0',
-#         worksheet_configs={'0': sheet_config},
-#         worksheet_priority=['0'],
-#     )
-
-#     gclient = gs.service_account(
-#         '/Users/saida/.config/scbl-utils/google-drive/service-account.json'
-#     )
-#     df = GSpreadsheet(config=configspreadsheet, gclient=gclient)
-#     for sheet in df.worksheets:
-#         print(sheet.as_insertable_data)
-#         print(sheet.as_insertable_data['Person']['columns'])
-#         print(sheet.as_insertable_data['Institution']['columns'])
-#     assert False
+        for key, expected_data in expected_dfs.items():
+            assert_frame_equal(result_dfs[key], pl.DataFrame(expected_data))
