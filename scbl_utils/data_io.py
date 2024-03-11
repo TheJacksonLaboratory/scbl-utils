@@ -3,6 +3,7 @@ from functools import cache, cached_property
 from itertools import groupby
 from pathlib import Path
 
+import polars as pl
 from pydantic import computed_field, model_validator
 from scbl_db import Base
 from scbl_db.bases import Base
@@ -158,7 +159,19 @@ class DataToInsert(
 class DataToInsert2(
     StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
 ):
-    pass
+    data: pl.DataFrame | pl.LazyFrame
+    model: type[Base]
+    session: Session
+    source: str | Path
+
+    @model_validator(mode='after')
+    def validate_columns(self: 'DataToInsert2') -> 'DataToInsert2':
+        if not all(col.startswith(self.model.__name__) for col in self.data.columns):
+            raise ValueError(
+                f'All column names in {self.source} must start with {self.model.__name__}'
+            )
+
+        return self
 
 
 # TODO: next steps
