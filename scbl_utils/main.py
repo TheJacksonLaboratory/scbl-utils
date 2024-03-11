@@ -151,7 +151,7 @@ class SCBLUtils:
                 google_sheet_response
             )
 
-            google_sheet_response.to_lfs(config)
+            google_sheet_response.to_dfs(config)
 
 
 def main():

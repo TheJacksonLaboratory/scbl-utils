@@ -98,7 +98,7 @@ class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
         merge_strategies: dict[str, MergeStrategy],
     ) -> dict[str, pl.DataFrame]:
         merged_dfs = {}
-
+        # TODO: can this be factored out even further?
         for db_model_name, strategy in merge_strategies.items():
             df = None
 
@@ -123,6 +123,7 @@ class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
                     left_series, right_series = df.get_column(
                         left_column
                     ), df.get_column(right_column)
+
                     left_filled = left_series.fill_null(right_series)
 
                     df = df.with_columns(left_filled).drop(right_column)

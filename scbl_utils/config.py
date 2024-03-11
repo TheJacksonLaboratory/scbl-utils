@@ -18,7 +18,7 @@ class GoogleColumnConfig(StrictBaseModel, frozen=True, strict=True):
 
     @model_validator(mode='after')
     def validate_replace(self):
-        if self.replace.keys() > self.targets:
+        if not self.targets >= self.replace.keys():
             raise ValueError
 
         return self
@@ -34,7 +34,7 @@ class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
 
     @model_validator(mode='after')
     def validate_columns(self):
-        if self.column_to_type.keys() > self.column_to_targets.keys():
+        if not self.column_to_targets.keys() > self.column_to_type.keys():
             raise ValueError(f'Some helpful error')
 
         return self
@@ -49,6 +49,7 @@ class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
     spreadsheet_id: str
     worksheet_configs: dict[str, GoogleWorksheetConfig]
     merge_strategies: dict[DBModelName, MergeStrategy] = {}
+    build_from_children: set[DBModelName] = set()
 
     @model_validator(mode='after')
     def validate_worksheet_ids(
@@ -61,7 +62,7 @@ class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
             for worksheet_name in merge_strategy.order
         }
 
-        if worksheet_names_from_config < worksheet_names_from_merge_strategies:
+        if not worksheet_names_from_config >= worksheet_names_from_merge_strategies:
             raise ValueError(
                 f'Workheet configurations must be a superset of worksheet names in merge strategies.'
             )

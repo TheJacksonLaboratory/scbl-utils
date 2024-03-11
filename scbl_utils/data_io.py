@@ -153,3 +153,15 @@ class DataToInsert(
             except IntegrityError:
                 self.session.expunge(model_instance)
                 continue
+
+
+class DataToInsert2(
+    StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
+):
+    pass
+
+
+# TODO: next steps
+# constuct parent dataframe as a groupby of child dataframes, aggregating the children's attributes
+# rename columns in this new dataframe
+# create a list of lists of children from these child attributes for each parent (example: dataset libraries samples)
