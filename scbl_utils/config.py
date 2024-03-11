@@ -41,7 +41,7 @@ class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
 
 
 class MergeStrategy(StrictBaseModel, frozen=True, strict=True):
-    on: list[DBTarget]
+    on: list[DBTarget] | str
     order: list[str]
 
 
