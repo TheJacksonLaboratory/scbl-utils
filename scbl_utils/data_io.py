@@ -4,16 +4,16 @@ from itertools import groupby
 from pathlib import Path
 
 import polars as pl
-from pydantic import computed_field, model_validator
+from pydantic import computed_field, field_validator, model_validator
 from scbl_db import Base
 from scbl_db.bases import Base
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Mapper, Session
+from sqlalchemy.orm import Mapper, RelationshipDirection, Session
 
 from .db_query import get_matching_obj
 from .pydantic_model_config import StrictBaseModel
-from .validated_types import DBTarget
+from .validated_types import DBTarget, _validate_db_target
 
 
 class DataToInsert(
@@ -164,14 +164,58 @@ class DataToInsert2(
     session: Session
     source: str | Path
 
+    @field_validator('data', mode='after')
+    @classmethod
+    def validate_columns(
+        cls, data: pl.DataFrame | pl.LazyFrame
+    ) -> pl.DataFrame | pl.LazyFrame:
+        for column in data.columns:
+            _validate_db_target(column)
+
+        return data
+
     @model_validator(mode='after')
-    def validate_columns(self: 'DataToInsert2') -> 'DataToInsert2':
+    def validate_columns_match_model(self: 'DataToInsert2') -> 'DataToInsert2':
         if not all(col.startswith(self.model.__name__) for col in self.data.columns):
             raise ValueError(
                 f'All column names in {self.source} must start with {self.model.__name__}'
             )
 
         return self
+
+    @computed_field
+    @cached_property
+    def _renamed_data(self) -> pl.DataFrame | pl.LazyFrame:
+        return self.data.rename(
+            {
+                column: column.removeprefix(f'{self.model.__name__}.')
+                for column in self.data.columns
+            }
+        )
+
+    @computed_field
+    @cached_property
+    def _aggregated(self) -> pl.DataFrame | pl.LazyFrame:
+        self_columns = [
+            column for column in self._renamed_data.columns if column.count('.') == 0
+        ]
+        sorted_relationship_columns = sorted(
+            column
+            for column in self._renamed_data.columns
+            if column not in self_columns
+        )
+        relationships = inspect(self.model).relationships
+
+        expressions = []
+        for relationship, column_list in groupby(
+            sorted_relationship_columns, key=lambda column: column.split('.')[1]
+        ):
+            if relationships[relationship].direction == RelationshipDirection.MANYTOONE:
+                expressions.append(pl.struct(column_list).alias(relationship))
+            else:
+                expressions.append(pl.col(column_list))
+
+        return self._renamed_data.group_by(self_columns).agg(*expressions)
 
 
 # TODO: next steps

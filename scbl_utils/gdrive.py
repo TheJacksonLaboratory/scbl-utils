@@ -1,5 +1,4 @@
 from collections.abc import Collection
-from itertools import groupby
 from typing import Any, Literal, Protocol, TypedDict
 
 import polars as pl

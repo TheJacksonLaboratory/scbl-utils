@@ -45,3 +45,9 @@ def get_matching_obj(
     matches = session.execute(stmt).scalars().all()
 
     return matches
+
+
+def get_matching_obj2(
+    data: dict[str, Any], session: Session, model_name
+) -> Sequence[Base]:
+    ...
