@@ -1,11 +1,12 @@
 from collections.abc import Generator
 from csv import QUOTE_STRINGS
 from csv import reader as csv_reader
-from functools import cache, cached_property
+from functools import cached_property
 from os import environ, stat
 from pathlib import Path
 
 import fire
+import polars as pl
 from googleapiclient.discovery import Resource, build
 from oauth2client.service_account import ServiceAccountCredentials
 from pydantic import DirectoryPath, FilePath, computed_field, validate_call
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
 from .config import DBConfig, GoogleSpreadsheetConfig, SystemConfig
-from .data_io import DataToInsert
+from .data_io import DataToInsert, DataToInsert2
 from .gdrive import GoogleSheetsResponse
 from .pydantic_model_config import strict_config
 
@@ -122,17 +123,9 @@ class SCBLUtils:
             if stat(data_path).st_size == 0:
                 continue
 
-            with data_path.open() as f, self._db_sessionmaker.begin() as session:
-                data = csv_reader(f, quoting=QUOTE_STRINGS)
-                columns = tuple(next(data))
-
-                DataToInsert(
-                    columns=columns,
-                    data=data,
-                    model=model,
-                    session=session,
-                    source=data_path,
-                ).to_db()
+            with self._db_sessionmaker.begin() as session:
+                data = pl.read_csv(data_path)
+                DataToInsert2(data=data, session=session, model=model, source=data_path)
 
     def _gdrive_to_db(self):
         for config in self._tracking_sheet_configs:
@@ -151,7 +144,19 @@ class SCBLUtils:
                 google_sheet_response
             )
 
-            google_sheet_response.to_dfs(config)
+            spreadsheet_as_dfs = google_sheet_response.to_dfs(config)
+
+            with self._db_sessionmaker.begin() as session:
+                for model_name, model in ORDERED_MODELS.items():
+                    if model_name not in spreadsheet_as_dfs:
+                        continue
+
+                    DataToInsert2(
+                        data=spreadsheet_as_dfs[model_name],
+                        model=model,
+                        session=session,
+                        source=config.spreadsheet_id,
+                    ).to_db()
 
 
 def main():

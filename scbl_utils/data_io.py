@@ -2,6 +2,7 @@ from collections.abc import Generator, Iterable, Sequence
 from functools import cache, cached_property
 from itertools import groupby
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 from pydantic import computed_field, field_validator, model_validator
@@ -9,9 +10,10 @@ from scbl_db import Base
 from scbl_db.bases import Base
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Mapper, RelationshipDirection, Session
+from sqlalchemy.orm import Mapper, RelationshipDirection, RelationshipProperty, Session
+from sqlalchemy.util import ReadOnlyProperties
 
-from .db_query import get_matching_obj
+from .db_query import construct_or_retrieve_model_instance, get_matching_obj
 from .pydantic_model_config import StrictBaseModel
 from .validated_types import DBTarget, _validate_db_target
 
@@ -185,7 +187,7 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _renamed_data(self) -> pl.DataFrame | pl.LazyFrame:
+    def _renamed(self) -> pl.DataFrame | pl.LazyFrame:
         return self.data.rename(
             {
                 column: column.removeprefix(f'{self.model.__name__}.')
@@ -195,27 +197,96 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _aggregated(self) -> pl.DataFrame | pl.LazyFrame:
-        self_columns = [
-            column for column in self._renamed_data.columns if column.count('.') == 0
-        ]
+    def _self_columns(self) -> list[str]:
+        return [column for column in self._renamed.columns if column.count('.') == 0]
+
+    @computed_field
+    @cached_property
+    def _relationships(self) -> ReadOnlyProperties[RelationshipProperty[Any]]:
+        return inspect(self.model).relationships
+
+    @computed_field
+    @cached_property
+    def _relationship_to_columns(self) -> list[tuple[str, list[str]]]:
         sorted_relationship_columns = sorted(
-            column
-            for column in self._renamed_data.columns
-            if column not in self_columns
+            col for col in self._renamed.columns if col.count('.') > 0
         )
-        relationships = inspect(self.model).relationships
 
+        return [
+            (relationship_name, list(column_list))
+            for relationship_name, column_list in groupby(
+                sorted_relationship_columns, key=lambda col: col.split('.')[0]
+            )
+        ]
+
+    @computed_field
+    @cached_property
+    def _parent_to_columns(self) -> list[tuple[str, list[str]]]:
+        return [
+            (relationship_name, column_list)
+            for relationship_name, column_list in self._relationship_to_columns
+            if self._relationships[relationship_name].direction
+            == RelationshipDirection.MANYTOONE
+        ]
+
+    @computed_field
+    @cached_property
+    def _aggregated(self) -> pl.DataFrame | pl.LazyFrame:
         expressions = []
-        for relationship, column_list in groupby(
-            sorted_relationship_columns, key=lambda column: column.split('.')[1]
-        ):
-            if relationships[relationship].direction == RelationshipDirection.MANYTOONE:
-                expressions.append(pl.struct(column_list).alias(relationship))
-            else:
-                expressions.append(pl.col(column_list))
 
-        return self._renamed_data.group_by(self_columns).agg(*expressions)
+        for parent_name, column_list in self._parent_to_columns:
+            parent_model = self._relationships[parent_name].mapper.class_
+            renamed_columns = pl.col(column_list).name.map(
+                lambda col: col.replace(f'{parent_name}.', f'{parent_model.__name__}.')
+            )
+
+            expressions.append(pl.struct(renamed_columns).alias(parent_name))
+
+        return self._renamed.group_by(self._self_columns).agg(*expressions)
+
+    @computed_field
+    @cached_property
+    def _with_parents(self) -> pl.DataFrame | pl.LazyFrame:
+        df = self._aggregated
+
+        for parent_name, _ in self._parent_to_columns:
+            parent_model = self._relationships[parent_name].mapper.class_
+            df = df.with_columns(
+                pl.col(parent_name).map_elements(
+                    function=lambda data: construct_or_retrieve_model_instance(
+                        data, session=self.session, model=parent_model
+                    )
+                )
+            )
+
+        return df
+
+    def to_db(self):
+        df = self._with_parents
+
+        df_as_structs = df.with_columns(pl.struct(pl.all()).alias(self.model.__name__))
+        df_as_models = df_as_structs.select(
+            pl.col(self.model.__name__).map_elements(
+                function=lambda data: construct_or_retrieve_model_instance(
+                    data, session=self.session, model=self.model
+                )
+            )
+        )
+
+        df_as_models = (
+            df_as_models.collect()
+            if isinstance(df_as_models, pl.LazyFrame)
+            else df_as_models
+        )
+
+        for model_instance in df_as_models.get_column(self.model.__name__):
+            self.session.add(model_instance)
+
+            try:
+                self.session.flush()
+            except IntegrityError:
+                self.session.expunge(model_instance)
+                continue
 
 
 # TODO: next steps

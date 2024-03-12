@@ -3,9 +3,11 @@ from functools import cache
 from typing import Any
 
 from pydantic import ConfigDict, validate_call
-from scbl_db import Base
-from sqlalchemy import select
+from scbl_db import ORDERED_MODELS, Base
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Mapper, Session
+
+from .validated_types import DBModelName
 
 
 @cache
@@ -47,7 +49,31 @@ def get_matching_obj(
     return matches
 
 
-def get_matching_obj2(
-    data: dict[str, Any], session: Session, model_name
-) -> Sequence[Base]:
-    ...
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+def construct_or_retrieve_model_instance(
+    data: dict[str, Any], session: Session, model: type[Base]
+) -> Base | None:
+    model_mapper = inspect(model)
+
+    where_conditions = []
+
+    for col, val in data.items():
+        where = construct_where_condition(col, value=val, model_mapper=model_mapper)
+        where_conditions.append(where)
+
+    if not where_conditions:
+        return None
+
+    stmt = select(model_mapper).where(*where_conditions)
+    matches = session.execute(stmt).scalars().all()
+
+    match len(matches):
+        case 0:
+            try:
+                return model_mapper.class_(**data)
+            except:
+                return
+        case 1:
+            return matches[0]
+        case _:
+            return
