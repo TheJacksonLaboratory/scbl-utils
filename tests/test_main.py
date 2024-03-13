@@ -15,7 +15,7 @@ class TestSCBLUtils:
 
     @fixture
     def data_dir(self) -> Path:
-        return Path(__file__).parent / 'data'
+        return Path(__file__).parent / 'well_formatted_data'
 
     def test_correct_n_rows(self, cli: SCBLUtils, data_dir: Path) -> None:
         cli._directory_to_db(data_dir)

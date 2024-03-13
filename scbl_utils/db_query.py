@@ -50,7 +50,7 @@ def get_matching_obj(
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-def construct_or_retrieve_model_instance(
+def get_model_instance_from_db(
     data: dict[str, Any], session: Session, model: type[Base]
 ) -> Base | None:
     model_mapper = inspect(model)

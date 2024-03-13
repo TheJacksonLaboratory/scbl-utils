@@ -7,13 +7,13 @@ from typing import Any
 import polars as pl
 from pydantic import computed_field, field_validator, model_validator
 from scbl_db import Base
-from scbl_db.bases import Base
+from scbl_db.bases import Base, Data
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapper, RelationshipDirection, RelationshipProperty, Session
 from sqlalchemy.util import ReadOnlyProperties
 
-from .db_query import construct_or_retrieve_model_instance, get_matching_obj
+from .db_query import get_matching_obj, get_model_instance_from_db
 from .pydantic_model_config import StrictBaseModel
 from .validated_types import DBTarget, _validate_db_target
 
@@ -161,16 +161,14 @@ class DataToInsert(
 class DataToInsert2(
     StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
 ):
-    data: pl.DataFrame | pl.LazyFrame
+    data: pl.DataFrame
     model: type[Base]
     session: Session
     source: str | Path
 
     @field_validator('data', mode='after')
     @classmethod
-    def validate_columns(
-        cls, data: pl.DataFrame | pl.LazyFrame
-    ) -> pl.DataFrame | pl.LazyFrame:
+    def validate_columns(cls, data: pl.DataFrame) -> pl.DataFrame:
         for column in data.columns:
             _validate_db_target(column)
 
@@ -187,7 +185,7 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _renamed(self) -> pl.DataFrame | pl.LazyFrame:
+    def _renamed(self) -> pl.DataFrame:
         return self.data.rename(
             {
                 column: column.removeprefix(f'{self.model.__name__}.')
@@ -213,7 +211,10 @@ class DataToInsert2(
         )
 
         return [
-            (relationship_name, list(column_list))
+            (
+                relationship_name,
+                list(column_list),
+            )
             for relationship_name, column_list in groupby(
                 sorted_relationship_columns, key=lambda col: col.split('.')[0]
             )
@@ -221,62 +222,169 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _parent_to_columns(self) -> list[tuple[str, list[str]]]:
-        return [
-            (relationship_name, column_list)
-            for relationship_name, column_list in self._relationship_to_columns
-            if self._relationships[relationship_name].direction
-            == RelationshipDirection.MANYTOONE
-        ]
-
-    @computed_field
-    @cached_property
-    def _aggregated(self) -> pl.DataFrame | pl.LazyFrame:
+    def _aggregated(self) -> pl.DataFrame:
         expressions = []
 
-        for parent_name, column_list in self._parent_to_columns:
-            parent_model = self._relationships[parent_name].mapper.class_
-            renamed_columns = pl.col(column_list).name.map(
-                lambda col: col.replace(f'{parent_name}.', f'{parent_model.__name__}.')
-            )
-
-            expressions.append(pl.struct(renamed_columns).alias(parent_name))
-
-        return self._renamed.group_by(self._self_columns).agg(*expressions)
-
-    @computed_field
-    @cached_property
-    def _with_parents(self) -> pl.DataFrame | pl.LazyFrame:
-        df = self._aggregated
-
-        for parent_name, _ in self._parent_to_columns:
-            parent_model = self._relationships[parent_name].mapper.class_
-            df = df.with_columns(
-                pl.col(parent_name).map_elements(
-                    function=lambda data: construct_or_retrieve_model_instance(
-                        data, session=self.session, model=parent_model
-                    )
+        for relationship_name, column_list in self._relationship_to_columns:
+            expression = (
+                pl.struct(column_list)
+                .alias(relationship_name)
+                .struct.rename_fields(
+                    [col.removeprefix(f'{relationship_name}.') for col in column_list]
                 )
             )
 
-        return df
+            if (
+                self._relationships[relationship_name].direction
+                == RelationshipDirection.MANYTOONE
+            ):
+                expression = expression.first()
 
-    def to_db(self):
-        df = self._with_parents
+            expressions.append(expression)
 
-        df_as_structs = df.with_columns(pl.struct(pl.all()).alias(self.model.__name__))
+        return (
+            self._renamed.group_by(self._self_columns)
+            .agg(*expressions)
+            .with_row_index(offset=1)
+        )
+
+    @computed_field
+    @cached_property
+    def _with_ids(self) -> pl.DataFrame:
+        if (
+            'id' not in self.model.init_field_names()
+            or 'id' in self._aggregated.columns
+        ):
+            return self._aggregated
+
+        # This line is just for IDE support
+        if not issubclass(self.model, Data):
+            return self._aggregated
+
+        year_indicator_length = 2
+        pad_length = (
+            self.model.id_length - len(self.model.id_prefix) - year_indicator_length
+        )
+
+        id_expression = (
+            self.model.id_prefix
+            + pl.col(self.model.id_date_col).dt.to_string('%y')
+            + pl.col('index').cast(str).str.pad_start(pad_length, fill_char='0')
+        )
+        return self._aggregated.with_columns(id_expression)
+
+    @computed_field
+    @cached_property
+    # TODO: this is pretty bad. Eventually refactor and make it more efficient
+    def _with_children_ids(self) -> pl.DataFrame:
+        with_children_ids = self._with_ids
+
+        for relationship_name, column_list in self._relationship_to_columns:
+            relationship = self._relationships[relationship_name]
+            relationship_model = relationship.mapper.class_
+
+            if (
+                relationship.direction == RelationshipDirection.MANYTOONE
+                or 'id' in column_list
+                or not issubclass(relationship_model, Data)
+            ):
+                continue
+
+            last_id_number = 1
+            updated_relationship_column = []
+
+            for child_struct_list in self._with_ids.get_column(relationship_name):
+                child_struct_list: list[dict]
+
+                id_date_col_idx = [
+                    i
+                    for i in child_struct_list[0].keys()
+                    if i == relationship_model.id_date_col
+                ][0]
+
+                unique_sorted_struct_as_tuples = sorted(
+                    {tuple(struct.items()) for struct in child_struct_list},
+                    key=lambda tup: tup[id_date_col_idx],
+                )
+                structs_with_ids = []
+
+                for struct_tuple in unique_sorted_struct_as_tuples:
+                    struct = dict(struct_tuple)
+
+                    year_indicator_length = 2
+                    pad_length = (
+                        relationship_model.id_length
+                        - len(relationship_model.id_prefix)
+                        - year_indicator_length
+                    )
+
+                    struct['id'] = (
+                        relationship_model.id_prefix
+                        + str(struct[relationship_model.id_date_col].year)
+                        + f'{last_id_number:0{pad_length}}'
+                    )
+
+                    structs_with_ids.append(struct)
+                    last_id_number += 1
+
+                updated_relationship_column.append(structs_with_ids)
+
+            new_relationship_column = pl.Series(
+                name=relationship_name, values=updated_relationship_column
+            )
+
+            with_children_ids = with_children_ids.with_columns(new_relationship_column)
+
+        return with_children_ids
+
+    @computed_field
+    @cached_property
+    def _with_relationships(self) -> pl.DataFrame:
+        with_relationships = self._with_children_ids
+
+        for relationship_name, _ in self._relationship_to_columns:
+            relationship = self._relationships[relationship_name]
+            relationship_model = relationship.mapper.class_
+
+            if relationship.direction == RelationshipDirection.MANYTOONE:
+                with_relationships = with_relationships.with_columns(
+                    pl.col(relationship_name).map_elements(
+                        function=lambda struct: get_model_instance_from_db(
+                            struct, model=relationship_model, session=self.session
+                        )
+                    )
+                )
+                continue
+
+            child_column = pl.Series(
+                name=relationship_name,
+                values=(
+                    [
+                        get_model_instance_from_db(
+                            child_struct, model=relationship_model, session=self.session
+                        )
+                        for child_struct in child_struct_list
+                    ]
+                    for child_struct_list in with_relationships.get_column(
+                        relationship_name
+                    )
+                ),
+            )
+            with_relationships = with_relationships.with_columns(child_column)
+
+        return with_relationships
+
+    def to_db(self) -> None:
+        df_as_structs = self._with_relationships.with_columns(
+            pl.struct(pl.all()).alias(self.model.__name__)
+        )
+
         df_as_models = df_as_structs.select(
             pl.col(self.model.__name__).map_elements(
-                function=lambda data: construct_or_retrieve_model_instance(
+                function=lambda data: get_model_instance_from_db(
                     data, session=self.session, model=self.model
                 )
             )
-        )
-
-        df_as_models = (
-            df_as_models.collect()
-            if isinstance(df_as_models, pl.LazyFrame)
-            else df_as_models
         )
 
         for model_instance in df_as_models.get_column(self.model.__name__):

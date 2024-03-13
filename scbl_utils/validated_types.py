@@ -1,3 +1,4 @@
+from datetime import date
 from functools import cache
 from typing import Annotated
 
@@ -46,9 +47,9 @@ DBTarget = Annotated[
 
 
 def _validate_type_string(string: str):
-    valid_types = ('bool', 'float', 'int', 'str')
+    valid_types = ('bool', 'float', 'int', 'str', 'date.fromisoformat')
 
-    if string not in ('bool', 'float', 'int', 'str'):
+    if string not in valid_types:
         raise ValueError(
             f'Type-defining string must be one of {valid_types}, not {string}'
         )

@@ -125,7 +125,9 @@ class SCBLUtils:
 
             with self._db_sessionmaker.begin() as session:
                 data = pl.read_csv(data_path)
-                DataToInsert2(data=data, session=session, model=model, source=data_path)
+                DataToInsert2(
+                    data=data, session=session, model=model, source=data_path
+                ).to_db()
 
     def _gdrive_to_db(self):
         for config in self._tracking_sheet_configs:

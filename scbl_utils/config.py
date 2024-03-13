@@ -29,7 +29,6 @@ class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
     column_to_type: dict[str, TypeString] = {}
     empty_means_drop: set[str] = set()
     header: NonNegativeInt = 0
-    index_col: str | None = None
     replace: dict[str, Any] = {}
 
     @model_validator(mode='after')

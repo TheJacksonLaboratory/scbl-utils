@@ -1,0 +1,2 @@
+ChromiumDataSet.name,ChromiumDataSet.ilab_request_id,ChromiumDataSet.date_initialized,ChromiumDataSet.assay.name,ChromiumDataSet.lab.pi.email,ChromiumDataSet.submitter.email,ChromiumDataSet.libraries.id,ChromiumDataSet.date_constructed,ChromiumDataSet.libraries.status,ChromiumDataSet.samples.name,ChromiumDataSet.samples.date_received
+dataset0,ilab_request_id0,1999-01-01,Flex,ahmed.said@jax.org,ahmed.said@jax.org,SC9900000,1999-01-01,status,dataset0,1999-01-01
