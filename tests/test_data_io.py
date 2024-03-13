@@ -35,11 +35,6 @@ class TestDataToInsert:
             print(
                 DataToInsert2(
                     data=data, model=ChromiumDataSet, session=session, source='test'
-                )._aggregated.get_column('libraries')[0][0]
-            )
-            print(
-                DataToInsert2(
-                    data=data, model=ChromiumDataSet, session=session, source='test'
                 )._with_relationships
             )
 

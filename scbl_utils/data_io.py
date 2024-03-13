@@ -298,8 +298,8 @@ class DataToInsert2(
 
                 id_date_col_idx = [
                     i
-                    for i in child_struct_list[0].keys()
-                    if i == relationship_model.id_date_col
+                    for i, field in enumerate(child_struct_list[0].keys())
+                    if field == relationship_model.id_date_col
                 ][0]
 
                 unique_sorted_struct_as_tuples = sorted(
@@ -320,7 +320,7 @@ class DataToInsert2(
 
                     struct['id'] = (
                         relationship_model.id_prefix
-                        + str(struct[relationship_model.id_date_col].year)
+                        + str(struct[relationship_model.id_date_col].strftime('%y'))
                         + f'{last_id_number:0{pad_length}}'
                     )
 

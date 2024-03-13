@@ -71,7 +71,10 @@ def get_model_instance_from_db(
         case 0:
             try:
                 return model_mapper.class_(**data)
-            except:
+            except Exception as e:
+                print(data)
+                print(model)
+                print(e)
                 return
         case 1:
             return matches[0]
