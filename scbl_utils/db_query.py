@@ -58,6 +58,9 @@ def get_model_instance_from_db(
     where_conditions = []
 
     for col, val in data.items():
+        if not model_mapper.attrs.has_key(col):
+            continue
+
         where = construct_where_condition(col, value=val, model_mapper=model_mapper)
         where_conditions.append(where)
 
@@ -70,10 +73,15 @@ def get_model_instance_from_db(
     match len(matches):
         case 0:
             try:
-                return model_mapper.class_(**data)
+                return model_mapper.class_(
+                    **{
+                        key: val
+                        for key, val in data.items()
+                        if key in model.init_field_names()
+                    }
+                )
             except Exception as e:
                 print(data)
-                print(model)
                 print(e)
                 return
         case 1:

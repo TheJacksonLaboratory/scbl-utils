@@ -24,7 +24,7 @@ from .gdrive import GoogleSheetsResponse
 from .pydantic_model_config import strict_config
 
 console = Console()
-install(console=console, max_frames=1)
+install(console=console)
 
 
 @dataclass(config=strict_config, frozen=True)
@@ -85,7 +85,7 @@ class SCBLUtils:
 
     @computed_field
     @cached_property
-    def _google_resource(self: 'SCBLUtils') -> Resource:
+    def _google_sheets_resource(self: 'SCBLUtils') -> Resource:
         credentials = ServiceAccountCredentials.from_json_keyfile_name(
             self._gdrive_credential_path
         )
@@ -124,7 +124,7 @@ class SCBLUtils:
                 continue
 
             with self._db_sessionmaker.begin() as session:
-                data = pl.read_csv(data_path)
+                data = pl.read_csv(data_path).with_columns(pl.all().replace('', None))
                 DataToInsert2(
                     data=data, session=session, model=model, source=data_path
                 ).to_db()
@@ -133,12 +133,12 @@ class SCBLUtils:
         for config in self._tracking_sheet_configs:
             # TODO: make this more robust by keeping a record of what we have ingested from google drive in the database
             google_sheet_response = (
-                self._google_resource.spreadsheets()
+                self._google_sheets_resource.spreadsheets()
                 .values()
                 .batchGet(
                     spreadsheetId=config.spreadsheet_id,
                     ranges=config.worksheet_configs.keys(),
-                    majorDimension='COLUMNS',
+                    majorDimension='ROWS',
                 )
                 .execute()
             )

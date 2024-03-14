@@ -49,6 +49,7 @@ class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
     worksheet_configs: dict[str, GoogleWorksheetConfig]
     merge_strategies: dict[DBModelName, MergeStrategy] = {}
 
+    # TODO: add more validation here. Make sure that all the
     @model_validator(mode='after')
     def validate_worksheet_ids(
         self: 'GoogleSpreadsheetConfig',
@@ -68,5 +69,5 @@ class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
         return self
 
 
-class SystemConfig(StrictBaseModel, frozen=True, strict=True):
+class SystemConfig(StrictBaseModel, frozen=True):
     delivery_parent_dir: DirectoryPath = Path('/sc/service/delivery/')

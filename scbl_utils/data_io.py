@@ -242,11 +242,8 @@ class DataToInsert2(
 
             expressions.append(expression)
 
-        return (
-            self._renamed.group_by(self._self_columns)
-            .agg(*expressions)
-            .with_row_index(offset=1)
-        )
+        aggregated = self._renamed.group_by(self._self_columns).agg(*expressions)
+        return aggregated.with_row_index(offset=1)
 
     @computed_field
     @cached_property
@@ -376,28 +373,18 @@ class DataToInsert2(
 
     def to_db(self) -> None:
         df_as_structs = self._with_relationships.with_columns(
-            pl.struct(pl.all()).alias(self.model.__name__)
+            pl.struct(pl.all()).alias(f'{self.model.__name__}_struct')
         )
 
         df_as_models = df_as_structs.select(
-            pl.col(self.model.__name__).map_elements(
+            pl.col(f'{self.model.__name__}_struct')
+            .map_elements(
                 function=lambda data: get_model_instance_from_db(
                     data, session=self.session, model=self.model
                 )
             )
+            .alias(self.model.__name__)
         )
 
         for model_instance in df_as_models.get_column(self.model.__name__):
             self.session.add(model_instance)
-
-            try:
-                self.session.flush()
-            except IntegrityError:
-                self.session.expunge(model_instance)
-                continue
-
-
-# TODO: next steps
-# constuct parent dataframe as a groupby of child dataframes, aggregating the children's attributes
-# rename columns in this new dataframe
-# create a list of lists of children from these child attributes for each parent (example: dataset libraries samples)
