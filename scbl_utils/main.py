@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
 from .config import DBConfig, GoogleSpreadsheetConfig, SystemConfig
-from .data_io import DataToInsert, DataToInsert2
+from .data_io import DataToInsert2
 from .gdrive import GoogleSheetsResponse
 from .pydantic_model_config import strict_config
 

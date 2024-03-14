@@ -10,11 +10,13 @@ from sqlalchemy.orm import Mapper, Session
 from .validated_types import DBModelName
 
 
-@cache
 def construct_where_condition(
     attribute_name: str, value: Any, model_mapper: Mapper[Base]
 ):
     if '.' not in attribute_name:
+        if attribute_name not in model_mapper.attrs.keys():
+            return
+
         attribute = model_mapper.attrs[attribute_name].class_attribute
         return attribute.ilike(value) if isinstance(value, str) else attribute == value
 
@@ -29,24 +31,24 @@ def construct_where_condition(
     return parent.has(parent_where_condition)
 
 
-@cache
-@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-def get_matching_obj(
-    columns: tuple[str, ...], row: tuple, session: Session, model_mapper: Mapper[Base]
-) -> Sequence[Base]:
-    where_conditions = []
+# @cache
+# @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+# def get_matching_obj(
+#     columns: tuple[str, ...], row: tuple, session: Session, model_mapper: Mapper[Base]
+# ) -> Sequence[Base]:
+#     where_conditions = []
 
-    for col, val in zip(columns, row, strict=True):
-        where = construct_where_condition(col, value=val, model_mapper=model_mapper)
-        where_conditions.append(where)
+#     for col, val in zip(columns, row, strict=True):
+#         where = construct_where_condition(col, value=val, model_mapper=model_mapper)
+#         where_conditions.append(where) if where is not None else None
 
-    if not where_conditions:
-        return []
+#     if not where_conditions:
+#         return []
 
-    stmt = select(model_mapper).where(*where_conditions)
-    matches = session.execute(stmt).scalars().all()
+#     stmt = select(model_mapper).where(*where_conditions)
+#     matches = session.execute(stmt).scalars().all()
 
-    return matches
+#     return matches
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
@@ -58,10 +60,14 @@ def get_model_instance_from_db(
     where_conditions = []
 
     for col, val in data.items():
-        if not model_mapper.attrs.has_key(col):
+        if val is None:
             continue
 
         where = construct_where_condition(col, value=val, model_mapper=model_mapper)
+
+        if where is None:
+            continue
+
         where_conditions.append(where)
 
     if not where_conditions:
@@ -70,21 +76,7 @@ def get_model_instance_from_db(
     stmt = select(model_mapper).where(*where_conditions)
     matches = session.execute(stmt).scalars().all()
 
-    match len(matches):
-        case 0:
-            try:
-                return model_mapper.class_(
-                    **{
-                        key: val
-                        for key, val in data.items()
-                        if key in model.init_field_names()
-                    }
-                )
-            except Exception as e:
-                print(data)
-                print(e)
-                return
-        case 1:
-            return matches[0]
-        case _:
-            return
+    if len(matches) == 1:
+        return matches[0]
+
+    return

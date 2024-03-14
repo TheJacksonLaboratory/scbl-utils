@@ -6,6 +6,7 @@ from typing import Any
 
 import polars as pl
 from pydantic import computed_field, field_validator, model_validator
+from requests import session
 from scbl_db import Base
 from scbl_db.bases import Base, Data
 from sqlalchemy import inspect, select
@@ -13,149 +14,148 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapper, RelationshipDirection, RelationshipProperty, Session
 from sqlalchemy.util import ReadOnlyProperties
 
-from .db_query import get_matching_obj, get_model_instance_from_db
+from .db_query import get_model_instance_from_db
 from .pydantic_model_config import StrictBaseModel
 from .validated_types import DBTarget, _validate_db_target
 
+# class DataToInsert(
+#     StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
+# ):
+#     columns: tuple[DBTarget, ...]
+#     data: Iterable[Iterable]
+#     model: type[Base]
+#     session: Session
+#     source: str | Path
 
-class DataToInsert(
-    StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
-):
-    columns: tuple[DBTarget, ...]
-    data: Iterable[Iterable]
-    model: type[Base]
-    session: Session
-    source: str | Path
+#     @model_validator(mode='after')
+#     def validate_columns(self: 'DataToInsert') -> 'DataToInsert':
+#         if not all(col.startswith(self.model.__name__) for col in self.columns):
+#             raise ValueError(
+#                 f'All column names in {self.source} must start with {self.model.__name__}'
+#             )
 
-    @model_validator(mode='after')
-    def validate_columns(self: 'DataToInsert') -> 'DataToInsert':
-        if not all(col.startswith(self.model.__name__) for col in self.columns):
-            raise ValueError(
-                f'All column names in {self.source} must start with {self.model.__name__}'
-            )
+#         return self
 
-        return self
+#     @computed_field
+#     @cached_property
+#     def _relative_columns(self: 'DataToInsert') -> tuple[str, ...]:
+#         return tuple(
+#             col.removeprefix(f'{self.model.__name__}.') for col in self.columns
+#         )
 
-    @computed_field
-    @cached_property
-    def _relative_columns(self: 'DataToInsert') -> tuple[str, ...]:
-        return tuple(
-            col.removeprefix(f'{self.model.__name__}.') for col in self.columns
-        )
+#     @computed_field
+#     @cached_property
+#     def _columns_as_set(self) -> set[str]:
+#         return set(self._relative_columns)
 
-    @computed_field
-    @cached_property
-    def _columns_as_set(self) -> set[str]:
-        return set(self._relative_columns)
+#     @computed_field
+#     @cached_property
+#     def _parent_to_columns(self) -> dict[str, tuple[int, ...]]:
+#         parent_columns = sorted(
+#             (
+#                 (i, col)
+#                 for (i, col) in enumerate(self._relative_columns)
+#                 if col.count('.') > 0
+#                 and col.split('.')[0] in self.model.init_field_names()
+#             ),
+#             key=lambda idx_col: idx_col[1],
+#         )
 
-    @computed_field
-    @cached_property
-    def _parent_to_columns(self) -> dict[str, tuple[int, ...]]:
-        parent_columns = sorted(
-            (
-                (i, col)
-                for (i, col) in enumerate(self._relative_columns)
-                if col.count('.') > 0
-                and col.split('.')[0] in self.model.init_field_names()
-            ),
-            key=lambda idx_col: idx_col[1],
-        )
+#         return {
+#             parent_name: tuple(i for i, col in column_list)
+#             for parent_name, column_list in groupby(
+#                 parent_columns, key=lambda idx_col: idx_col[1].split('.')[0]
+#             )
+#         }
 
-        return {
-            parent_name: tuple(i for i, col in column_list)
-            for parent_name, column_list in groupby(
-                parent_columns, key=lambda idx_col: idx_col[1].split('.')[0]
-            )
-        }
+#     @computed_field
+#     @property
+#     def _cleaned_data(self) -> Generator[tuple, None, None]:
+#         return (
+#             tuple(val if val != '' else None for val in value_list)
+#             for value_list in self.data
+#         )
 
-    @computed_field
-    @property
-    def _cleaned_data(self) -> Generator[tuple, None, None]:
-        return (
-            tuple(val if val != '' else None for val in value_list)
-            for value_list in self.data
-        )
+#     @cache
+#     def _assign_parent(
+#         self,
+#         row: tuple,
+#         parent_column_idxs: tuple[int, ...],
+#         parent_mapper: Mapper[Base],
+#         parent_name: str,
+#     ) -> Sequence[Base]:
+#         parent_columns = tuple(
+#             self._relative_columns[i].removeprefix(f'{parent_name}.')
+#             for i in parent_column_idxs
+#             if row[i] is not None
+#         )
+#         parent_row = tuple(row[i] for i in parent_column_idxs if row[i] is not None)
 
-    @cache
-    def _assign_parent(
-        self,
-        row: tuple,
-        parent_column_idxs: tuple[int, ...],
-        parent_mapper: Mapper[Base],
-        parent_name: str,
-    ) -> Sequence[Base]:
-        parent_columns = tuple(
-            self._relative_columns[i].removeprefix(f'{parent_name}.')
-            for i in parent_column_idxs
-            if row[i] is not None
-        )
-        parent_row = tuple(row[i] for i in parent_column_idxs if row[i] is not None)
+#         return get_matching_obj(
+#             columns=parent_columns,
+#             row=parent_row,
+#             session=self.session,
+#             model_mapper=parent_mapper,
+#         )
 
-        return get_matching_obj(
-            columns=parent_columns,
-            row=parent_row,
-            session=self.session,
-            model_mapper=parent_mapper,
-        )
+#     @cache
+#     def _row_to_model(self, row: tuple) -> Base | None:
+#         relationships = inspect(self.model).relationships
+#         row_parents: dict[str, Base | None] = {}
 
-    @cache
-    def _row_to_model(self, row: tuple) -> Base | None:
-        relationships = inspect(self.model).relationships
-        row_parents: dict[str, Base | None] = {}
+#         for parent_name, parent_column_idxs in self._parent_to_columns.items():
+#             if parent_name in self._relative_columns:
+#                 continue
 
-        for parent_name, parent_column_idxs in self._parent_to_columns.items():
-            if parent_name in self._relative_columns:
-                continue
+#             parent_mapper = relationships[parent_name].mapper
+#             found_parents = self._assign_parent(
+#                 row,
+#                 parent_column_idxs=parent_column_idxs,
+#                 parent_mapper=parent_mapper,
+#                 parent_name=parent_name,
+#             )
 
-            parent_mapper = relationships[parent_name].mapper
-            found_parents = self._assign_parent(
-                row,
-                parent_column_idxs=parent_column_idxs,
-                parent_mapper=parent_mapper,
-                parent_name=parent_name,
-            )
+#             if len(found_parents) != 1:
+#                 if parent_name in self.model.required_init_field_names():
+#                     break
+#                 else:
+#                     row_parents[parent_name] = None
 
-            if len(found_parents) != 1:
-                if parent_name in self.model.required_init_field_names():
-                    break
-                else:
-                    row_parents[parent_name] = None
+#             else:
+#                 row_parents[parent_name] = found_parents[0]
 
-            else:
-                row_parents[parent_name] = found_parents[0]
+#         row_as_dict = {
+#             col: val
+#             for col, val in zip(self._relative_columns, row, strict=True)
+#             if col in self.model.init_field_names()
+#         }
+#         model_initializer = row_as_dict | row_parents
 
-        row_as_dict = {
-            col: val
-            for col, val in zip(self._relative_columns, row, strict=True)
-            if col in self.model.init_field_names()
-        }
-        model_initializer = row_as_dict | row_parents
+#         if model_initializer.keys() < self.model.required_init_field_names():
+#             return
 
-        if model_initializer.keys() < self.model.required_init_field_names():
-            return
+#         return self.model(**model_initializer)
 
-        return self.model(**model_initializer)
+#     @computed_field
+#     @cached_property
+#     def _model_instances_in_db(self) -> Sequence[Base]:
+#         return self.session.execute(select(self.model)).scalars().all()
 
-    @computed_field
-    @cached_property
-    def _model_instances_in_db(self) -> Sequence[Base]:
-        return self.session.execute(select(self.model)).scalars().all()
+#     # TODO: add some way to track which rows were not added
+#     def to_db(self) -> None:
+#         for row in self._cleaned_data:
+#             model_instance = self._row_to_model(row)
 
-    # TODO: add some way to track which rows were not added
-    def to_db(self) -> None:
-        for row in self._cleaned_data:
-            model_instance = self._row_to_model(row)
+#             if model_instance in self._model_instances_in_db or model_instance is None:
+#                 continue
 
-            if model_instance in self._model_instances_in_db or model_instance is None:
-                continue
+#             self.session.add(model_instance)
 
-            self.session.add(model_instance)
-
-            try:
-                self.session.flush()
-            except IntegrityError:
-                self.session.expunge(model_instance)
-                continue
+#             try:
+#                 self.session.flush()
+#             except IntegrityError:
+#                 self.session.expunge(model_instance)
+#                 continue
 
 
 class DataToInsert2(
@@ -357,8 +357,12 @@ class DataToInsert2(
                 name=relationship_name,
                 values=(
                     [
-                        get_model_instance_from_db(
-                            child_struct, model=relationship_model, session=self.session
+                        relationship_model(
+                            **{
+                                key: val
+                                for key, val in child_struct.items()
+                                if key in relationship_model.init_field_names()
+                            }
                         )
                         for child_struct in child_struct_list
                     ]
@@ -371,20 +375,38 @@ class DataToInsert2(
 
         return with_relationships
 
+    @computed_field
+    @property
+    def _model_instances_in_db(self) -> Sequence[Base]:
+        return self.session.execute(select(self.model)).scalars().all()
+
     def to_db(self) -> None:
-        df_as_structs = self._with_relationships.with_columns(
-            pl.struct(pl.all()).alias(f'{self.model.__name__}_struct')
-        )
+        df_as_structs = self._with_relationships.to_dicts()
 
-        df_as_models = df_as_structs.select(
-            pl.col(f'{self.model.__name__}_struct')
-            .map_elements(
-                function=lambda data: get_model_instance_from_db(
-                    data, session=self.session, model=self.model
-                )
-            )
-            .alias(self.model.__name__)
-        )
+        for struct in df_as_structs:
+            init_data = {
+                key: val
+                for key, val in struct.items()
+                if key in self.model.init_field_names()
+            }
+            new_model_instance = self.model(**init_data)
 
-        for model_instance in df_as_models.get_column(self.model.__name__):
-            self.session.add(model_instance)
+            if new_model_instance in self._model_instances_in_db:
+                continue
+
+            self.session.add(new_model_instance)
+
+            self.session.flush()
+
+        # df_as_models = df_as_structs.select(
+        #     pl.col(f'{self.model.__name__}_struct')
+        #     .map_elements(
+        #         function=lambda data: get_model_instance_from_db(
+        #             data, session=self.session, model=self.model
+        #         )
+        #     )
+        #     .alias(self.model.__name__)
+        # )
+
+        # for model_instance in df_as_models.get_column(self.model.__name__):
+        #     self.session.add(model_instance)
