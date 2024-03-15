@@ -128,9 +128,13 @@ class SCBLUtils:
                 if data_path.name == 'ChromiumTag.csv':
                     continue
                 data = pl.read_csv(data_path).with_columns(pl.all().replace('', None))
-                DataToInsert2(
+                skipped_data = DataToInsert2(
                     data=data, session=session, model=model, source=data_path
                 ).to_db()
+
+                for db_model, skipped_data_list in skipped_data.items():
+                    print(db_model)
+                    print(*skipped_data_list, sep='\n')
 
     def _gdrive_to_db(self):
         for config in self._tracking_sheet_configs:
@@ -156,12 +160,20 @@ class SCBLUtils:
                     if model_name not in spreadsheet_as_dfs:
                         continue
 
-                    DataToInsert2(
+                    skipped_data = DataToInsert2(
                         data=spreadsheet_as_dfs[model_name],
                         model=model,
                         session=session,
                         source=config.spreadsheet_id,
                     ).to_db()
+
+                    for db_model, skipped_data_list in skipped_data.items():
+                        if db_model == 'ChromiumLibrary':
+                            print(db_model, len(skipped_data_list), end='\n\n')
+                            print(*skipped_data_list, sep='\n\n', end='\n\n\n')
+                        else:
+                            print(db_model, len(skipped_data_list), end='\n\n')
+                            print(*skipped_data_list[:20], sep='\n\n', end='\n\n\n')
 
 
 def main():

@@ -186,6 +186,11 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
+    def _skipped_data(self) -> dict[str, list[tuple[dict[str, Any], str]]]:
+        return {}
+
+    @computed_field
+    @cached_property
     def _renamed(self) -> pl.DataFrame:
         return self.data.rename(
             {
@@ -269,7 +274,7 @@ class DataToInsert2(
             + pl.col(self.model.id_date_col).dt.to_string('%y')
             + pl.col('index').cast(str).str.pad_start(pad_length, fill_char='0')
         )
-        return self._aggregated.with_columns(id_expression)
+        return self._aggregated.with_columns(id_expression.alias('id'))
 
     @computed_field
     @cached_property
@@ -283,7 +288,6 @@ class DataToInsert2(
 
             if (
                 relationship.direction == RelationshipDirection.MANYTOONE
-                or f'{relationship_name}.id' in column_list
                 or not issubclass(relationship_model, Data)
             ):
                 continue
@@ -319,6 +323,10 @@ class DataToInsert2(
                         - year_indicator_length
                     )
 
+                    if 'id' in struct:
+                        structs_with_ids.append(struct)
+                        continue
+
                     struct['id'] = (
                         relationship_model.id_prefix
                         + str(struct[relationship_model.id_date_col].strftime('%y'))
@@ -340,42 +348,51 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _with_relationships(self) -> pl.DataFrame:
-        with_relationships = self._with_children_ids
+    def _with_relationships(self) -> list[dict[str, Any]]:
+        with_relationships = self._with_children_ids.to_dicts()
 
         for relationship_name, _ in self._relationship_to_columns:
             relationship = self._relationships[relationship_name]
             relationship_model = relationship.mapper.class_
 
+            # TODO: move around the iterations here
             if relationship.direction == RelationshipDirection.MANYTOONE:
-                with_relationships = with_relationships.with_columns(
-                    pl.col(relationship_name).map_elements(
-                        function=lambda struct: get_model_instance_from_db(
-                            struct, model=relationship_model, session=self.session
-                        )
+                for row in with_relationships:
+                    new_row = get_model_instance_from_db(
+                        row[relationship_name],
+                        model=relationship_model,
+                        session=self.session,
                     )
-                )
-                continue
+                    if new_row is None:
+                        del row[relationship_name]
+                    else:
+                        row[relationship_name] = new_row
 
-            child_column = pl.Series(
-                name=relationship_name,
-                values=(
-                    [
-                        relationship_model(
-                            **{
-                                key: val
-                                for key, val in child_struct.items()
-                                if key in relationship_model.init_field_names()
-                            }
-                        )
-                        for child_struct in child_struct_list
-                    ]
-                    for child_struct_list in with_relationships.get_column(
-                        relationship_name
-                    )
-                ),
-            )
-            with_relationships = with_relationships.with_columns(child_column)
+            else:
+                for row in with_relationships:
+                    new_row = []
+
+                    for child_struct in row[relationship_name]:
+                        init_data = {
+                            key: val
+                            for key, val in child_struct.items()
+                            if key in relationship_model.init_field_names()
+                        }
+
+                        try:
+                            child_model_instance = relationship_model(**init_data)
+                            new_row.append(child_model_instance)
+                        except Exception as e:
+                            if relationship_model.__name__ in self._skipped_data:
+                                self._skipped_data[relationship_model.__name__].append(
+                                    (child_struct, str(e))
+                                )
+                            else:
+                                self._skipped_data[relationship_model.__name__] = [
+                                    (child_struct, str(e))
+                                ]
+
+                    row[relationship_name] = new_row
 
         return with_relationships
 
@@ -384,23 +401,35 @@ class DataToInsert2(
     def _model_instances_in_db(self) -> Sequence[Base]:
         return self.session.execute(select(self.model)).scalars().all()
 
-    def to_db(self) -> None:
-        df_as_structs = self._with_relationships.to_dicts()
-
-        for struct in df_as_structs:
+    def to_db(self) -> dict[str, list[tuple[dict[str, Any], str]]]:
+        for struct in self._with_relationships:
             init_data = {
                 key: val
                 for key, val in struct.items()
                 if key in self.model.init_field_names()
             }
-            new_model_instance = self.model(**init_data)
 
-            if new_model_instance in self._model_instances_in_db:
+            try:
+                new_model_instance = self.model(**init_data)
+            except Exception as e:
+                if self.model.__name__ in self._skipped_data:
+                    self._skipped_data[self.model.__name__].append((struct, str(e)))
+                else:
+                    self._skipped_data[self.model.__name__] = [(struct, str(e))]
+
+                new_model_instance = None
+
+            if (
+                new_model_instance in self._model_instances_in_db
+                or new_model_instance is None
+            ):
                 continue
 
             self.session.add(new_model_instance)
 
             self.session.flush()
+
+        return self._skipped_data
 
         # df_as_models = df_as_structs.select(
         #     pl.col(f'{self.model.__name__}_struct')

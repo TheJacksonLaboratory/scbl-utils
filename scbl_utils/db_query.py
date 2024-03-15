@@ -3,6 +3,8 @@ from functools import cache
 from typing import Any
 
 from pydantic import ConfigDict, validate_call
+from rich import print as rprint
+from rich.prompt import Prompt
 from scbl_db import ORDERED_MODELS, Base
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Mapper, Session
@@ -76,7 +78,16 @@ def get_model_instance_from_db(
     stmt = select(model_mapper).where(*where_conditions)
     matches = session.execute(stmt).scalars().all()
 
+    if len(matches) == 0:
+        return
+
     if len(matches) == 1:
         return matches[0]
 
-    return
+    rprint(*matches, sep='\n')
+    choice = Prompt.ask(
+        f'Multiple matches found for {model.__name__}. Which of these is correct?',
+        choices=[str(i) for i, instance in enumerate(matches)],
+    )
+
+    return matches[int(choice)]

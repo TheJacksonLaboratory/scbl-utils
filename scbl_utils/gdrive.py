@@ -51,6 +51,10 @@ class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
         )
 
     def _cast(self, lf: pl.DataFrame, column_to_type: dict[str, type]) -> pl.DataFrame:
+        for col, type_ in column_to_type.items():
+            if type_ == int:
+                lf = lf.with_columns(pl.col(col).str.replace_all(',', ''))
+
         return lf.cast(column_to_type)
 
     def to_lf(self, config: GoogleWorksheetConfig) -> pl.DataFrame:
@@ -85,7 +89,9 @@ class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
                 lf = lfs.get(db_model_name, pl.DataFrame())
 
                 column_data_to_append = sheet_as_lf.select(
-                    pl.col(old_column).replace(column_config.replace).alias(target)
+                    pl.col(old_column)
+                    .alias(target)
+                    .replace(column_config.replace.get(target, {}))
                 )
 
                 lfs[db_model_name] = lf.with_columns(column_data_to_append)
