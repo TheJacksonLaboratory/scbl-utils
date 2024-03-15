@@ -124,6 +124,9 @@ class SCBLUtils:
                 continue
 
             with self._db_sessionmaker.begin() as session:
+                # TODO: this is a hack
+                if data_path.name == 'ChromiumTag.csv':
+                    continue
                 data = pl.read_csv(data_path).with_columns(pl.all().replace('', None))
                 DataToInsert2(
                     data=data, session=session, model=model, source=data_path
@@ -137,7 +140,7 @@ class SCBLUtils:
                 .values()
                 .batchGet(
                     spreadsheetId=config.spreadsheet_id,
-                    ranges=config.worksheet_configs.keys(),
+                    ranges=list(config.worksheet_configs.keys()),
                     majorDimension='ROWS',
                 )
                 .execute()

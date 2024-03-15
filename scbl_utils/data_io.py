@@ -1,4 +1,5 @@
 from collections.abc import Generator, Iterable, Sequence
+from datetime import date
 from functools import cache, cached_property
 from itertools import groupby
 from pathlib import Path
@@ -282,7 +283,7 @@ class DataToInsert2(
 
             if (
                 relationship.direction == RelationshipDirection.MANYTOONE
-                or 'id' in column_list
+                or f'{relationship_name}.id' in column_list
                 or not issubclass(relationship_model, Data)
             ):
                 continue
@@ -307,6 +308,9 @@ class DataToInsert2(
 
                 for struct_tuple in unique_sorted_struct_as_tuples:
                     struct = dict(struct_tuple)
+
+                    if not isinstance(struct[relationship_model.id_date_col], date):
+                        continue
 
                     year_indicator_length = 2
                     pad_length = (

@@ -1,7 +1,7 @@
-from datetime import date
 from functools import cache
 from typing import Annotated
 
+import polars as pl
 from pydantic import AfterValidator, StringConstraints
 from scbl_db import ORDERED_MODELS, Base
 from scbl_db.bases import Base
@@ -47,7 +47,7 @@ DBTarget = Annotated[
 
 
 def _validate_type_string(string: str):
-    valid_types = ('bool', 'float', 'int', 'str', 'date.fromisoformat')
+    valid_types = ('bool', 'float', 'int', 'str', 'pl.Date')
 
     if string not in valid_types:
         raise ValueError(
