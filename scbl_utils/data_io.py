@@ -17,7 +17,7 @@ from sqlalchemy.util import ReadOnlyProperties
 
 from .db_query import get_model_instance_from_db
 from .pydantic_model_config import StrictBaseModel
-from .validated_types import DBTarget, _validate_db_target
+from .validated_types import DBModelName, DBTarget, _validate_db_target
 
 # class DataToInsert(
 #     StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
@@ -166,6 +166,7 @@ class DataToInsert2(
     model: type[Base]
     session: Session
     source: str | Path
+    calling_parent_name: str | None = None
 
     @field_validator('data', mode='after')
     @classmethod
@@ -202,7 +203,20 @@ class DataToInsert2(
     @computed_field
     @cached_property
     def _self_columns(self) -> list[str]:
-        return [column for column in self._renamed.columns if column.count('.') == 0]
+        self_columns = [
+            column for column in self._renamed.columns if column.count('.') == 0
+        ]
+
+        if self.calling_parent_name is not None:
+            self_columns.extend(
+                (
+                    column
+                    for column in self._renamed.columns
+                    if column.startswith(self.calling_parent_name)
+                )
+            )
+
+        return self_columns
 
     @computed_field
     @cached_property
@@ -237,19 +251,27 @@ class DataToInsert2(
         expressions = []
 
         for relationship_name, column_list in self._relationship_to_columns:
-            expression = (
-                pl.struct(column_list)
-                .alias(relationship_name)
-                .struct.rename_fields(
-                    [col.removeprefix(f'{relationship_name}.') for col in column_list]
-                )
-            )
+            if relationship_name == self.calling_parent_name:
+                continue
 
             if (
                 self._relationships[relationship_name].direction
                 == RelationshipDirection.MANYTOONE
             ):
-                expression = expression.first()
+                expression = (
+                    pl.struct(column_list)
+                    .alias(relationship_name)
+                    .struct.rename_fields(
+                        [
+                            col.removeprefix(f'{relationship_name}.')
+                            for col in column_list
+                        ]
+                    )
+                    .first()
+                )
+
+            else:
+                expression = pl.col(column_list)
 
             expressions.append(expression)
 
@@ -258,15 +280,11 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _with_ids(self) -> pl.DataFrame:
-        if (
-            'id' not in self.model.init_field_names()
-            or 'id' in self._aggregated.columns
-        ):
+    def _with_id(self) -> pl.DataFrame:
+        if not issubclass(self.model, Data):
             return self._aggregated
 
-        # This line is just for IDE support
-        if not issubclass(self.model, Data):
+        if 'id' in self._aggregated.columns:
             return self._aggregated
 
         year_indicator_length = 2
@@ -285,11 +303,10 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    # TODO: this is pretty bad. Eventually refactor and make it more efficient
     def _with_children(self) -> pl.DataFrame:
-        df = self._with_ids
+        df = self._with_id
 
-        for relationship_name, _ in self._relationship_to_columns:
+        for relationship_name, column_list in self._relationship_to_columns:
             relationship = self._relationships[relationship_name]
             relationship_model = relationship.mapper.class_
             remote_side = relationship.remote_side
@@ -297,11 +314,12 @@ class DataToInsert2(
             if not df.schema[relationship_name] == pl.List:
                 continue
 
-            child_df = (
-                df.select(pl.col('id').alias(f'{remote_side}.id'), relationship_name)
-                .explode(relationship_name)
-                .unnest(relationship_name)
-            )
+            primary_key_columns = [col.name for col in inspect(self.model).primary_key]
+
+            child_df = df.select(
+                pl.col(primary_key_columns).map_alias(lambda c: f'{remote_side}.{c}'),
+                column_list,
+            ).explode(column_list)
             child_df = child_df.rename(
                 {
                     column: f'{relationship_model}.{column}'
@@ -309,82 +327,29 @@ class DataToInsert2(
                 }
             )
 
-            DataToInsert2(
+            child_df = DataToInsert2(
                 data=child_df,
                 model=relationship_model,
                 session=self.session,
                 source=self.source,
+                calling_parent_name=relationship_name,
             ).to_models()
 
-        with_children_ids = self._with_ids
-
-        for relationship_name, column_list in self._relationship_to_columns:
-            relationship = self._relationships[relationship_name]
-            relationship_model = relationship.mapper.class_
-
-            if (
-                relationship.direction == RelationshipDirection.MANYTOONE
-                or not issubclass(relationship_model, Data)
-            ):
-                continue
-
-            last_id_number = 1
-            updated_relationship_column = []
-
-            for child_struct_list in self._with_ids.get_column(relationship_name):
-                child_struct_list: list[dict]
-
-                id_date_col_idx = [
-                    i
-                    for i, field in enumerate(child_struct_list[0].keys())
-                    if field == relationship_model.id_date_col
-                ][0]
-
-                unique_sorted_struct_as_tuples = sorted(
-                    {tuple(struct.items()) for struct in child_struct_list},
-                    key=lambda tup: tup[id_date_col_idx],
-                )
-                structs_with_ids = []
-
-                for struct_tuple in unique_sorted_struct_as_tuples:
-                    struct = dict(struct_tuple)
-
-                    if not isinstance(struct[relationship_model.id_date_col], date):
-                        continue
-
-                    year_indicator_length = 2
-                    pad_length = (
-                        relationship_model.id_length
-                        - len(relationship_model.id_prefix)
-                        - year_indicator_length
-                    )
-
-                    if 'id' in struct:
-                        structs_with_ids.append(struct)
-                        continue
-
-                    struct['id'] = (
-                        relationship_model.id_prefix
-                        + str(struct[relationship_model.id_date_col].strftime('%y'))
-                        + f'{last_id_number:0{pad_length}}'
-                    )
-
-                    structs_with_ids.append(struct)
-                    last_id_number += 1
-
-                updated_relationship_column.append(structs_with_ids)
-
-            new_relationship_column = pl.Series(
-                name=relationship_name, values=updated_relationship_column
+            df = df.join(
+                child_df,
+                left_on=primary_key_columns,
+                right_on=[
+                    column
+                    for column in child_df.columns
+                    if column.startswith(remote_side)
+                ],
             )
 
-            with_children_ids = with_children_ids.with_columns(new_relationship_column)
-
-        return with_children_ids
+        return df
 
     @computed_field
     @cached_property
-    def _with_relationships(self) -> list[dict[str, Any]]:
+    def _with_parents(self) -> list[dict[str, Any]]:
         with_relationships = self._with_children_ids.to_dicts()
 
         for relationship_name, _ in self._relationship_to_columns:
@@ -438,7 +403,7 @@ class DataToInsert2(
         return self.session.execute(select(self.model)).scalars().all()
 
     def to_db(self) -> dict[str, list[tuple[dict[str, Any], str]]]:
-        for struct in self._with_relationships:
+        for struct in self._with_parents:
             init_data = {
                 key: val
                 for key, val in struct.items()

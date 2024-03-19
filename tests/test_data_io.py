@@ -35,7 +35,7 @@ class TestDataToInsert:
             print(
                 DataToInsert2(
                     data=data, model=ChromiumDataSet, session=session, source='test'
-                )._with_relationships
+                )._with_parents
             )
 
         assert False

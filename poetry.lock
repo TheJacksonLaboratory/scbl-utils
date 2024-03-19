@@ -1068,13 +1068,13 @@ pyasn1 = ">=0.1.3"
 
 [[package]]
 name = "scbl-db"
-version = "0.1.14"
+version = "0.1.15"
 description = "The ORM of the sample-tracking database used at the Single Cell Biology Laboratory at the Jackson Laboratory. This ORM is currently incomplete - it only supports a subset of the platforms available at the Single Cell Biology Laboratory."
 optional = false
 python-versions = ">=3.12,<3.13"
 files = [
-    {file = "scbl_db-0.1.14-py3-none-any.whl", hash = "sha256:5fc8f15128c3addd4ce5c9699d9aeae794bd6579d9b0a66b4d25f394b57ae29a"},
-    {file = "scbl_db-0.1.14.tar.gz", hash = "sha256:56c766fc715fcb54e0cc0841ec2ac0c7e434244c5582d19e230b77fc851291dc"},
+    {file = "scbl_db-0.1.15-py3-none-any.whl", hash = "sha256:d9be973ed3f49b3b66e13ba0159b6b3e484af9d9d76b0ae27ce3dbd6564937d2"},
+    {file = "scbl_db-0.1.15.tar.gz", hash = "sha256:23745c1c9a94b40db7438f751d26417905a60edca57133930ee4801610af450e"},
 ]
 
 [package.dependencies]
@@ -1272,4 +1272,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12,<3.13"
-content-hash = "331f1a8d11a4880b864f615d3c6fb4152c0ff6ccdd41f52badfaa9cf17a5bd1a"
+content-hash = "fc7761d965de31d140c5841431f89b47099d06570dd55d449dfc6f6db112075c"
