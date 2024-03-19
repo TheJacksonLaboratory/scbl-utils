@@ -228,6 +228,11 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
+    def _index_column(self) -> str:
+        return f'{self.model.__name__}_index'
+
+    @computed_field
+    @cached_property
     def _aggregated(self) -> pl.DataFrame:
         expressions = []
 
@@ -249,7 +254,7 @@ class DataToInsert2(
             expressions.append(expression)
 
         aggregated = self._renamed.group_by(self._self_columns).agg(*expressions)
-        return aggregated.with_row_index(offset=1)
+        return aggregated.with_row_index(name=self._index_column, offset=1)
 
     @computed_field
     @cached_property
@@ -272,14 +277,45 @@ class DataToInsert2(
         id_expression = (
             self.model.id_prefix
             + pl.col(self.model.id_date_col).dt.to_string('%y')
-            + pl.col('index').cast(str).str.pad_start(pad_length, fill_char='0')
+            + pl.col(self._index_column)
+            .cast(str)
+            .str.pad_start(pad_length, fill_char='0')
         )
         return self._aggregated.with_columns(id_expression.alias('id'))
 
     @computed_field
     @cached_property
     # TODO: this is pretty bad. Eventually refactor and make it more efficient
-    def _with_children_ids(self) -> pl.DataFrame:
+    def _with_children(self) -> pl.DataFrame:
+        df = self._with_ids
+
+        for relationship_name, _ in self._relationship_to_columns:
+            relationship = self._relationships[relationship_name]
+            relationship_model = relationship.mapper.class_
+            remote_side = relationship.remote_side
+
+            if not df.schema[relationship_name] == pl.List:
+                continue
+
+            child_df = (
+                df.select(pl.col('id').alias(f'{remote_side}.id'), relationship_name)
+                .explode(relationship_name)
+                .unnest(relationship_name)
+            )
+            child_df = child_df.rename(
+                {
+                    column: f'{relationship_model}.{column}'
+                    for column in child_df.columns
+                }
+            )
+
+            DataToInsert2(
+                data=child_df,
+                model=relationship_model,
+                session=self.session,
+                source=self.source,
+            ).to_models()
+
         with_children_ids = self._with_ids
 
         for relationship_name, column_list in self._relationship_to_columns:
