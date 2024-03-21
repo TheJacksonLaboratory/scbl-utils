@@ -11,7 +11,7 @@ from sqlalchemy import inspect
 @cache
 def _validate_model_field(model: type[Base], field: str):
     if field.count('.') == 0:
-        if field not in model.field_names():
+        if field not in model.dc_field_names():
             raise ValueError(f'{field} is not a field of {model.__name__}')
 
         return

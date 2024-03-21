@@ -13,7 +13,7 @@ class InsertableData(TypedDict):
 
 
 class GoogleApiResource(Protocol):
-    """Class just for type-hinting. not implementeed yet"""
+    """Class just for type-hinting. not implemented yet"""
 
     pass
 
@@ -24,9 +24,13 @@ class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
     values: list[list[str]]
 
     def _to_raw_lf(self, header: int) -> pl.DataFrame:
-        columns = self.values[header]
-        data = self.values[header + 1 :]
-        data = [row + [''] * (len(columns) - len(row)) for row in data]
+        row_length = max(len(row) for row in self.values)
+        normalized_length_values = [
+            row + [''] * (row_length - len(row)) for row in self.values
+        ]
+
+        columns = normalized_length_values[header]
+        data = normalized_length_values[header + 1 :]
 
         return pl.DataFrame(schema=columns, data=data, orient='row')
 

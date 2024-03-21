@@ -1,162 +1,20 @@
-from collections.abc import Generator, Iterable, Sequence
-from datetime import date
-from functools import cache, cached_property
+from collections.abc import Sequence
+from functools import cached_property
 from itertools import groupby
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 from pydantic import computed_field, field_validator, model_validator
-from requests import session
 from scbl_db import Base
 from scbl_db.bases import Base, Data
 from sqlalchemy import inspect, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Mapper, RelationshipDirection, RelationshipProperty, Session
+from sqlalchemy.orm import RelationshipDirection, RelationshipProperty, Session
 from sqlalchemy.util import ReadOnlyProperties
 
 from .db_query import get_model_instance_from_db
 from .pydantic_model_config import StrictBaseModel
-from .validated_types import DBModelName, DBTarget, _validate_db_target
-
-# class DataToInsert(
-#     StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
-# ):
-#     columns: tuple[DBTarget, ...]
-#     data: Iterable[Iterable]
-#     model: type[Base]
-#     session: Session
-#     source: str | Path
-
-#     @model_validator(mode='after')
-#     def validate_columns(self: 'DataToInsert') -> 'DataToInsert':
-#         if not all(col.startswith(self.model.__name__) for col in self.columns):
-#             raise ValueError(
-#                 f'All column names in {self.source} must start with {self.model.__name__}'
-#             )
-
-#         return self
-
-#     @computed_field
-#     @cached_property
-#     def _relative_columns(self: 'DataToInsert') -> tuple[str, ...]:
-#         return tuple(
-#             col.removeprefix(f'{self.model.__name__}.') for col in self.columns
-#         )
-
-#     @computed_field
-#     @cached_property
-#     def _columns_as_set(self) -> set[str]:
-#         return set(self._relative_columns)
-
-#     @computed_field
-#     @cached_property
-#     def _parent_to_columns(self) -> dict[str, tuple[int, ...]]:
-#         parent_columns = sorted(
-#             (
-#                 (i, col)
-#                 for (i, col) in enumerate(self._relative_columns)
-#                 if col.count('.') > 0
-#                 and col.split('.')[0] in self.model.init_field_names()
-#             ),
-#             key=lambda idx_col: idx_col[1],
-#         )
-
-#         return {
-#             parent_name: tuple(i for i, col in column_list)
-#             for parent_name, column_list in groupby(
-#                 parent_columns, key=lambda idx_col: idx_col[1].split('.')[0]
-#             )
-#         }
-
-#     @computed_field
-#     @property
-#     def _cleaned_data(self) -> Generator[tuple, None, None]:
-#         return (
-#             tuple(val if val != '' else None for val in value_list)
-#             for value_list in self.data
-#         )
-
-#     @cache
-#     def _assign_parent(
-#         self,
-#         row: tuple,
-#         parent_column_idxs: tuple[int, ...],
-#         parent_mapper: Mapper[Base],
-#         parent_name: str,
-#     ) -> Sequence[Base]:
-#         parent_columns = tuple(
-#             self._relative_columns[i].removeprefix(f'{parent_name}.')
-#             for i in parent_column_idxs
-#             if row[i] is not None
-#         )
-#         parent_row = tuple(row[i] for i in parent_column_idxs if row[i] is not None)
-
-#         return get_matching_obj(
-#             columns=parent_columns,
-#             row=parent_row,
-#             session=self.session,
-#             model_mapper=parent_mapper,
-#         )
-
-#     @cache
-#     def _row_to_model(self, row: tuple) -> Base | None:
-#         relationships = inspect(self.model).relationships
-#         row_parents: dict[str, Base | None] = {}
-
-#         for parent_name, parent_column_idxs in self._parent_to_columns.items():
-#             if parent_name in self._relative_columns:
-#                 continue
-
-#             parent_mapper = relationships[parent_name].mapper
-#             found_parents = self._assign_parent(
-#                 row,
-#                 parent_column_idxs=parent_column_idxs,
-#                 parent_mapper=parent_mapper,
-#                 parent_name=parent_name,
-#             )
-
-#             if len(found_parents) != 1:
-#                 if parent_name in self.model.required_init_field_names():
-#                     break
-#                 else:
-#                     row_parents[parent_name] = None
-
-#             else:
-#                 row_parents[parent_name] = found_parents[0]
-
-#         row_as_dict = {
-#             col: val
-#             for col, val in zip(self._relative_columns, row, strict=True)
-#             if col in self.model.init_field_names()
-#         }
-#         model_initializer = row_as_dict | row_parents
-
-#         if model_initializer.keys() < self.model.required_init_field_names():
-#             return
-
-#         return self.model(**model_initializer)
-
-#     @computed_field
-#     @cached_property
-#     def _model_instances_in_db(self) -> Sequence[Base]:
-#         return self.session.execute(select(self.model)).scalars().all()
-
-#     # TODO: add some way to track which rows were not added
-#     def to_db(self) -> None:
-#         for row in self._cleaned_data:
-#             model_instance = self._row_to_model(row)
-
-#             if model_instance in self._model_instances_in_db or model_instance is None:
-#                 continue
-
-#             self.session.add(model_instance)
-
-#             try:
-#                 self.session.flush()
-#             except IntegrityError:
-#                 self.session.expunge(model_instance)
-#                 continue
+from .validated_types import _validate_db_target
 
 
 class DataToInsert2(
@@ -303,144 +161,124 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _with_children(self) -> pl.DataFrame:
-        df = self._with_id
+    def _with_parents(self) -> pl.DataFrame:
+        with_parents = self._with_id
 
-        for relationship_name, column_list in self._relationship_to_columns:
+        for relationship_name, _ in self._relationship_to_columns:
+            if relationship_name == self.calling_parent_name:
+                continue
+
             relationship = self._relationships[relationship_name]
-            relationship_model = relationship.mapper.class_
-            remote_side = relationship.remote_side
 
-            if not df.schema[relationship_name] == pl.List:
+            if relationship.direction != RelationshipDirection.MANYTOONE:
+                continue
+
+            relationship_model = relationship.mapper.class_
+
+            with_parents = with_parents.with_columns(
+                pl.col(relationship_name).map_elements(
+                    lambda struct: get_model_instance_from_db(
+                        struct, model=relationship_model, session=self.session
+                    )
+                )
+            )
+
+        return with_parents
+
+    @computed_field
+    @cached_property
+    def _with_children_as_records(self) -> list[dict[str, Any]]:
+        df_as_dicts = self._with_parents.to_dicts()
+        df = self._with_parents
+
+        for (
+            relationship_name,
+            relationship_column_list,
+        ) in self._relationship_to_columns:
+            relationship = self._relationships[relationship_name]
+
+            if relationship.direction != RelationshipDirection.ONETOMANY:
                 continue
 
             primary_key_columns = [col.name for col in inspect(self.model).primary_key]
 
+            if relationship.back_populates is None:
+                raise NotImplementedError
+
             child_df = df.select(
-                pl.col(primary_key_columns).map_alias(lambda c: f'{remote_side}.{c}'),
-                column_list,
-            ).explode(column_list)
+                pl.col(primary_key_columns).map_alias(
+                    lambda c: f'{relationship.back_populates}.{c}'
+                ),
+                *relationship_column_list,
+            ).explode(relationship_column_list)
+
+            relationship_model: type[Base] = relationship.mapper.class_
+
             child_df = child_df.rename(
                 {
-                    column: f'{relationship_model}.{column}'
+                    column: f'{relationship_model.__name__}.{column.removeprefix(relationship_name + ".")}'
                     for column in child_df.columns
                 }
             )
 
-            child_df = DataToInsert2(
+            child_records = DataToInsert2(
                 data=child_df,
                 model=relationship_model,
                 session=self.session,
                 source=self.source,
-                calling_parent_name=relationship_name,
-            ).to_models()
+                calling_parent_name=relationship.back_populates,
+            )._with_children_as_records
 
-            df = df.join(
-                child_df,
-                left_on=primary_key_columns,
-                right_on=[
-                    column
-                    for column in child_df.columns
-                    if column.startswith(remote_side)
-                ],
-            )
+            for row in df_as_dicts:
+                row[relationship_name] = []
 
-        return df
+                for child_row in child_records:
+                    is_same_row = {row[pk] for pk in primary_key_columns} == {
+                        child_row[f'{relationship.back_populates}.{pk}']
+                        for pk in primary_key_columns
+                    }
 
-    @computed_field
-    @cached_property
-    def _with_parents(self) -> list[dict[str, Any]]:
-        with_relationships = self._with_children_ids.to_dicts()
-
-        for relationship_name, _ in self._relationship_to_columns:
-            relationship = self._relationships[relationship_name]
-            relationship_model = relationship.mapper.class_
-
-            # TODO: move around the iterations here
-            if relationship.direction == RelationshipDirection.MANYTOONE:
-                for row in with_relationships:
-                    new_row = get_model_instance_from_db(
-                        row[relationship_name],
-                        model=relationship_model,
-                        session=self.session,
-                    )
-                    if new_row is None:
-                        del row[relationship_name]
-                    else:
-                        row[relationship_name] = new_row
-
-            else:
-                for row in with_relationships:
-                    new_row = []
-
-                    for child_struct in row[relationship_name]:
-                        init_data = {
-                            key: val
-                            for key, val in child_struct.items()
-                            if key in relationship_model.init_field_names()
-                        }
-
+                    if is_same_row:
                         try:
-                            child_model_instance = relationship_model(**init_data)
-                            new_row.append(child_model_instance)
-                        except Exception as e:
-                            if relationship_model.__name__ in self._skipped_data:
-                                self._skipped_data[relationship_model.__name__].append(
-                                    (child_struct, str(e))
-                                )
-                            else:
-                                self._skipped_data[relationship_model.__name__] = [
-                                    (child_struct, str(e))
-                                ]
-
-                    row[relationship_name] = new_row
-
-        return with_relationships
+                            child_model = relationship_model(
+                                **{
+                                    key: val
+                                    for key, val in child_row.items()
+                                    if key in relationship_model.dc_init_field_names()
+                                }
+                            )
+                            row[relationship_name].append(child_model)
+                        except:
+                            continue
+        return df_as_dicts
 
     @computed_field
     @property
     def _model_instances_in_db(self) -> Sequence[Base]:
         return self.session.execute(select(self.model)).scalars().all()
 
-    def to_db(self) -> dict[str, list[tuple[dict[str, Any], str]]]:
-        for struct in self._with_parents:
+    def to_db(self) -> None:
+        for row in self._with_children_as_records:
             init_data = {
                 key: val
-                for key, val in struct.items()
-                if key in self.model.init_field_names()
+                for key, val in row.items()
+                if key in self.model.dc_init_field_names()
             }
 
             try:
                 new_model_instance = self.model(**init_data)
             except Exception as e:
-                if self.model.__name__ in self._skipped_data:
-                    self._skipped_data[self.model.__name__].append((struct, str(e)))
-                else:
-                    self._skipped_data[self.model.__name__] = [(struct, str(e))]
-
-                new_model_instance = None
-
-            if (
-                new_model_instance in self._model_instances_in_db
-                or new_model_instance is None
-            ):
+                print(
+                    f'exception generatign model from {init_data}: {e}'
+                )  # TODO: log this
                 continue
 
-            self.session.add(new_model_instance)
+            if new_model_instance in self._model_instances_in_db:
+                continue
 
-            self.session.flush()
-
-        return self._skipped_data
-
-        # df_as_models = df_as_structs.select(
-        #     pl.col(f'{self.model.__name__}_struct')
-        #     .map_elements(
-        #         function=lambda data: get_model_instance_from_db(
-        #             data, session=self.session, model=self.model
-        #         )
-        #     )
-        #     .alias(self.model.__name__)
-        # )
-
-        # for model_instance in df_as_models.get_column(self.model.__name__):
-        #     self.session.add(model_instance)
+            try:
+                merged_model_instance = self.session.merge(new_model_instance)
+                self.session.add(merged_model_instance)
+            except Exception as e:
+                print(f'exception adding to db: {e}')  # TODO log this
+                continue

@@ -1,8 +1,6 @@
 from collections.abc import Generator
-from csv import QUOTE_STRINGS
-from csv import reader as csv_reader
 from functools import cached_property
-from os import environ, stat
+from os import environ
 from pathlib import Path
 
 import fire
@@ -120,21 +118,12 @@ class SCBLUtils:
             if not data_path.is_file():
                 continue
 
-            if stat(data_path).st_size == 0:
-                continue
-
             with self._db_sessionmaker.begin() as session:
-                # TODO: this is a hack
-                if data_path.name == 'ChromiumTag.csv':
-                    continue
-                data = pl.read_csv(data_path).with_columns(pl.all().replace('', None))
-                skipped_data = DataToInsert2(
+                data = pl.read_csv(data_path, null_values='', raise_if_empty=False)
+
+                DataToInsert2(
                     data=data, session=session, model=model, source=data_path
                 ).to_db()
-
-                for db_model, skipped_data_list in skipped_data.items():
-                    print(db_model)
-                    print(*skipped_data_list, sep='\n')
 
     def _gdrive_to_db(self):
         for config in self._tracking_sheet_configs:
@@ -160,20 +149,12 @@ class SCBLUtils:
                     if model_name not in spreadsheet_as_dfs:
                         continue
 
-                    skipped_data = DataToInsert2(
+                    DataToInsert2(
                         data=spreadsheet_as_dfs[model_name],
                         model=model,
                         session=session,
                         source=config.spreadsheet_id,
                     ).to_db()
-
-                    for db_model, skipped_data_list in skipped_data.items():
-                        if db_model == 'ChromiumLibrary':
-                            print(db_model, len(skipped_data_list), end='\n\n')
-                            print(*skipped_data_list, sep='\n\n', end='\n\n\n')
-                        else:
-                            print(db_model, len(skipped_data_list), end='\n\n')
-                            print(*skipped_data_list[:20], sep='\n\n', end='\n\n\n')
 
 
 def main():

@@ -47,7 +47,8 @@ def google_spreadsheet_config():
         },
         merge_strategies={
             'ChromiumLibrary': MergeStrategy(
-                on='ChromiumLibrary.id', order=['multiplexing_sheet', 'main_sheet']
+                merge_on='ChromiumLibrary.id',
+                order=['multiplexing_sheet', 'main_sheet'],
             )
         },
     )

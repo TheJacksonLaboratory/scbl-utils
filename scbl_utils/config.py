@@ -19,7 +19,7 @@ class GoogleColumnConfig(StrictBaseModel, frozen=True, strict=True):
     @model_validator(mode='after')
     def validate_replace(self):
         if not self.targets >= self.replace.keys():
-            raise ValueError
+            raise ValueError('Targets must be a superset of replacement dictionaries.')
 
         return self
 
