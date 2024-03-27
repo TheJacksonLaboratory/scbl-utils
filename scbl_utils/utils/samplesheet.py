@@ -58,6 +58,24 @@ def get_latest_version(
 ) -> (
     str
 ):
+    match tool:
+        case 'cellranger':
+            return '7.1.0'
+        case 'spaceranger':
+            return '7.1.0'
+        case 'cellranger-atac':
+            return '2.1.0'
+        case 'cellranger-arc':
+            return '2.0.1'
+        case _:
+            raise NotImplementedError(f'{tool} not available')
+
+
+def get_latest_version_old(
+    tool: str, registry_url: str = CONTAINER_REGISTRY
+) -> (
+    str
+):
     """Get latest version of a given tool
 
     :param tool: The name of the tool
