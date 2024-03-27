@@ -222,6 +222,7 @@ _species_to_visium_probesets = {
 PLATFORMS_TO_PROBESET = {
     'Flex': _species_to_flex_probesets,
     'Visium CytAssist FFPE': _species_to_visium_probesets,
+    'Visium CytAssist FF': _species_to_visium_probesets,
     'Visium FF': _species_to_visium_probesets,
     'Visium FFPE': _species_to_visium_probesets,
 }
