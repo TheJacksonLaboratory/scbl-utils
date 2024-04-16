@@ -91,6 +91,8 @@ class GSheet(gs.Spreadsheet):
         df = df.map(lambda s: s.strip(), na_action='ignore')  # type: ignore
         df.replace({'TRUE': True, 'FALSE': False, '': nan, '-': nan}, inplace=True)
 
+        df['libraries'] = df['libraries'].ffill()
+
         # Set index and rename
         df.set_index(index_col, inplace=True)
         df.index.rename('', inplace=True)

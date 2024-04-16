@@ -115,7 +115,6 @@ def samplesheet_from_gdrive(
         header_row=multiplexing_spec['header_row'],
         to_join=multiplexing_spec['join'],
     )
-    multiplexing_df['libraries'] = multiplexing_df['libraries'].ffill()
 
     # Filter df and fill with available information
     # # TODO: after the filtration, everything can be wrapped into a
