@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from functools import cached_property
 from itertools import groupby
@@ -45,11 +46,6 @@ class DataToInsert2(
 
     @computed_field
     @cached_property
-    def _skipped_data(self) -> dict[str, list[tuple[dict[str, Any], str]]]:
-        return {}
-
-    @computed_field
-    @cached_property
     def _renamed(self) -> pl.DataFrame:
         return self.data.rename(
             {
@@ -57,24 +53,6 @@ class DataToInsert2(
                 for column in self.data.columns
             }
         )
-
-    @computed_field
-    @cached_property
-    def _self_columns(self) -> list[str]:
-        self_columns = [
-            column for column in self._renamed.columns if column.count('.') == 0
-        ]
-
-        if self.calling_parent_name is not None:
-            self_columns.extend(
-                (
-                    column
-                    for column in self._renamed.columns
-                    if column.startswith(self.calling_parent_name)
-                )
-            )
-
-        return self_columns
 
     @computed_field
     @cached_property
@@ -107,6 +85,7 @@ class DataToInsert2(
     @cached_property
     def _aggregated(self) -> pl.DataFrame:
         expressions = []
+        group_by = [col for col in self._renamed.columns]
 
         for relationship_name, column_list in self._relationship_to_columns:
             if relationship_name == self.calling_parent_name:
@@ -131,9 +110,12 @@ class DataToInsert2(
             else:
                 expression = pl.col(column_list)
 
+                for col in column_list:
+                    group_by.remove(col)
+
             expressions.append(expression)
 
-        aggregated = self._renamed.group_by(self._self_columns).agg(*expressions)
+        aggregated = self._renamed.group_by(group_by).agg(*expressions)
         return aggregated.with_row_index(name=self._index_column, offset=1)
 
     @computed_field
@@ -179,7 +161,8 @@ class DataToInsert2(
                 pl.col(relationship_name).map_elements(
                     lambda struct: get_model_instance_from_db(
                         struct, model=relationship_model, session=self.session
-                    )
+                    ),
+                    return_dtype=pl.Object,
                 )
             )
 
@@ -203,7 +186,9 @@ class DataToInsert2(
             primary_key_columns = [col.name for col in inspect(self.model).primary_key]
 
             if relationship.back_populates is None:
-                raise NotImplementedError
+                raise NotImplementedError(
+                    'something about how back populated must be set'
+                )
 
             child_df = df.select(
                 pl.col(primary_key_columns).map_alias(
@@ -239,17 +224,27 @@ class DataToInsert2(
                     }
 
                     if is_same_row:
+                        init_data = {
+                            key: val
+                            for key, val in child_row.items()
+                            if key in relationship_model.dc_init_field_names()
+                            and val is not None
+                        }
+
                         try:
-                            child_model = relationship_model(
-                                **{
-                                    key: val
-                                    for key, val in child_row.items()
-                                    if key in relationship_model.dc_init_field_names()
-                                }
+                            child_model = relationship_model(**init_data)
+                        except Exception as e:
+                            logger_name = f'{__package__}.{relationship_model.__name__}'
+                            child_logger = logging.getLogger(logger_name)
+
+                            child_logger.error(
+                                f'Could not instantiate the following data as a child of {self.model.__name__}:\n\n{init_data}\n\n{e}\n\n\n'
                             )
-                            row[relationship_name].append(child_model)
-                        except:
+
                             continue
+                        else:
+                            row[relationship_name].append(child_model)
+
         return df_as_dicts
 
     @computed_field
@@ -262,23 +257,32 @@ class DataToInsert2(
             init_data = {
                 key: val
                 for key, val in row.items()
-                if key in self.model.dc_init_field_names()
+                if key in self.model.dc_init_field_names() and val is not None
             }
 
             try:
                 new_model_instance = self.model(**init_data)
             except Exception as e:
-                print(
-                    f'exception generatign model from {init_data}: {e}'
-                )  # TODO: log this
+                logger_name = f'{__package__}.{self.model.__name__}'
+                logger = logging.getLogger(logger_name)
+
+                logger.error(
+                    f'Could not instantiate the following data:\n\n{init_data}\n\n{e}\n\n\n'
+                )
+
                 continue
 
             if new_model_instance in self._model_instances_in_db:
                 continue
 
             try:
-                merged_model_instance = self.session.merge(new_model_instance)
-                self.session.add(merged_model_instance)
+                self.session.merge(new_model_instance)
             except Exception as e:
-                print(f'exception adding to db: {e}')  # TODO log this
+                logger_name = f'{__package__}.{self.model.__name__}'
+                logger = logging.getLogger(logger_name)
+
+                logger.error(
+                    f'Could not add the following data to the database:\n\n{init_data}\n\n{e}\n\n\n'
+                )
+
                 continue

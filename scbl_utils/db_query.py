@@ -78,10 +78,13 @@ def get_model_instance_from_db(
     stmt = select(model_mapper).where(*where_conditions)
     matches = session.execute(stmt).scalars().all()
 
+    if len(matches) >= 1:
+        return matches[0]
+
+    return None
+
     if len(matches) == 0:
         return
-    else:
-        return matches[0]
 
     if len(matches) == 1:
         return matches[0]
@@ -89,6 +92,7 @@ def get_model_instance_from_db(
     rprint(*matches, sep='\n')
     choice = Prompt.ask(
         f'Multiple matches found for {model.__name__}. Which of these is correct?',
+        *matches,
         choices=[str(i) for i, instance in enumerate(matches)],
     )
 

@@ -61,6 +61,11 @@ class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
 
         return lf.cast(column_to_type)
 
+    def _forward_fill(
+        self, lf: pl.DataFrame, columns_to_fill: list[str]
+    ) -> pl.DataFrame:
+        return lf.with_columns(pl.col(columns_to_fill).forward_fill())
+
     def to_lf(self, config: GoogleWorksheetConfig) -> pl.DataFrame:
         raw_lf = self._to_raw_lf(config.header)
         lf_with_replaced_values = self._replace_values(raw_lf, replace=config.replace)
@@ -71,8 +76,9 @@ class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):
             desired_lf_subset, empty_means_drop=config.empty_means_drop
         )
         clean_lf = self._cast(filtered_lf, column_to_type=config.column_to_type)
+        filled_lf = self._forward_fill(clean_lf, config.forward_fill_nulls)
 
-        return clean_lf
+        return filled_lf
 
 
 class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
@@ -130,15 +136,15 @@ class GoogleSheetsResponse(StrictBaseModel, frozen=True, strict=True):
                     if col.endswith(suffix)
                 )
                 for left_column, right_column in duplicate_columns:
-                    left_series, right_series = df.get_column(
-                        left_column
-                    ), df.get_column(right_column)
+                    left_series = df.get_column(left_column)
+                    right_series = df.get_column(right_column)
 
                     left_filled = left_series.fill_null(right_series)
 
                     df = df.with_columns(left_filled).drop(right_column)
 
-            merged_dfs[db_model_name] = df
+            if df is not None:
+                merged_dfs[db_model_name] = df
 
         return merged_dfs
 

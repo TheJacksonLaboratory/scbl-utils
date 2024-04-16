@@ -30,11 +30,12 @@ class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
     empty_means_drop: set[str] = set()
     header: NonNegativeInt = 0
     replace: dict[str, Any] = {}
+    forward_fill_nulls: list[str] = []
 
     @model_validator(mode='after')
     def validate_columns(self):
         if not self.column_to_targets.keys() >= self.column_to_type.keys():
-            raise ValueError(f'Some helpful error')
+            raise ValueError(f'Some helpful error 1')
 
         return self
 
@@ -55,6 +56,7 @@ class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
         self: 'GoogleSpreadsheetConfig',
     ) -> 'GoogleSpreadsheetConfig':
         worksheet_names_from_config = self.worksheet_configs.keys()
+
         worksheet_names_from_merge_strategies = {
             worksheet_name
             for merge_strategy in self.merge_strategies.values()
@@ -62,8 +64,24 @@ class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
         }
 
         if worksheet_names_from_config != worksheet_names_from_merge_strategies:
+            raise NotImplementedError(
+                'Currently, worksheet names specified in worksheet configurations must be the same as worksheet names in merge strategies.'
+            )
             raise ValueError(
                 f'Workheet configurations must be a superset of worksheet names in merge strategies.'
+            )
+
+        targets_from_configs = set()
+        for worksheet_config in self.worksheet_configs.values():
+            for column_config in worksheet_config.column_to_targets.values():
+                for target in column_config.targets:
+                    targets_from_configs.add(target.split('.')[0])
+
+        if targets_from_configs != self.merge_strategies.keys():
+            raise NotImplementedError(
+                'something informative about merge strategies'
+                + str(targets_from_configs)
+                + str(self.merge_strategies.keys())
             )
 
         return self

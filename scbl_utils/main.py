@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Generator
 from functools import cached_property
 from os import environ
@@ -30,6 +31,18 @@ class SCBLUtils:
     """A set of command-line utilities that facilitate data processing at the Single Cell Biology Lab at the Jackson Laboratory."""
 
     config_dir: DirectoryPath = Path('/sc/service/etc/.config/scbl-utils')
+    log_dir: Path = Path.cwd() / 'scbl-utils_log'
+
+    def __post_init__(self) -> None:
+        self.log_dir.mkdir(exist_ok=True, parents=True)
+
+        root_logger = logging.getLogger(__package__)
+
+        for model_name in ORDERED_MODELS:
+            handler = logging.FileHandler(self.log_dir / f'{model_name}.log', mode='w')
+            logger = logging.getLogger(f'{root_logger.name}.{model_name}')
+
+            logger.addHandler(handler)
 
     @computed_field
     @cached_property
@@ -71,7 +84,7 @@ class SCBLUtils:
         engine = create_engine(url)
         Base.metadata.create_all(engine)
 
-        return sessionmaker(engine)
+        return sessionmaker(engine, autoflush=False)
 
     @computed_field
     @cached_property
@@ -106,6 +119,7 @@ class SCBLUtils:
     @validate_call
     def fill_db(self, data_dir: DirectoryPath | None = None) -> None:
         environ.update(self._system_config.model_dump(mode='json'))
+
         if data_dir is not None:
             self._directory_to_db(data_dir)
 
@@ -144,11 +158,11 @@ class SCBLUtils:
 
             spreadsheet_as_dfs = google_sheet_response.to_dfs(config)
 
-            with self._db_sessionmaker.begin() as session:
-                for model_name, model in ORDERED_MODELS.items():
-                    if model_name not in spreadsheet_as_dfs:
-                        continue
+            for model_name, model in ORDERED_MODELS.items():
+                if model_name not in spreadsheet_as_dfs:
+                    continue
 
+                with self._db_sessionmaker.begin() as session:
                     DataToInsert2(
                         data=spreadsheet_as_dfs[model_name],
                         model=model,
