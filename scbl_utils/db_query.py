@@ -1,15 +1,10 @@
 from collections.abc import Sequence
-from functools import cache
 from typing import Any
 
 from pydantic import ConfigDict, validate_call
-from rich import print as rprint
-from rich.prompt import Prompt
-from scbl_db import ORDERED_MODELS, Base
+from scbl_db import Base
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Mapper, Session
-
-from .validated_types import DBModelName
 
 
 def construct_where_condition(
@@ -33,30 +28,10 @@ def construct_where_condition(
     return parent.has(parent_where_condition)
 
 
-# @cache
-# @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-# def get_matching_obj(
-#     columns: tuple[str, ...], row: tuple, session: Session, model_mapper: Mapper[Base]
-# ) -> Sequence[Base]:
-#     where_conditions = []
-
-#     for col, val in zip(columns, row, strict=True):
-#         where = construct_where_condition(col, value=val, model_mapper=model_mapper)
-#         where_conditions.append(where) if where is not None else None
-
-#     if not where_conditions:
-#         return []
-
-#     stmt = select(model_mapper).where(*where_conditions)
-#     matches = session.execute(stmt).scalars().all()
-
-#     return matches
-
-
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def get_model_instance_from_db(
     data: dict[str, Any], session: Session, model: type[Base]
-) -> Base | None:
+) -> Sequence[Base] | Base | None:
     model_mapper = inspect(model)
 
     where_conditions = []
@@ -78,22 +53,10 @@ def get_model_instance_from_db(
     stmt = select(model_mapper).where(*where_conditions)
     matches = session.execute(stmt).scalars().all()
 
-    if len(matches) >= 1:
-        return matches[0]
-
-    return None
-
     if len(matches) == 0:
         return
 
     if len(matches) == 1:
         return matches[0]
 
-    rprint(*matches, sep='\n')
-    choice = Prompt.ask(
-        f'Multiple matches found for {model.__name__}. Which of these is correct?',
-        *matches,
-        choices=[str(i) for i, instance in enumerate(matches)],
-    )
-
-    return matches[int(choice)]
+    return matches

@@ -18,7 +18,7 @@ from .pydantic_model_config import StrictBaseModel
 from .validated_types import _validate_db_target
 
 
-class DataToInsert2(
+class DataInserter(
     StrictBaseModel, arbitrary_types_allowed=True, frozen=True, strict=True
 ):
     data: pl.DataFrame
@@ -36,7 +36,7 @@ class DataToInsert2(
         return data
 
     @model_validator(mode='after')
-    def validate_columns_match_model(self: 'DataToInsert2') -> 'DataToInsert2':
+    def validate_columns_match_model(self: 'DataInserter') -> 'DataInserter':
         if not all(col.startswith(self.model.__name__) for col in self.data.columns):
             raise ValueError(
                 f'All column names in {self.source} must start with {self.model.__name__}'
@@ -206,7 +206,7 @@ class DataToInsert2(
                 }
             )
 
-            child_records = DataToInsert2(
+            child_records = DataInserter(
                 data=child_df,
                 model=relationship_model,
                 session=self.session,

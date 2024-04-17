@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from yaml import safe_load
 
 from .config import DBConfig, GoogleSpreadsheetConfig, SystemConfig
-from .data_io import DataToInsert2
+from .data_io import DataInserter
 from .gdrive import GoogleSheetsResponse
 from .pydantic_model_config import strict_config
 
@@ -133,9 +133,9 @@ class SCBLUtils:
                 continue
 
             with self._db_sessionmaker.begin() as session:
-                data = pl.read_csv(data_path, null_values='', raise_if_empty=False)
+                data = pl.read_csv(data_path, null_values='')
 
-                DataToInsert2(
+                DataInserter(
                     data=data, session=session, model=model, source=data_path
                 ).to_db()
 
@@ -163,7 +163,7 @@ class SCBLUtils:
                     continue
 
                 with self._db_sessionmaker.begin() as session:
-                    DataToInsert2(
+                    DataInserter(
                         data=spreadsheet_as_dfs[model_name],
                         model=model,
                         session=session,

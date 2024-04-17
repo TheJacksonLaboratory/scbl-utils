@@ -15,7 +15,7 @@ scbl-utils = 'scbl_utils.main:main'
 python = ">=3.12,<3.13"
 PyYAML = "^6.0.1"
 pydantic = "^2.6.3"
-fire = "^0.5.0"
+fire = "^0.6.0"
 rich = "^13.7.0"
 sqlalchemy = "^2.0.27"
 polars = "^0.20.14"
@@ -31,6 +31,7 @@ mypy = "^1.8.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.0.1"
+python-dotenv = "^1.0.1"
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]

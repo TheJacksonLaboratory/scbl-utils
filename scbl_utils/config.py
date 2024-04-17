@@ -7,24 +7,26 @@ from .pydantic_model_config import StrictBaseModel
 from .validated_types import DBModelName, DBTarget, TypeString
 
 
-class DBConfig(StrictBaseModel, frozen=True, strict=True):
+class DBConfig(StrictBaseModel, frozen=True):
     database: str
     drivername: Literal['sqlite'] = 'sqlite'
 
 
-class GoogleColumnConfig(StrictBaseModel, frozen=True, strict=True):
+class GoogleColumnConfig(StrictBaseModel, frozen=True):
     targets: set[DBTarget]
     replace: dict[DBTarget, dict[str, Any]] = {}
 
     @model_validator(mode='after')
     def validate_replace(self):
         if not self.targets >= self.replace.keys():
-            raise ValueError('Targets must be a superset of replacement dictionaries.')
+            raise ValueError(
+                'Targets must be a superset of replacement dictionary keys.'
+            )
 
         return self
 
 
-class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
+class GoogleWorksheetConfig(StrictBaseModel, frozen=True):
     column_to_targets: dict[str, GoogleColumnConfig]
     column_to_type: dict[str, TypeString] = {}
     empty_means_drop: set[str] = set()
@@ -40,12 +42,12 @@ class GoogleWorksheetConfig(StrictBaseModel, frozen=True, strict=True):
         return self
 
 
-class MergeStrategy(StrictBaseModel, frozen=True, strict=True):
+class MergeStrategy(StrictBaseModel, frozen=True):
     merge_on: list[DBTarget] | str
     order: list[str]
 
 
-class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True, strict=True):
+class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True):
     spreadsheet_id: str
     worksheet_configs: dict[str, GoogleWorksheetConfig]
     merge_strategies: dict[DBModelName, MergeStrategy] = {}

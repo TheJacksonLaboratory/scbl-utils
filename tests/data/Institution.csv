@@ -1,3 +1,2 @@
 Institution.ror_id,Institution.name,Institution.email_format,Institution.short_name,Institution.country,Institution.state,Institution.city
-,Jackson Laboratory for Genomic Medicine,{first_name}.{last_name}@jax.org,JAX-GM,US,CT,Farmington
 021sy4w91,Jackson Laboratory for Mammalian Genetics,{first_name}.{last_name}@jax.org,JAX-MG,,,

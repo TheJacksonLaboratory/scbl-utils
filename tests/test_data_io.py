@@ -4,11 +4,11 @@ import polars as pl
 from pytest import fixture
 from scbl_db import ChromiumDataSet
 
-from scbl_utils.data_io import DataToInsert2
+from scbl_utils.data_io import DataInserter
 from scbl_utils.main import SCBLUtils
 
 
-class TestDataToInsert:
+class TestDataInserter:
     def test_data_preparation(self, config_dir: Path):
         google_drive_data_dir = Path(__file__).parent / 'google-drive_data'
 
@@ -33,7 +33,7 @@ class TestDataToInsert:
 
         with scbl_utils._db_sessionmaker.begin() as session:
             print(
-                DataToInsert2(
+                DataInserter(
                     data=data, model=ChromiumDataSet, session=session, source='test'
                 )._with_parents
             )

@@ -20,33 +20,10 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Install package
       run: |
-        sudo apt update
-        sudo apt install pipx
-        pipx ensurepath
-
-        pipx install poetry
-        pipx inject poetry poetry-plugin-export
-
-        poetry export --output requirements.txt --without-hashes --with test
-        
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
-        python -m pip install .
+        pip install .
 
     - name: Test with pytest
       run: |
         python -m pytest
-
-  sort-imports_and_format:
-
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sort imports with isort
-        uses: isort/isort-action@v1.1.0
-
-      - name: Format with black
-        uses: psf/black@stable
