@@ -95,6 +95,7 @@ class TestGoogleSheetsResponse:
             ),
         }
         spreadsheet_config = GoogleSpreadsheetConfig(
+            spreadsheet_id='spreadsheet',
             worksheet_configs=worksheet_configs,
             merge_strategies={
                 'ChromiumLibrary': MergeStrategy(
