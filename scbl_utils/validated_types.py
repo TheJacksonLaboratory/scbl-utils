@@ -47,14 +47,20 @@ DBTarget = Annotated[
 
 
 def _validate_type_string(string: str):
-    valid_types = ('bool', 'float', 'int', 'str', 'pl.Date')
+    valid_types = {
+        'bool': bool,
+        'float': float,
+        'int': int,
+        'str': str,
+        'date': pl.Date,
+    }
 
     if string not in valid_types:
         raise ValueError(
             f'Type-defining string must be one of {valid_types}, not {string}'
         )
 
-    return eval(string)
+    return valid_types[string]
 
 
 TypeString = Annotated[str, AfterValidator(_validate_type_string)]

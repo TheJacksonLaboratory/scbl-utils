@@ -9,10 +9,6 @@ from scbl_utils.main import SCBLUtils
 
 class TestSCBLUtils:
     @fixture
-    def cli(self, config_dir: Path) -> SCBLUtils:
-        return SCBLUtils(config_dir=config_dir)
-
-    @fixture
     def data_dir(self) -> Path:
         return Path(__file__).parent / 'data'
 

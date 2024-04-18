@@ -16,6 +16,7 @@ from scbl_utils.config import (
     MergeStrategy,
     SystemConfig,
 )
+from scbl_utils.main import SCBLUtils
 
 
 @fixture
@@ -105,10 +106,15 @@ def config_dir(
 
     for fname, data in filename_to_data:
         with (config_directory / fname).open('w') as f:
-            if isinstance(data, pydantic.BaseModel):
+            if '.yml' in fname:
                 safe_dump(data=data.model_dump(mode='json'), stream=f)
 
             else:
                 json.dump(data, fp=f)
 
     return config_directory
+
+
+@fixture
+def cli(config_dir: Path):
+    return SCBLUtils(config_dir)

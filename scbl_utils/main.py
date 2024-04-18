@@ -163,12 +163,22 @@ class SCBLUtils:
                     continue
 
                 with self._db_sessionmaker.begin() as session:
-                    DataInserter(
+                    data_inserter = DataInserter(
                         data=spreadsheet_as_dfs[model_name],
                         model=model,
                         session=session,
                         source=config.spreadsheet_id,
-                    ).to_db()
+                    )
+
+                    print(
+                        *(
+                            rec
+                            for rec in data_inserter._with_children_as_records
+                            if not rec['date_initialized']
+                        ),
+                        sep='\n\n',
+                    ) if model_name == 'ChromiumDataSet' else None
+                    data_inserter.to_db()
 
 
 def main():

@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Sequence
+from datetime import date
 from functools import cached_property
 from itertools import groupby
 from pathlib import Path
@@ -115,7 +116,9 @@ class DataInserter(
 
             expressions.append(expression)
 
-        aggregated = self._renamed.group_by(group_by).agg(*expressions)
+        aggregated = self._renamed.group_by(group_by, maintain_order=True).agg(
+            *expressions
+        )
         return aggregated.with_row_index(name=self._index_column, offset=1)
 
     @computed_field
@@ -126,6 +129,11 @@ class DataInserter(
 
         if 'id' in self._aggregated.columns:
             return self._aggregated
+
+        if self.model.id_date_col not in self._aggregated.columns:
+            raise ValueError(
+                f'{self.model.id_date_col} must be in columns of {self.source}'
+            )
 
         year_indicator_length = 2
         pad_length = (
@@ -191,7 +199,7 @@ class DataInserter(
                 )
 
             child_df = df.select(
-                pl.col(primary_key_columns).map_alias(
+                pl.col(primary_key_columns).name.map(
                     lambda c: f'{relationship.back_populates}.{c}'
                 ),
                 *relationship_column_list,
@@ -233,12 +241,12 @@ class DataInserter(
 
                         try:
                             child_model = relationship_model(**init_data)
-                        except Exception:
+                        except Exception as e:
                             logger_name = f'{__package__}.{relationship_model.__name__}'
                             child_logger = logging.getLogger(logger_name)
 
                             child_logger.error(
-                                f'Could not instantiate the following data as a child of {self.model.__name__}:\n\n{init_data}\n\n{e}\n\n\n'
+                                f'Could not instantiate as a child of {self.model.__name__}:\n{init_data}\n{e}\n'
                             )
 
                             continue
@@ -253,6 +261,11 @@ class DataInserter(
         return self.session.execute(select(self.model)).scalars().all()
 
     def to_db(self) -> None:
+        logger_name = f'{__package__}.{self.model.__name__}'
+        logger = logging.getLogger(logger_name)
+
+        primary_key_columns = [col.name for col in inspect(self.model).primary_key]
+
         for row in self._with_children_as_records:
             init_data = {
                 key: val
@@ -263,26 +276,31 @@ class DataInserter(
             try:
                 new_model_instance = self.model(**init_data)
             except Exception as e:
-                logger_name = f'{__package__}.{self.model.__name__}'
-                logger = logging.getLogger(logger_name)
-
-                logger.error(
-                    f'Could not instantiate the following data:\n\n{init_data}\n\n{e}\n\n\n'
-                )
+                logger.error(f'Could not instantiate:\n{init_data}\n{e}\n')
 
                 continue
 
             if new_model_instance in self._model_instances_in_db:
                 continue
 
+            primary_key_data = {
+                key: val for key, val in init_data.items() if key in primary_key_columns
+            }
+            if primary_key_data:
+                if (
+                    get_model_instance_from_db(
+                        primary_key_data, session=self.session, model=self.model
+                    )
+                    is not None
+                ):
+                    continue
+
             try:
                 self.session.merge(new_model_instance)
             except Exception as e:
-                logger_name = f'{__package__}.{self.model.__name__}'
-                logger = logging.getLogger(logger_name)
+                logger.error(f'Could not add to the database:\n{init_data}\n{e}\n')
 
-                logger.error(
-                    f'Could not add the following data to the database:\n\n{init_data}\n\n{e}\n\n\n'
-                )
+                del init_data
+                del new_model_instance
 
                 continue
