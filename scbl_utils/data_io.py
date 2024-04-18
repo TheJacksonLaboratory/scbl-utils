@@ -233,7 +233,7 @@ class DataInserter(
 
                         try:
                             child_model = relationship_model(**init_data)
-                        except Exception as e:
+                        except Exception:
                             logger_name = f'{__package__}.{relationship_model.__name__}'
                             child_logger = logging.getLogger(logger_name)
 
