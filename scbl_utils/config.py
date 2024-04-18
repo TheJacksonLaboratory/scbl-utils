@@ -48,7 +48,6 @@ class MergeStrategy(StrictBaseModel, frozen=True):
 
 
 class GoogleSpreadsheetConfig(StrictBaseModel, frozen=True):
-    spreadsheet_id: str
     worksheet_configs: dict[str, GoogleWorksheetConfig]
     merge_strategies: dict[DBModelName, MergeStrategy] = {}
 

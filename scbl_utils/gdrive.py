@@ -1,21 +1,10 @@
 from collections.abc import Collection
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Any, Literal
 
 import polars as pl
 
 from .config import GoogleSpreadsheetConfig, GoogleWorksheetConfig, MergeStrategy
 from .pydantic_model_config import StrictBaseModel
-
-
-class InsertableData(TypedDict):
-    columns: list[str]
-    data: list[list]
-
-
-class GoogleApiResource(Protocol):
-    """Class just for type-hinting. not implemented yet"""
-
-    pass
 
 
 class GoogleSheetsValueRange(StrictBaseModel, frozen=True, strict=True):

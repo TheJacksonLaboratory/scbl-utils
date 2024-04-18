@@ -5,7 +5,7 @@ from typing import Any
 
 import dotenv
 import pydantic
-from pytest import MonkeyPatch, fixture
+from pytest import MonkeyPatch, TempPathFactory, fixture
 from yaml import safe_dump
 
 from scbl_utils.config import (
@@ -19,8 +19,8 @@ from scbl_utils.config import (
 
 
 @fixture
-def db_path(tmp_path: Path) -> Path:
-    return tmp_path / 'tmp.db'
+def db_path(tmp_path_factory: TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp('db') / 'tmp.db'
 
 
 @fixture

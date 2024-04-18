@@ -1,3 +1,5 @@
+from datetime import date
+
 import polars as pl
 from polars.testing import assert_frame_equal
 from pytest import fixture
@@ -10,119 +12,139 @@ from scbl_utils.config import (
 )
 from scbl_utils.gdrive import GoogleSheetsResponse, GoogleSheetsValueRange
 
-# TODO: rewrite these tests a bit
+
+class TestGoogleSheetsValueRange:
+    def test_to_df(self):
+        values = [
+            ['foo', 'bar'],  # Extraneous row
+            [],  # An empty row
+            [
+                'name',
+                '',
+                'date received',
+                'column',
+            ],  # A header with a missing column name and an extraneous column
+            ['sample1', 'foo', '1999-01-01', 'bar'],  # A correct row
+            ['null', 'null', 'null'],  # An entirely empty row
+            [
+                'sample2',
+                'foo',
+                '1999-01-01',
+                'bar',
+            ],  # The first row in a pair of merged rows
+            ['', 'foo', '1999-01-01', 'bar'],  # The second row in a pair of merged rows
+            ['sample3', 'foo', 'null', 'bar'],  # A row with required data missing
+        ]
+
+        column_configs = {
+            'name': GoogleColumnConfig(targets={'ChromiumSample.name'}),
+            'date received': GoogleColumnConfig(
+                targets={'ChromiumSample.date_received'}
+            ),
+        }
+        worksheet_config = GoogleWorksheetConfig(
+            column_to_targets=column_configs,
+            column_to_type={'date received': 'pl.Date'},
+            empty_means_drop={'date received'},
+            header=2,
+            replace={'': None, 'null': None},
+            forward_fill_nulls=['name'],
+        )
+
+        value_range = GoogleSheetsValueRange(
+            values=values, range='Sheet1', majorDimension='ROWS'
+        )
+
+        the_date = date(1999, 1, 1)
+        expected_data = {
+            'name': ['sample1', 'sample2', 'sample2'],
+            'date received': [the_date, the_date, the_date],
+        }
+
+        assert_frame_equal(
+            value_range.to_lf(worksheet_config), pl.DataFrame(expected_data)
+        )
 
 
-@fixture
-def google_spreadsheet_config():
-    main_sheet_config = GoogleWorksheetConfig(
-        column_to_targets={
-            'library id': GoogleColumnConfig(targets={'ChromiumLibrary.id'}),
-            'sample name': GoogleColumnConfig(
-                targets={
-                    'ChromiumLibrary.data_set.name',
-                    'ChromiumLibrary.data_set.samples.name',
+class TestGoogleSheetsResponse:
+    def test_to_dfs(self):
+        library_id_column_config = GoogleColumnConfig(
+            targets={'ChromiumDataSet.libraries.id', 'ChromiumLibrary.id'}
+        )
+        sample_name_column_config = GoogleColumnConfig(
+            targets={'ChromiumDataSet.samples.name'}
+        )
+        library_type_column_config = GoogleColumnConfig(
+            targets={'ChromiumDataSet.assay.name'},
+            replace={'ChromiumDataSet.assay.name': {'multiome rna': 'multiome'}},
+        )
+
+        worksheet_configs = {
+            'sheet1': GoogleWorksheetConfig(
+                column_to_targets={
+                    'library ID': library_id_column_config,
+                    'sample name': sample_name_column_config,
+                    'library type': library_type_column_config,
+                }
+            ),
+            'sheet2': GoogleWorksheetConfig(
+                column_to_targets={
+                    'library ID': library_id_column_config,
+                    'sample name': sample_name_column_config,
                 }
             ),
         }
-    )
+        spreadsheet_config = GoogleSpreadsheetConfig(
+            worksheet_configs=worksheet_configs,
+            merge_strategies={
+                'ChromiumLibrary': MergeStrategy(
+                    merge_on='ChromiumLibrary.id', order=['sheet2', 'sheet1']
+                ),
+                'ChromiumDataSet': MergeStrategy(
+                    merge_on='ChromiumDataSet.libraries.id', order=['sheet2', 'sheet1']
+                ),
+            },
+        )
 
-    multiplexing_sheet_config = GoogleWorksheetConfig(
-        column_to_targets={
-            'library id': GoogleColumnConfig(targets={'ChromiumLibrary.id'}),
-            'dataset name': GoogleColumnConfig(
-                targets={'ChromiumLibrary.data_set.name'}
+        sheet1 = GoogleSheetsValueRange(
+            range='sheet1',
+            values=[
+                ['library ID', 'sample name', 'library type'],
+                ['lib0', 'sample0', 'multiome rna'],
+                ['lib1', 'sample-pool0', 'flex'],
+            ],
+            majorDimension='ROWS',
+        )
+
+        sheet2 = GoogleSheetsValueRange(
+            range='sheet2',
+            values=[
+                ['library ID', 'sample name'],
+                ['lib1', 'sample1'],
+                ['lib1', 'sample2'],
+            ],
+            majorDimension='ROWS',
+        )
+
+        response = GoogleSheetsResponse(
+            spreadsheetId='spreadsheet', valueRanges=[sheet1, sheet2]
+        )
+        result_dfs = response.to_dfs(spreadsheet_config)
+
+        expected_dfs = {
+            'ChromiumLibrary': pl.DataFrame(
+                {'ChromiumLibrary.id': ['lib0', 'lib1', 'lib1']}
             ),
-            'sample name': GoogleColumnConfig(
-                targets={'ChromiumLibrary.data_set.samples.name'}
+            'ChromiumDataSet': pl.DataFrame(
+                {
+                    'ChromiumDataSet.libraries.id': ['lib0', 'lib1', 'lib1'],
+                    'ChromiumDataSet.samples.name': ['sample0', 'sample1', 'sample2'],
+                    'ChromiumDataSet.assay.name': ['multiome', 'flex', 'flex'],
+                }
             ),
         }
-    )
 
-    return GoogleSpreadsheetConfig(
-        spreadsheet_id='id',
-        worksheet_configs={
-            'main_sheet': main_sheet_config,
-            'multiplexing_sheet': multiplexing_sheet_config,
-        },
-        merge_strategies={
-            'ChromiumLibrary': MergeStrategy(
-                merge_on='ChromiumLibrary.id',
-                order=['multiplexing_sheet', 'main_sheet'],
-            )
-        },
-    )
+        assert expected_dfs.keys() == result_dfs.keys()
 
-
-class TestGoogleSheetResponse:
-    @fixture
-    def main_sheet(self) -> GoogleSheetsValueRange:
-        range = 'main_sheet'
-        major_dimension = 'ROWS'
-        values = [
-            ['library id', 'sample name', 'extraneous column'],
-            ['SC0', 'SC1', 'SC2', 'SC3'],
-            ['sample0', 'sample1', 'sample2', 'sample3'],
-            ['foo', 'bar', 'baz', 'bah'],
-        ]
-
-        return GoogleSheetsValueRange(
-            range=range, majorDimension=major_dimension, values=values
-        )
-
-    @fixture
-    def multiplexing_sheet(self) -> GoogleSheetsValueRange:
-        range = 'multiplexing_sheet'
-        major_dimension = 'ROWS'
-        values = [
-            ['library id', 'dataset name', 'sample name'],
-            ['SC1', 'SC1'],
-            ['multiplexed_dataset1', 'multiplexed_dataset1'],
-            ['multiplexed_sample1', 'multiplexed_sample2'],
-        ]
-
-        return GoogleSheetsValueRange(
-            range=range, majorDimension=major_dimension, values=values
-        )
-
-    @fixture
-    def google_sheet_response(
-        self,
-        main_sheet: GoogleSheetsValueRange,
-        multiplexing_sheet: GoogleSheetsValueRange,
-    ):
-        return GoogleSheetsResponse(
-            spreadsheetId='spreadsheet_id',
-            valueRanges=[main_sheet, multiplexing_sheet],
-        )
-
-    # TODO: see if we can make this a bit more sophisticated and less hardcoded
-    def test_sheet_splitting(
-        self,
-        google_sheet_response: GoogleSheetsResponse,
-        google_spreadsheet_config: GoogleSpreadsheetConfig,
-    ):
-        result_dfs = google_sheet_response.to_dfs(google_spreadsheet_config)
-
-        expected_dfs = {}
-
-        expected_dfs['ChromiumLibrary'] = {
-            'ChromiumLibrary.id': ['SC0', 'SC1', 'SC1', 'SC2', 'SC3'],
-            'ChromiumLibrary.data_set.name': [
-                'sample0',
-                'multiplexed_dataset1',
-                'multiplexed_dataset1',
-                'sample2',
-                'sample3',
-            ],
-            'ChromiumLibrary.data_set.samples.name': [
-                'sample0',
-                'multiplexed_sample1',
-                'multiplexed_sample2',
-                'sample2',
-                'sample3',
-            ],
-        }
-
-        for key, expected_data in expected_dfs.items():
-            assert_frame_equal(result_dfs[key], pl.DataFrame(expected_data))
+        for key in expected_dfs:
+            assert_frame_equal(expected_dfs[key], result_dfs[key])
