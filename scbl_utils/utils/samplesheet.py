@@ -62,7 +62,7 @@ def get_latest_version(
         case 'cellranger':
             return '7.1.0'
         case 'spaceranger':
-            return '7.1.0'
+            return '2.1.0'
         case 'cellranger-atac':
             return '2.1.0'
         case 'cellranger-arc':
