@@ -87,7 +87,7 @@ class TestDataInserter:
             'id': ['foo', 'bar'],
             'lab.name': ['lab', 'lab'],
             'lab': [{'name': 'lab'}, {'name': 'lab'}],
-            'libraries.id': [['lib', 'lib1'], ['lib2']],
+            'libraries': [[{'id': 'lib'}, {'id': 'lib1'}], [{'id': 'lib2'}]],
             'ChromiumDataSet_index': [1, 2],
         }
         expected_aggregation = pl.DataFrame(expected_aggregation)
@@ -181,7 +181,7 @@ class TestDataInserter:
             library_type = session.execute(select(ChromiumLibraryType)).scalar()
 
             if library_type is None:
-                pytest.fail('ChromiumLibraryType not added to database successfully')
+                pytest.fail('Failed to add ChromiumLibraryType to test database.')
 
             with_children = DataInserter(
                 data=data, session=session, source='test', model=ChromiumDataSet
@@ -195,14 +195,12 @@ class TestDataInserter:
                         ChromiumLibrary(id='SC9900001', library_type=library_type)
                     ],
                     'ChromiumDataSet_index': 1,
-                    'libraries.id': ['SC9900001'],
-                    'libraries.library_type.name': ['foo'],
                 }
             ]
 
             assert with_children == expected_result
 
-    def test_duplicate_data_insertion(self, cli: SCBLUtils):
+    def test_duplicate_rows(self, cli: SCBLUtils):
         name = 'JAX'
         email_format = '{first_name}.{last_name}@jax.org'
         country = 'US'
@@ -227,6 +225,43 @@ class TestDataInserter:
             institutions = session.execute(select(Institution)).scalars().all()
 
             assert len(institutions) == 1
+
+    def test_updating_data(self, cli: SCBLUtils):
+        name = 'JAX'
+        email_format = '{first_name}.{last_name}@jax.org'
+        country = 'US'
+        city = 'Farmington'
+        short_name = 'JAX'
+
+        data = {
+            'Institution.name': [name],
+            'Institution.email_format': [email_format],
+            'Institution.country': [country],
+            'Institution.city': [city],
+            'Institution.short_name': [short_name],
+        }
+        data = pl.DataFrame(data)
+
+        with cli._db_sessionmaker.begin() as session:
+            DataInserter(
+                data=data, session=session, source='test', model=Institution
+            ).to_db()
+
+        modification = '_modified'
+        data = data.with_columns(pl.col('Institution.short_name') + modification)
+
+        with cli._db_sessionmaker.begin() as session:
+            DataInserter(
+                data=data, session=session, source='test', model=Institution
+            ).to_db()
+
+        with cli._db_sessionmaker.begin() as session:
+            institution = session.execute(select(Institution)).scalar()
+
+            if institution is None:
+                pytest.fail('Failed to add Institution to the test database.')
+
+            assert institution.short_name == short_name + modification
 
     def test_column_name_not_in_db(self, cli: SCBLUtils):
         data = {'foo': [1, 2, 3]}

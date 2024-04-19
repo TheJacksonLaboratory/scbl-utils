@@ -1,6 +1,4 @@
 import logging
-from collections.abc import Sequence
-from datetime import date
 from functools import cached_property
 from itertools import groupby
 from pathlib import Path
@@ -10,7 +8,8 @@ import polars as pl
 from pydantic import computed_field, field_validator, model_validator
 from scbl_db import Base
 from scbl_db.bases import Base, Data
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import RelationshipDirection, RelationshipProperty, Session
 from sqlalchemy.util import ReadOnlyProperties
 
@@ -92,25 +91,20 @@ class DataInserter(
             if relationship_name == self.calling_parent_name:
                 continue
 
+            expression = (
+                pl.struct(column_list)
+                .alias(relationship_name)
+                .struct.rename_fields(
+                    [col.removeprefix(f'{relationship_name}.') for col in column_list]
+                )
+            )
+
             if (
                 self._relationships[relationship_name].direction
                 == RelationshipDirection.MANYTOONE
             ):
-                expression = (
-                    pl.struct(column_list)
-                    .alias(relationship_name)
-                    .struct.rename_fields(
-                        [
-                            col.removeprefix(f'{relationship_name}.')
-                            for col in column_list
-                        ]
-                    )
-                    .first()
-                )
-
+                expression = expression.first()
             else:
-                expression = pl.col(column_list)
-
                 for col in column_list:
                     group_by.remove(col)
 
@@ -182,28 +176,31 @@ class DataInserter(
         df_as_dicts = self._with_parents.to_dicts()
         df = self._with_parents
 
+        primary_key_columns = [col.name for col in inspect(self.model).primary_key]
+
         for (
             relationship_name,
-            relationship_column_list,
+            _,
         ) in self._relationship_to_columns:
             relationship = self._relationships[relationship_name]
 
             if relationship.direction != RelationshipDirection.ONETOMANY:
                 continue
 
-            primary_key_columns = [col.name for col in inspect(self.model).primary_key]
-
             if relationship.back_populates is None:
                 raise NotImplementedError(
                     'something about how back populated must be set'
                 )
 
-            child_df = df.select(
-                pl.col(primary_key_columns).name.map(
-                    lambda c: f'{relationship.back_populates}.{c}'
-                ),
-                *relationship_column_list,
-            ).explode(relationship_column_list)
+            columns_to_refer_back_to_self = pl.col(primary_key_columns).name.map(
+                lambda c: f'{relationship.back_populates}.{c}'
+            )
+
+            child_df = (
+                df.select(columns_to_refer_back_to_self, relationship_name)
+                .explode(relationship_name)
+                .unnest(relationship_name)
+            )
 
             relationship_model: type[Base] = relationship.mapper.class_
 
@@ -255,16 +252,9 @@ class DataInserter(
 
         return df_as_dicts
 
-    @computed_field
-    @property
-    def _model_instances_in_db(self) -> Sequence[Base]:
-        return self.session.execute(select(self.model)).scalars().all()
-
     def to_db(self) -> None:
         logger_name = f'{__package__}.{self.model.__name__}'
         logger = logging.getLogger(logger_name)
-
-        primary_key_columns = [col.name for col in inspect(self.model).primary_key]
 
         for row in self._with_children_as_records:
             init_data = {
@@ -280,27 +270,16 @@ class DataInserter(
 
                 continue
 
-            if new_model_instance in self._model_instances_in_db:
+            try:
+                with self.session.begin_nested():
+                    self.session.merge(new_model_instance)
+
+            except IntegrityError as e:
+                logger.warn(f'Skipped because row already exists:\n{init_data}\n')
+
                 continue
 
-            primary_key_data = {
-                key: val for key, val in init_data.items() if key in primary_key_columns
-            }
-            if primary_key_data:
-                if (
-                    get_model_instance_from_db(
-                        primary_key_data, session=self.session, model=self.model
-                    )
-                    is not None
-                ):
-                    continue
-
-            try:
-                self.session.merge(new_model_instance)
             except Exception as e:
                 logger.error(f'Could not add to the database:\n{init_data}\n{e}\n')
-
-                del init_data
-                del new_model_instance
 
                 continue

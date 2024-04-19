@@ -56,6 +56,8 @@ def get_model_instance_from_db(
     if len(matches) == 0:
         return
 
+    return matches[0]
+
     if len(matches) == 1:
         return matches[0]
 

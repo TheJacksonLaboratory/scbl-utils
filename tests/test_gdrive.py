@@ -44,7 +44,7 @@ class TestGoogleSheetsValueRange:
         }
         worksheet_config = GoogleWorksheetConfig(
             column_to_targets=column_configs,
-            column_to_type={'date received': 'pl.Date'},
+            column_to_type={'date received': 'date'},
             empty_means_drop={'date received'},
             header=2,
             replace={'': None, 'null': None},

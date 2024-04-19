@@ -170,14 +170,6 @@ class SCBLUtils:
                         source=config.spreadsheet_id,
                     )
 
-                    print(
-                        *(
-                            rec
-                            for rec in data_inserter._with_children_as_records
-                            if not rec['date_initialized']
-                        ),
-                        sep='\n\n',
-                    ) if model_name == 'ChromiumDataSet' else None
                     data_inserter.to_db()
 
 
