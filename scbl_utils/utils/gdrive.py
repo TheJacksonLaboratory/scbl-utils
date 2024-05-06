@@ -140,6 +140,20 @@ def get_project_params(
         for col in ('libraries', 'sample_name', 'project', 'tool', 'reference_dirs', 'species')
     )
 
+    if not project:
+        params = pd.Series()
+        params['tool_version'] = get_latest_version(tool)
+
+        message = f'\nThere are no spreadsheets in the Google Drive folder at https://drive.google.com/drive/folders/{metrics_dir_id} containing the SCBL Project [bold orange1]{project}[/] and the tool [bold orange1]{tool}[/].'
+        params['reference_path'] = genomes_from_user(
+            message=message,
+            reference_dirs=reference_dirs,
+            sample_name=sample_name,
+            libraries=libraries
+        )
+
+        return params
+
     # Build service
     service = build(serviceName='drive', version='v3', credentials=creds)
 
@@ -196,6 +210,9 @@ def get_project_params(
 
         # Filter metrics_df to contain just those projects matching this
         # project and tool
+        if 'project' not in metrics_df.columns:
+            continue
+
         project_df = metrics_df[
             (metrics_df['project'] == project)
             & (metrics_df['tool'] == tool)
