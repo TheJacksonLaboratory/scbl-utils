@@ -60,7 +60,7 @@ def get_latest_version(
 ):
     match tool:
         case 'cellranger':
-            return '7.1.0'
+            return '8.0.0'
         case 'spaceranger':
             return '2.1.0'
         case 'cellranger-atac':
